@@ -12,6 +12,101 @@
 <meta name="apple-mobile-web-app-title" content="Fitness Tracker">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBvTU5OhJnvJW-hYJYYVTro2rNcNr60aCk",
+    authDomain: "fitness-tracker-c6f97.firebaseapp.com",
+    projectId: "fitness-tracker-c6f97",
+    storageBucket: "fitness-tracker-c6f97.firebasestorage.app",
+    messagingSenderId: "187864668697",
+    appId: "1:187864668697:web:e2437802dbb11a23482888"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
+  let currentUser = null;
+  let unsubscribe = null;
+
+  function userCollection() {
+    return collection(db, 'users', currentUser.uid, 'entries');
+  }
+
+  window.fbSignIn = async function() {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch(e) { console.error('Sign in failed:', e); }
+  };
+
+  window.fbSignOut = async function() {
+    if (unsubscribe) unsubscribe();
+    await signOut(auth);
+    currentUser = null;
+    updateAuthUI(null);
+  };
+
+  window.fbSaveEntry = async function(entry) {
+    if (!currentUser) return;
+    try {
+      await setDoc(doc(userCollection(), String(entry.id)), entry);
+    } catch(e) { console.error('Save failed:', e); }
+  };
+
+  window.fbDeleteEntry = async function(id) {
+    if (!currentUser) return;
+    try {
+      await deleteDoc(doc(userCollection(), String(id)));
+    } catch(e) { console.error('Delete failed:', e); }
+  };
+
+  window.fbDeleteEntries = async function(ids) {
+    if (!currentUser) return;
+    await Promise.all([...ids].map(id => deleteDoc(doc(userCollection(), String(id)))));
+  };
+
+  function updateAuthUI(user) {
+    const btn = document.getElementById('auth-btn');
+    const info = document.getElementById('auth-info');
+    const syncDot = document.getElementById('sync-dot');
+    if (!btn) return;
+    if (user) {
+      btn.textContent = 'Abmelden';
+      btn.onclick = window.fbSignOut;
+      if (info) info.textContent = user.email;
+      if (syncDot) { syncDot.style.background = '#44ff88'; syncDot.title = 'Cloud-Sync aktiv'; }
+    } else {
+      btn.textContent = 'Mit Google anmelden';
+      btn.onclick = window.fbSignIn;
+      if (info) info.textContent = 'Nicht angemeldet';
+      if (syncDot) { syncDot.style.background = '#ffaa33'; syncDot.title = 'Offline — kein Sync'; }
+    }
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    updateAuthUI(user);
+    if (user) {
+      // Subscribe to real-time updates
+      if (unsubscribe) unsubscribe();
+      unsubscribe = onSnapshot(userCollection(), (snapshot) => {
+        const cloudData = [];
+        snapshot.forEach(doc => cloudData.push(doc.data()));
+        cloudData.forEach(d => { d.id = Number(d.id); if (d.variante && window.VARIANTE_MAP && window.VARIANTE_MAP[d.variante]) d.variante = window.VARIANTE_MAP[d.variante]; });
+        cloudData.sort((a,b) => new Date(b.datum) - new Date(a.datum));
+        window._setData(cloudData);
+      });
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    updateAuthUI(null);
+  });
+</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -87,11 +182,12 @@
   </div>
   <div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-ghost" id="auth-btn" onclick="window.fbSignIn && window.fbSignIn()">Mit Google anmelden</button>
       <button class="btn-ghost" onclick="manualExport()">Export JSON</button>
       <label class="btn-ghost" style="cursor:pointer;">Import JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
     </div>
     <div class="storage-info">
-      <span><span class="dot-ok"></span>localStorage aktiv</span>
+      <span><span class="dot-ok" id="sync-dot" title="Offline"></span><span id="auth-info">Nicht angemeldet</span></span>
       <span id="entry-count">0 Einträge</span>
       <span id="last-export-info"></span>
     </div>
@@ -496,22 +592,42 @@ let ratings = { schlaf: 0, energie: 0 };
 let data = [];
 
 const VARIANTE_MAP = { 'Breit': 'Weit' };
+window.VARIANTE_MAP = VARIANTE_MAP;
+
+// Called by Firebase module when cloud data arrives
+window._setData = function(cloudData) {
+  data = cloudData;
+  localStorage.setItem(LS_DATA, JSON.stringify(data));
+  updateEntryCount();
+  renderDashboard();
+  renderHistory();
+  renderTodayEntries();
+};
 
 function loadData() {
   try {
     const r = localStorage.getItem(LS_DATA);
-    data = r ? JSON.parse(r) : [];
-    data.forEach(d => {
+    const loaded = r ? JSON.parse(r) : [];
+    loaded.forEach(d => {
       d.id = Number(d.id);
       if (d.variante && VARIANTE_MAP[d.variante]) d.variante = VARIANTE_MAP[d.variante];
     });
+    data = loaded;
   }
   catch(e) { data = []; }
 }
 
-function saveData() {
+function saveData(changedEntries, deletedIds) {
+  // Always keep localStorage as offline fallback
   try { localStorage.setItem(LS_DATA, JSON.stringify(data)); updateEntryCount(); }
   catch(e) { showToast('⚠ Speicherfehler'); }
+  // Sync to Firebase if signed in
+  if (window.fbSaveEntry && changedEntries) {
+    changedEntries.forEach(e => window.fbSaveEntry(e));
+  }
+  if (window.fbDeleteEntry && deletedIds) {
+    deletedIds.forEach(id => window.fbDeleteEntry(id));
+  }
 }
 
 function updateEntryCount() {
@@ -646,7 +762,7 @@ function saveTageslog() {
   };
   data.unshift(entry);
   data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
-  saveData();
+  saveData([entry], null);
   showToast('✓ Tageslog gespeichert');
   checkTageslogExists();
   renderDashboard();
@@ -681,7 +797,7 @@ function saveEntry() {
 
   data.unshift(entry);
   data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
-  saveData();
+  saveData([entry], null);
   resetForm();
   renderDashboard();
   showToast('✓ Einheit gespeichert');
@@ -720,7 +836,7 @@ async function importData(e) {
       const existing = new Set(data.map(d => d.id));
       const fresh = imported.filter(d => !existing.has(d.id));
       data = [...data, ...fresh].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-      saveData();
+      saveData(fresh, null);
       renderDashboard();
       renderHistory();
       showToast('✓ ' + fresh.length + ' neue Einträge importiert');
@@ -914,7 +1030,7 @@ function confirmDeleteSelected() {
   const before = data.length;
   data = data.filter(d => !toDelete.has(Number(d.id)));
   const removed = before - data.length;
-  saveData();
+  saveData(null, [...toDelete]);
   cancelSelectMode();
   renderDashboard();
   showToast(removed + ' Eintrag' + (removed !== 1 ? 'e' : '') + ' gelöscht');
@@ -923,7 +1039,7 @@ function confirmDeleteSelected() {
 function deleteEntry(id) {
   if (!window.confirm('Eintrag löschen?')) return;
   data = data.filter(d => d.id !== id);
-  saveData();
+  saveData(null, [id]);
   renderHistory();
   renderDashboard();
   showToast('Eintrag gelöscht');
@@ -1026,7 +1142,7 @@ function saveEdit() {
 
   // Resort by date descending
   data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
-  saveData();
+  saveData([data.find(e => e.id === editId)], null);
   closeEditModal();
   renderHistory();
   renderDashboard();

@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fitness Tracker</title>
+<meta name="description" content="Kraft · Ausdauer · Körper · ZNS">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fitness Tracker">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a; --surface: #111111; --surface2: #1a1a1a; --border: #2a2a2a;
+    --accent: #e8ff47; --accent2: #ff6b35; --text: #f0f0f0; --muted: #666;
+    --danger: #ff4444; --ok: #44ff88; --warn: #ffaa33;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; min-height: 100vh; padding: 24px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+  h1 { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px; width: fit-content; }
+  .tab { padding: 7px 16px; border-radius: 4px; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); border: none; background: none; transition: all 0.15s; }
+  .tab.active { background: var(--accent); color: #000; font-weight: 500; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .panel { display: none; } .panel.active { display: block; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+  input, select, textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; padding: 8px 10px; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+  .rating-group { display: flex; gap: 6px; }
+  .rating-btn { flex: 1; padding: 8px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface2); color: var(--muted); cursor: pointer; text-align: center; font-family: 'DM Mono', monospace; font-size: 12px; transition: all 0.15s; }
+  .rating-btn:hover { border-color: var(--accent); color: var(--text); }
+  .rating-btn.selected { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+  .btn { background: var(--accent); color: #000; border: none; border-radius: 4px; padding: 10px 20px; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .btn:hover { background: #d4eb00; transform: translateY(-1px); }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 8px 16px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+  .btn-danger { background: none; border: 1px solid var(--danger); color: var(--danger); border-radius: 4px; padding: 5px 10px; font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+  .btn-danger:hover { background: var(--danger); color: #000; }
+  .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .metric-value { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; }
+  .metric-unit { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .zns-bar { height: 8px; border-radius: 4px; background: var(--border); margin-top: 8px; overflow: hidden; }
+  .zns-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .entry-row { display: grid; grid-template-columns: 90px 100px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .entry-row:last-child { border-bottom: none; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag-lauf { background: rgba(232,255,71,0.15); color: var(--accent); border: 1px solid rgba(232,255,71,0.3); }
+  .tag-pull { background: rgba(255,107,53,0.15); color: var(--accent2); border: 1px solid rgba(255,107,53,0.3); }
+  .tag-push { background: rgba(68,255,136,0.12); color: var(--ok); border: 1px solid rgba(68,255,136,0.25); }
+  .signal-ok { color: var(--ok); } .signal-warn { color: var(--warn); } .signal-danger { color: var(--danger); }
+  .zns-alert { border-radius: 6px; padding: 12px 16px; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
+  .zns-alert.ok { background: rgba(68,255,136,0.08); border: 1px solid rgba(68,255,136,0.25); color: var(--ok); }
+  .zns-alert.warn { background: rgba(255,170,51,0.08); border: 1px solid rgba(255,170,51,0.3); color: var(--warn); }
+  .zns-alert.danger { background: rgba(255,68,68,0.08); border: 1px solid rgba(255,68,68,0.3); color: var(--danger); }
+  .export-banner { background: rgba(232,255,71,0.06); border: 1px solid rgba(232,255,71,0.35); border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .export-banner-text { font-size: 12px; color: var(--accent); line-height: 1.6; }
+  .export-banner-text small { color: var(--muted); font-size: 11px; display: block; }
+  .spark-bar { flex: 1; border-radius: 2px 2px 0 0; min-width: 8px; }
+  .storage-info { font-size: 11px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .dot-ok { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); display: inline-block; margin-right: 4px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--accent); color: #000; padding: 10px 18px; border-radius: 6px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  @media (max-width: 700px) { .grid-2, .grid-4 { grid-template-columns: 1fr; } .entry-row { grid-template-columns: 70px 80px 1fr auto; } }
+  @media (max-width: 480px) { body { padding: 16px 12px; } h1 { font-size: 22px; } .tabs { flex-wrap: wrap; } .tab { font-size: 11px; padding: 6px 12px; } }
+  @supports (padding-top: env(safe-area-inset-top)) { body { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ FITNESS TRACKER</h1>
+    <div class="subtitle">Kraft · Ausdauer · Körper · ZNS</div>
+  </div>
+  <div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-ghost" onclick="manualExport()">Export JSON</button>
+      <label class="btn-ghost" style="cursor:pointer;">Import JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
+    </div>
+    <div class="storage-info">
+      <span><span class="dot-ok"></span>localStorage aktiv</span>
+      <span id="entry-count">0 Einträge</span>
+      <span id="last-export-info"></span>
+    </div>
+  </div>
+</header>
+
+<div id="export-banner" style="display:none;" class="export-banner">
+  <div class="export-banner-text">
+    📦 Wöchentliche Sicherung fällig
+    <small id="export-banner-sub"></small>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn" onclick="manualExport()">Jetzt exportieren →</button>
+    <button class="btn-ghost" onclick="document.getElementById('export-banner').style.display='none'">Später</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('log')">Einheit loggen</button>
+  <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab" onclick="switchTab('history')">Verlauf</button>
+  <button class="tab" onclick="switchTab('analyse')">Analyse</button>
+</div>
+
+<!-- LOG -->
+<div id="panel-log" class="panel active">
+
+  <!-- Sub-tabs -->
+  <div style="display:flex;gap:2px;margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px;width:fit-content;">
+    <button class="tab active" id="logtab-training" onclick="switchLogTab('training')">Training</button>
+    <button class="tab" id="logtab-tageslog" onclick="switchLogTab('tageslog')">Tageslog</button>
+  </div>
+
+  <!-- TRAINING SUB-PANEL -->
+  <div id="logpanel-training">
+    <div class="grid-2">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Einheit</div>
+          <div class="grid-2">
+            <div class="form-group"><label>Datum</label><input type="date" id="log-date"></div>
+            <div class="form-group"><label>Typ</label>
+              <select id="log-type" onchange="toggleFields()">
+                <option value="pull">Klimmzüge (Pull)</option>
+                <option value="push">Push-ups (Push)</option>
+                <option value="lauf">Laufen</option>
+                <option value="intervall">Intervall</option>
+                <option value="reko">Reko-Lauf</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="fields-kraft" style="margin-bottom:16px;">
+          <div class="card-title">Kraft-Details</div>
+          <div class="form-group"><label>Variante</label>
+            <select id="log-variante">
+              <optgroup label="Pull-ups">
+                <option>Regulär</option><option>Reverse Grip</option><option>Hammer Grip</option>
+              </optgroup>
+              <optgroup label="Push-ups">
+                <option>Weit</option><option>Eng</option><option>Diamond</option><option>Elevated Feet</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="form-group"><label>Sets (z.B. 11-10-7)</label><input type="text" id="log-sets" placeholder="11-10-7"></div>
+          <div class="form-group"><label>PR?</label>
+            <select id="log-pr"><option value="nein">Nein</option><option value="ja">Ja — PR! 🏆</option></select>
+          </div>
+        </div>
+
+        <div class="card" id="fields-lauf" style="margin-bottom:16px;display:none;">
+          <div class="card-title">Lauf-Details</div>
+          <div class="grid-2">
+            <div class="form-group"><label>Distanz (km)</label><input type="number" id="log-distanz" step="0.01" placeholder="12.12"></div>
+            <div class="form-group"><label>Ø Pace (min:sek/km)</label><input type="text" id="log-pace" placeholder="5:03"></div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group"><label>Ø HF Brustgurt (bpm)</label><input type="number" id="log-hf" placeholder="145"></div>
+            <div class="form-group"><label>Max HF (bpm)</label><input type="number" id="log-hf-max" placeholder="165"></div>
+          </div>
+          <div id="fields-intervall" style="display:none;">
+            <div class="form-group"><label>Intervall-Detail</label><input type="text" id="log-intervall-detail" placeholder="5x1km @ 4:30 / Pause 5:30"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Notizen</div>
+          <textarea id="log-notiz" rows="3" placeholder="Besonderheiten, Gefühl, Wetter..."></textarea>
+        </div>
+        <div class="card" style="background:rgba(232,255,71,0.04);border-color:rgba(232,255,71,0.2);">
+          <div class="card-title">Heutige Einheiten</div>
+          <div id="today-entries" style="font-size:12px;color:var(--muted);">—</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;"><button class="btn" onclick="saveEntry()">Einheit speichern →</button></div>
+  </div>
+
+  <!-- TAGESLOG SUB-PANEL -->
+  <div id="logpanel-tageslog" style="display:none;">
+    <div class="grid-2">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Datum</div>
+          <div class="form-group"><label>Datum</label><input type="date" id="tlog-date"></div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Körper & Ernährung</div>
+          <div class="grid-2">
+            <div class="form-group"><label>Gewicht (kg)</label><input type="number" id="log-gewicht" step="0.1" placeholder="75.4"></div>
+            <div class="form-group"><label>Kalorien (kcal)</label><input type="number" id="log-kalorien" placeholder="2800"></div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group"><label>Protein (g)</label><input type="number" id="log-protein" placeholder="150"></div>
+            <div class="form-group"><label>Kohlenhydrate (g)</label><input type="number" id="log-carbs" placeholder="300"></div>
+          </div>
+          <div class="form-group"><label>Schritte (Tag gesamt)</label><input type="number" id="log-schritte" placeholder="12000"></div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-title">ZNS & Erholung</div>
+          <div class="form-group"><label>Ruheherzfrequenz morgens (bpm)</label><input type="number" id="log-rhf" placeholder="52"></div>
+          <div class="form-group"><label>Schlafqualität</label>
+            <div class="rating-group" id="rating-schlaf">
+              <div class="rating-btn" onclick="setRating('schlaf',1)">1</div><div class="rating-btn" onclick="setRating('schlaf',2)">2</div>
+              <div class="rating-btn" onclick="setRating('schlaf',3)">3</div><div class="rating-btn" onclick="setRating('schlaf',4)">4</div>
+              <div class="rating-btn" onclick="setRating('schlaf',5)">5</div>
+            </div>
+          </div>
+          <div class="form-group"><label>Energie vor Training</label>
+            <div class="rating-group" id="rating-energie">
+              <div class="rating-btn" onclick="setRating('energie',1)">1</div><div class="rating-btn" onclick="setRating('energie',2)">2</div>
+              <div class="rating-btn" onclick="setRating('energie',3)">3</div><div class="rating-btn" onclick="setRating('energie',4)">4</div>
+              <div class="rating-btn" onclick="setRating('energie',5)">5</div>
+            </div>
+          </div>
+          <div class="form-group"><label>Volumen absolviert?</label>
+            <select id="log-volumen">
+              <option value="ja">Ja — alles wie geplant</option>
+              <option value="reduziert">Reduziert</option>
+              <option value="abgebrochen">Abgebrochen</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+      <button class="btn" onclick="saveTageslog()">Tageslog speichern →</button>
+      <span id="tageslog-hint" style="font-size:11px;color:var(--muted);"></span>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="panel-dashboard" class="panel">
+  <div id="zns-alert-box"></div>
+  <div class="grid-4" style="margin-bottom:20px;">
+    <div class="metric-card">
+      <div class="metric-label">ZNS-Score</div>
+      <div class="metric-value" id="m-zns">—</div>
+      <div class="zns-bar"><div class="zns-fill" id="zns-bar-fill"></div></div>
+      <div class="metric-unit">letzte 7 Tage</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Ø Gewicht</div>
+      <div class="metric-value" id="m-gewicht">—</div>
+      <div class="metric-unit">kg — Wochenschnitt</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Wochenkm</div>
+      <div class="metric-value" id="m-km">—</div>
+      <div class="metric-unit">diese Woche</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Ø Protein</div>
+      <div class="metric-value" id="m-protein">—</div>
+      <div class="metric-unit">g — letzte 7 Tage</div>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="card-title">Gewicht — Wochen-Trend</div>
+      <div id="trend-chart" style="display:flex;gap:4px;align-items:flex-end;height:60px;margin-top:8px;"></div>
+      <div id="trend-label" style="font-size:11px;color:var(--muted);margin-top:8px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Klimmzug 1. Set — Progression</div>
+      <div id="pull-chart" style="display:flex;gap:4px;align-items:flex-end;height:60px;margin-top:8px;"></div>
+      <div id="pull-label" style="font-size:11px;color:var(--muted);margin-top:8px;"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">ZNS-Indikatoren — letzte 7 Einträge</div>
+    <div id="zns-table"></div>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div id="panel-history" class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <select id="filter-type" onchange="renderHistory()" style="width:150px;">
+        <option value="alle">Alle Typen</option><option value="pull">Klimmzüge</option>
+        <option value="push">Push-ups</option><option value="lauf">Laufen</option>
+        <option value="intervall">Intervall</option><option value="reko">Reko</option>
+      </select>
+      <select id="filter-weeks" onchange="renderHistory()" style="width:150px;">
+        <option value="4">Letzte 4 Wochen</option><option value="8">Letzte 8 Wochen</option>
+        <option value="12">Letzte 12 Wochen</option><option value="all">Alle</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span id="history-count" style="color:var(--muted);font-size:11px;"></span>
+      <button class="btn-ghost" id="btn-select-mode" onclick="toggleSelectMode()" style="font-size:11px;padding:5px 12px;">Auswählen</button>
+      <span id="select-actions" style="display:none;gap:8px;">
+        <button class="btn-ghost" id="btn-select-all" onclick="selectAll()" style="font-size:11px;padding:5px 12px;">Alle</button>
+        <button class="btn-danger" id="btn-delete-selected" onclick="deleteSelected()" style="padding:5px 12px;">Auswahl löschen</button>
+        <button class="btn-ghost" onclick="cancelSelectMode()" style="font-size:11px;padding:5px 12px;">Abbrechen</button>
+      </span>
+    </div>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:100;overflow-y:auto;padding:24px;">
+  <div style="max-width:680px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--accent);">Eintrag bearbeiten</h2>
+      <button class="btn-ghost" onclick="closeEditModal()">✕ Schließen</button>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="form-group"><label>Datum</label><input type="date" id="edit-date"></div>
+      <div class="form-group"><label>Typ</label>
+        <select id="edit-type" onchange="toggleEditFields()">
+          <option value="pull">Klimmzüge (Pull)</option>
+          <option value="push">Push-ups (Push)</option>
+          <option value="lauf">Laufen</option>
+          <option value="intervall">Intervall</option>
+          <option value="reko">Reko-Lauf</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="edit-fields-kraft" style="margin-bottom:14px;">
+      <div class="grid-2">
+        <div class="form-group"><label>Variante</label>
+          <select id="edit-variante">
+            <optgroup label="Pull-ups">
+              <option>Regulär</option><option>Reverse Grip</option><option>Hammer Grip</option>
+            </optgroup>
+            <optgroup label="Push-ups">
+              <option>Weit</option><option>Eng</option><option>Diamond</option><option>Elevated Feet</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group"><label>PR?</label>
+          <select id="edit-pr"><option value="nein">Nein</option><option value="ja">Ja — PR! 🏆</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label>Sets (z.B. 11-10-7)</label><input type="text" id="edit-sets" placeholder="11-10-7"></div>
+    </div>
+
+    <div id="edit-fields-lauf" style="margin-bottom:14px;display:none;">
+      <div class="grid-2">
+        <div class="form-group"><label>Distanz (km)</label><input type="number" id="edit-distanz" step="0.01"></div>
+        <div class="form-group"><label>Ø Pace (min:sek/km)</label><input type="text" id="edit-pace" placeholder="5:03"></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label>Ø HF Brustgurt (bpm)</label><input type="number" id="edit-hf"></div>
+        <div class="form-group"><label>Max HF (bpm)</label><input type="number" id="edit-hf-max"></div>
+      </div>
+      <div id="edit-fields-intervall" style="display:none;">
+        <div class="form-group"><label>Intervall-Detail</label><input type="text" id="edit-intervall-detail"></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="form-group"><label>Gewicht (kg)</label><input type="number" id="edit-gewicht" step="0.1"></div>
+      <div class="form-group"><label>Kalorien (kcal)</label><input type="number" id="edit-kalorien"></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="form-group"><label>Protein (g)</label><input type="number" id="edit-protein"></div>
+      <div class="form-group"><label>Kohlenhydrate (g)</label><input type="number" id="edit-carbs"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;"><label>Schritte (Tag gesamt)</label><input type="number" id="edit-schritte"></div>
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="form-group"><label>Ruheherzfrequenz (bpm)</label><input type="number" id="edit-rhf"></div>
+      <div class="form-group"><label>Volumen absolviert?</label>
+        <select id="edit-volumen">
+          <option value="ja">Ja — alles wie geplant</option>
+          <option value="reduziert">Reduziert</option>
+          <option value="abgebrochen">Abgebrochen</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;"><label>Schlafqualität</label>
+      <div class="rating-group" id="edit-rating-schlaf">
+        <div class="rating-btn" onclick="setEditRating('schlaf',1)">1</div><div class="rating-btn" onclick="setEditRating('schlaf',2)">2</div>
+        <div class="rating-btn" onclick="setEditRating('schlaf',3)">3</div><div class="rating-btn" onclick="setEditRating('schlaf',4)">4</div>
+        <div class="rating-btn" onclick="setEditRating('schlaf',5)">5</div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;"><label>Energie vor Training</label>
+      <div class="rating-group" id="edit-rating-energie">
+        <div class="rating-btn" onclick="setEditRating('energie',1)">1</div><div class="rating-btn" onclick="setEditRating('energie',2)">2</div>
+        <div class="rating-btn" onclick="setEditRating('energie',3)">3</div><div class="rating-btn" onclick="setEditRating('energie',4)">4</div>
+        <div class="rating-btn" onclick="setEditRating('energie',5)">5</div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:20px;"><label>Notizen</label><textarea id="edit-notiz" rows="2"></textarea></div>
+
+    <div style="display:flex;gap:10px;">
+      <button class="btn" onclick="saveEdit()">Änderungen speichern →</button>
+      <button class="btn-ghost" onclick="closeEditModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<div id="delete-confirm-banner" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--danger);border-radius:8px;padding:14px 20px;z-index:200;gap:14px;align-items:center;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+  <span id="delete-confirm-text" style="font-size:13px;color:var(--text);"></span>
+  <button onclick="confirmDeleteSelected()" style="background:var(--danger);color:#000;border:none;border-radius:4px;padding:7px 16px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Löschen</button>
+  <button onclick="document.getElementById('delete-confirm-banner').style.display='none'" class="btn-ghost" style="font-size:12px;padding:6px 12px;">Abbrechen</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ANALYSE PANEL -->
+<div id="panel-analyse" class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
+    <span style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Zeitraum</span>
+    <div style="display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px;">
+      <button class="tab active" id="az-4"  onclick="setAnalyseRange(4)"  style="padding:5px 14px;">4W</button>
+      <button class="tab"        id="az-8"  onclick="setAnalyseRange(8)"  style="padding:5px 14px;">8W</button>
+      <button class="tab"        id="az-12" onclick="setAnalyseRange(12)" style="padding:5px 14px;">12W</button>
+      <button class="tab"        id="az-0"  onclick="setAnalyseRange(0)"  style="padding:5px 14px;">Alles</button>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0;">Progression — 1. Satz</div>
+        <select id="prog-select" onchange="renderPullChart()" style="width:auto;font-size:11px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);">
+          <optgroup label="Pull-ups">
+            <option value="pull|Regulär">Pull — Regulär</option>
+            <option value="pull|Reverse Grip">Pull — Reverse Grip</option>
+            <option value="pull|Hammer Grip">Pull — Hammer Grip</option>
+            <option value="pull|alle">Pull — alle Varianten</option>
+          </optgroup>
+          <optgroup label="Push-ups">
+            <option value="push|Weit">Push — Weit</option>
+            <option value="push|Eng">Push — Eng</option>
+            <option value="push|Diamond">Push — Diamond</option>
+            <option value="push|Elevated Feet">Push — Elevated Feet</option>
+            <option value="push|alle">Push — alle Varianten</option>
+          </optgroup>
+          <optgroup label="Aktivität">
+            <option value="schritte|tag">Schritte pro Tag</option>
+          </optgroup>
+        </select>
+      </div>
+      <div id="chart-wrapper-pull" style="position:relative;height:200px;"><canvas id="chart-pull"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Lauf-Pace über Zeit (min/km)</div>
+      <div id="chart-wrapper-pace" style="position:relative;height:200px;"><canvas id="chart-pace"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title">Wöchentliches Laufvolumen (km)</div>
+    <div id="chart-wrapper-km" style="position:relative;height:180px;"><canvas id="chart-km"></canvas></div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-title">Gewichtsverlauf (kg)</div>
+      <div id="chart-wrapper-weight" style="position:relative;height:180px;"><canvas id="chart-weight"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Kalorien pro Tag (kcal)</div>
+      <div id="chart-wrapper-kcal" style="position:relative;height:180px;"><canvas id="chart-kcal"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Herzfrequenz bei Läufen — Ø HF (Brustgurt)</div>
+    <div id="chart-wrapper-hf" style="position:relative;height:180px;"><canvas id="chart-hf"></canvas></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">Nur Einträge mit Brustgurt-HF werden angezeigt.</div>
+  </div>
+</div>
+
+<script>
+const LS_DATA = 'ep_data_v1';
+const LS_LAST_EXPORT = 'ep_last_export';
+let ratings = { schlaf: 0, energie: 0 };
+let data = [];
+
+const VARIANTE_MAP = { 'Breit': 'Weit' };
+
+function loadData() {
+  try {
+    const r = localStorage.getItem(LS_DATA);
+    data = r ? JSON.parse(r) : [];
+    data.forEach(d => {
+      d.id = Number(d.id);
+      if (d.variante && VARIANTE_MAP[d.variante]) d.variante = VARIANTE_MAP[d.variante];
+    });
+  }
+  catch(e) { data = []; }
+}
+
+function saveData() {
+  try { localStorage.setItem(LS_DATA, JSON.stringify(data)); updateEntryCount(); }
+  catch(e) { showToast('⚠ Speicherfehler'); }
+}
+
+function updateEntryCount() {
+  document.getElementById('entry-count').textContent = data.length + ' Einträge';
+}
+
+function checkAutoExport() {
+  const last = localStorage.getItem(LS_LAST_EXPORT);
+  const lastDate = last ? new Date(last) : null;
+  const daysSince = lastDate ? Math.floor((Date.now() - lastDate) / 86400000) : null;
+  const info = document.getElementById('last-export-info');
+  info.textContent = lastDate ? 'Export: vor ' + daysSince + ' Tag' + (daysSince === 1 ? '' : 'en') : 'Noch kein Export';
+
+  if (data.length > 0 && (!lastDate || daysSince >= 7)) {
+    document.getElementById('export-banner').style.display = 'flex';
+    document.getElementById('export-banner-sub').textContent = lastDate
+      ? 'Letztes Backup vor ' + daysSince + ' Tagen. Empfehlung: jetzt sichern.'
+      : 'Noch kein Backup erstellt.';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const t = new Date().toISOString().split('T')[0];
+  document.getElementById('log-date').value = t;
+  document.getElementById('tlog-date').value = t;
+  loadData();
+  updateEntryCount();
+  checkAutoExport();
+  renderDashboard();
+  renderHistory();
+  renderTodayEntries();
+  document.getElementById('log-date').addEventListener('change', renderTodayEntries);
+  document.getElementById('tlog-date').addEventListener('change', checkTageslogExists);
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('[onclick="switchTab(\'' + tab + '\')"]').classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'history') renderHistory();
+  if (tab === 'analyse') { loadChartJS(renderAnalyse); }
+}
+
+function toggleFields() {
+  const t = document.getElementById('log-type').value;
+  document.getElementById('fields-kraft').style.display = (t === 'pull' || t === 'push') ? 'block' : 'none';
+  document.getElementById('fields-lauf').style.display = ['lauf','intervall','reko'].includes(t) ? 'block' : 'none';
+  document.getElementById('fields-intervall').style.display = t === 'intervall' ? 'block' : 'none';
+}
+
+function setRating(type, val) {
+  ratings[type] = val;
+  document.querySelectorAll('#rating-' + type + ' .rating-btn').forEach((b, i) => b.classList.toggle('selected', i < val));
+}
+
+function switchLogTab(tab) {
+  ['training','tageslog'].forEach(t => {
+    document.getElementById('logtab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('logpanel-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'training') renderTodayEntries();
+  if (tab === 'tageslog') checkTageslogExists();
+}
+
+function renderTodayEntries() {
+  const el = document.getElementById('today-entries');
+  if (!el) return;
+  const d = document.getElementById('log-date').value || new Date().toISOString().split('T')[0];
+  const todayEntries = data.filter(e => e.datum === d && ['pull','push','lauf','intervall','reko'].includes(e.type));
+  if (!todayEntries.length) { el.innerHTML = '<span style="color:var(--muted);">Noch keine Einheiten für diesen Tag</span>'; return; }
+  const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko' };
+  el.innerHTML = todayEntries.map(e => {
+    let detail = e.sets ? e.variante + ' · ' + e.sets : '';
+    if (e.distanz) detail = e.distanz + ' km @ ' + (e.pace||'—') + '/km';
+    return '<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">' +
+      '<span><span style="color:var(--accent2);">' + (typeLbl[e.type]||e.type) + '</span>' +
+      (detail ? ' · ' + detail : '') + (e.pr ? ' 🏆' : '') + '</span>' +
+      '<button class="btn-danger" style="padding:2px 8px;font-size:10px;" onclick="deleteEntry(' + e.id + ');renderTodayEntries()">×</button>' +
+      '</div>';
+  }).join('') + '<div style="margin-top:8px;font-size:11px;color:var(--muted);">' + todayEntries.length + ' Einheit' + (todayEntries.length>1?'en':'') + ' heute</div>';
+}
+
+function checkTageslogExists() {
+  const d = document.getElementById('tlog-date').value || new Date().toISOString().split('T')[0];
+  const existing = data.find(e => e.datum === d && e.type === 'tageslog');
+  const hint = document.getElementById('tageslog-hint');
+  if (existing) {
+    hint.textContent = 'Tageslog für ' + d + ' bereits vorhanden — wird überschrieben.';
+    // prefill existing values
+    document.getElementById('log-gewicht').value = existing.gewicht || '';
+    document.getElementById('log-kalorien').value = existing.kalorien || '';
+    document.getElementById('log-protein').value = existing.protein || '';
+    document.getElementById('log-carbs').value = existing.carbs || '';
+    document.getElementById('log-schritte').value = existing.schritte || '';
+    document.getElementById('log-rhf').value = existing.rhf || '';
+    document.getElementById('log-volumen').value = existing.volumen || 'ja';
+    ['schlaf','energie'].forEach(t => {
+      ratings[t] = existing[t] || 0;
+      document.querySelectorAll('#rating-' + t + ' .rating-btn').forEach((b,i) => b.classList.toggle('selected', i < ratings[t]));
+    });
+  } else {
+    hint.textContent = '';
+  }
+}
+
+function saveTageslog() {
+  const d = document.getElementById('tlog-date').value || new Date().toISOString().split('T')[0];
+  // Remove existing tageslog for this date
+  data = data.filter(e => !(e.datum === d && e.type === 'tageslog'));
+  const entry = {
+    id: Date.now(),
+    datum: d,
+    type: 'tageslog',
+    gewicht: parseFloat(document.getElementById('log-gewicht').value) || null,
+    kalorien: parseInt(document.getElementById('log-kalorien').value) || null,
+    protein: parseInt(document.getElementById('log-protein').value) || null,
+    carbs: parseInt(document.getElementById('log-carbs').value) || null,
+    schritte: parseInt(document.getElementById('log-schritte').value) || null,
+    rhf: parseInt(document.getElementById('log-rhf').value) || null,
+    schlaf: ratings.schlaf || null,
+    energie: ratings.energie || null,
+    volumen: document.getElementById('log-volumen').value,
+  };
+  data.unshift(entry);
+  data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
+  saveData();
+  showToast('✓ Tageslog gespeichert');
+  checkTageslogExists();
+  renderDashboard();
+}
+
+function saveEntry() {
+  const type = document.getElementById('log-type').value;
+  const today = new Date().toISOString().split('T')[0];
+  const entry = {
+    id: Date.now(),
+    datum: document.getElementById('log-date').value || today,
+    type,
+    notiz: document.getElementById('log-notiz').value.trim(),
+  };
+
+  if (type === 'pull' || type === 'push') {
+    entry.variante = document.getElementById('log-variante').value;
+    entry.sets = document.getElementById('log-sets').value;
+    entry.pr = document.getElementById('log-pr').value === 'ja';
+    const reps = entry.sets.split('-').map(Number).filter(n => !isNaN(n) && n > 0);
+    entry.total_reps = reps.reduce((a,b) => a+b, 0);
+    entry.first_set = reps[0] || null;
+  }
+
+  if (['lauf','intervall','reko'].includes(type)) {
+    entry.distanz = parseFloat(document.getElementById('log-distanz').value) || null;
+    entry.pace = document.getElementById('log-pace').value;
+    entry.hf = parseInt(document.getElementById('log-hf').value) || null;
+    entry.hf_max = parseInt(document.getElementById('log-hf-max').value) || null;
+    if (type === 'intervall') entry.intervall_detail = document.getElementById('log-intervall-detail').value;
+  }
+
+  data.unshift(entry);
+  data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
+  saveData();
+  resetForm();
+  renderDashboard();
+  showToast('✓ Einheit gespeichert');
+}
+
+function resetForm() {
+  ['log-sets','log-distanz','log-pace','log-hf','log-hf-max','log-notiz','log-intervall-detail']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('log-pr').value = 'nein';
+  renderTodayEntries();
+  document.getElementById('log-volumen').value = 'ja';
+  ratings = { schlaf: 0, energie: 0 };
+  ['schlaf','energie'].forEach(t => document.querySelectorAll('#rating-' + t + ' .rating-btn').forEach(b => b.classList.remove('selected')));
+}
+
+function manualExport() {
+  if (!data.length) { showToast('Keine Daten vorhanden'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'eisernes_protokoll_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  localStorage.setItem(LS_LAST_EXPORT, new Date().toISOString());
+  document.getElementById('export-banner').style.display = 'none';
+  checkAutoExport();
+  showToast('✓ Backup gespeichert');
+}
+
+async function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    if (Array.isArray(imported)) {
+      const existing = new Set(data.map(d => d.id));
+      const fresh = imported.filter(d => !existing.has(d.id));
+      data = [...data, ...fresh].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+      saveData();
+      renderDashboard();
+      renderHistory();
+      showToast('✓ ' + fresh.length + ' neue Einträge importiert');
+    }
+  } catch(err) { showToast('Fehler beim Import'); }
+}
+
+// --- Dashboard ---
+function renderDashboard() {
+  const sevenAgo = new Date(Date.now() - 7*86400000);
+  // For ZNS/nutrition: use tageslog entries; for training: use activity entries
+  const recent = data.filter(d => new Date(d.datum) >= sevenAgo);
+  const recentTageslog = data.filter(d => new Date(d.datum) >= sevenAgo && (d.type === 'tageslog' || (!['tageslog'].includes(d.type) && (d.gewicht||d.kalorien||d.schlaf||d.rhf))));
+
+  const zns = calcZNS(recentTageslog);
+  const znsEl = document.getElementById('m-zns');
+  znsEl.textContent = zns.score;
+  znsEl.className = 'metric-value ' + zns.cls;
+  document.getElementById('zns-bar-fill').style.cssText = 'width:' + zns.pct + '%;background:' + zns.color;
+  document.getElementById('zns-alert-box').innerHTML = '<div class="zns-alert ' + zns.alertCls + '">' + zns.msg + '</div>';
+
+  const weights = recentTageslog.filter(d => d.gewicht).map(d => d.gewicht);
+  document.getElementById('m-gewicht').textContent = weights.length ? (weights.reduce((a,b)=>a+b)/weights.length).toFixed(1) : '—';
+
+  const wStart = new Date(); wStart.setDate(wStart.getDate() - wStart.getDay() + 1);
+  const weekKm = data.filter(d => new Date(d.datum) >= wStart && d.distanz).reduce((a,b) => a+(b.distanz||0), 0);
+  document.getElementById('m-km').textContent = weekKm.toFixed(1);
+
+  const prots = recentTageslog.filter(d => d.protein).map(d => d.protein);
+  document.getElementById('m-protein').textContent = prots.length ? Math.round(prots.reduce((a,b)=>a+b)/prots.length) : '—';
+
+  renderSparkline('trend-chart', 'trend-label',
+    data.filter(d => d.gewicht && (d.type==='tageslog'||d.gewicht)).slice(0,14).reverse().map(d => ({ v: d.gewicht, label: d.datum })),
+    'var(--accent)', v => v.toFixed(1) + ' kg', true);
+
+  renderSparkline('pull-chart', 'pull-label',
+    data.filter(d => d.type === 'pull' && d.first_set).slice(0,10).reverse().map(d => ({ v: d.first_set, label: d.datum + ' · ' + d.variante })),
+    'var(--accent2)', v => v + ' Reps', false);
+
+  renderZNSTable(recentTageslog);
+}
+
+function calcZNS(recent) {
+  const wd = recent.filter(d => d.schlaf || d.energie);
+  if (!wd.length) return { score: '—', cls: '', pct: 50, color: '#444', alertCls: 'ok', msg: 'Schlaf & Energie loggen für ZNS-Score.' };
+  let score = 0, max = 0;
+  const sl = wd.filter(d => d.schlaf).map(d => d.schlaf);
+  if (sl.length) { score += sl.reduce((a,b)=>a+b)/sl.length; max += 5; }
+  const en = wd.filter(d => d.energie).map(d => d.energie);
+  if (en.length) { score += en.reduce((a,b)=>a+b)/en.length; max += 5; }
+  score -= recent.filter(d => d.volumen === 'abgebrochen').length * 0.8;
+  score -= recent.filter(d => d.volumen === 'reduziert').length * 0.4;
+  const rhfs = recent.filter(d => d.rhf).map(d => d.rhf);
+  if (rhfs.length >= 3) { const avg = rhfs.reduce((a,b)=>a+b)/rhfs.length; if (rhfs[0] > avg+7) score -= 1; }
+  const pct = Math.min(100, Math.max(0, (score/max)*100));
+  const norm = score/max;
+  if (norm >= 0.75) return { score: 'GUT', cls: 'signal-ok', pct, color: '#44ff88', alertCls: 'ok', msg: '✓ ZNS erholt. Planmäßiges Training möglich.' };
+  if (norm >= 0.5) return { score: 'OK', cls: 'signal-warn', pct, color: '#ffaa33', alertCls: 'warn', msg: '⚠ Leichte Belastung. Intensität beobachten, kein zusätzliches Volumen.' };
+  return { score: 'ACHTUNG', cls: 'signal-danger', pct, color: '#ff4444', alertCls: 'danger', msg: '✗ ZNS-Warnsignal. Heute Intensität reduzieren oder Reko-Lauf statt Intervall.' };
+}
+
+function renderSparkline(chartId, labelId, points, color, fmt, lowerIsBetter) {
+  const chart = document.getElementById(chartId);
+  const label = document.getElementById(labelId);
+  if (!points.length) { chart.innerHTML = '<span style="color:var(--muted);font-size:11px;">Noch keine Daten</span>'; label.innerHTML = ''; return; }
+  const vals = points.map(p => p.v);
+  const mn = Math.min(...vals) - (Math.max(...vals)-Math.min(...vals))*0.1 - 0.01;
+  const mx = Math.max(...vals) + (Math.max(...vals)-Math.min(...vals))*0.1 + 0.01;
+  const range = mx - mn;
+  chart.innerHTML = vals.map((v,i) => {
+    const h = Math.round(((v-mn)/range)*52)+8;
+    return '<div class="spark-bar" style="height:' + h + 'px;background:' + (i===vals.length-1 ? color : 'var(--border)') + ';flex:1;" title="' + fmt(v) + '"></div>';
+  }).join('');
+  const first = vals[0], last = vals[vals.length-1];
+  const diff = (last - first).toFixed(1);
+  const positive = lowerIsBetter ? diff <= 0 : diff >= 0;
+  label.innerHTML = fmt(first) + ' → <span style="color:' + (positive ? 'var(--ok)' : 'var(--danger)') + ';font-weight:500;">' + fmt(last) + ' (' + (diff > 0 ? '+' : '') + diff + ')</span>';
+}
+
+function renderZNSTable(recent) {
+  const el = document.getElementById('zns-table');
+  const rows = recent.filter(d => d.schlaf || d.energie || d.rhf).slice(0,7);
+  if (!rows.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">ZNS-Werte noch nicht geloggt</div>'; return; }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:90px 1fr 1fr 1fr 1fr;gap:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px;"><span>Datum</span><span>Schlaf</span><span>Energie</span><span>RHF</span><span>Volumen</span></div>' +
+    rows.map(d => '<div style="display:grid;grid-template-columns:90px 1fr 1fr 1fr 1fr;gap:8px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--border);">' +
+      '<span style="color:var(--muted)">' + d.datum + '</span>' +
+      '<span>' + (d.schlaf ? '★'.repeat(d.schlaf)+'☆'.repeat(5-d.schlaf) : '—') + '</span>' +
+      '<span>' + (d.energie ? '★'.repeat(d.energie)+'☆'.repeat(5-d.energie) : '—') + '</span>' +
+      '<span style="color:' + (d.rhf && d.rhf > 62 ? 'var(--warn)' : 'inherit') + '">' + (d.rhf||'—') + '</span>' +
+      '<span style="color:' + (d.volumen==='abgebrochen'?'var(--danger)':d.volumen==='reduziert'?'var(--warn)':'var(--ok)') + '">' + (d.volumen||'—') + '</span>' +
+      '</div>').join('');
+}
+
+// --- History ---
+function renderHistory() {
+  const tf = document.getElementById('filter-type').value;
+  const wf = document.getElementById('filter-weeks').value;
+  let filtered = [...data];
+  if (tf !== 'alle') filtered = filtered.filter(d => d.type === tf);
+  if (wf !== 'all') { const cutoff = new Date(Date.now() - parseInt(wf)*7*86400000); filtered = filtered.filter(d => new Date(d.datum) >= cutoff); }
+  document.getElementById('history-count').textContent = filtered.length + ' Einträge';
+  const el = document.getElementById('history-list');
+  if (!filtered.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:12px;">Keine Einträge</div>'; return; }
+  el.innerHTML = filtered.map(d => {
+    const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : 'tag-' + d.type;
+    const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', tageslog:'Tageslog' }[d.type] || d.type;
+    let detail = d.sets ? d.variante + ' · ' + d.sets + ' (' + d.total_reps + ' Reps)' + (d.pr ? ' 🏆' : '') : '';
+    if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
+    if (d.intervall_detail) detail += ' · ' + d.intervall_detail;
+    const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString():null].filter(Boolean);
+    const isSelected = selectedIds.has(d.id);
+    const rowBg = selectMode && isSelected ? 'background:rgba(232,255,71,0.06);' : '';
+    return '<div class="entry-row" style="' + rowBg + '">' +
+      (selectMode
+        ? '<input type="checkbox" class="entry-checkbox" data-id="' + d.id + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(' + d.id + ')" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">'
+        : '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>') +
+      (selectMode ? '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>' : '') +
+      '<span class="tag ' + tagCls + '">' + typeLbl + '</span>' +
+      '<div><div>' + (detail||'—') + '</div>' +
+      (meta.length ? '<div style="color:var(--muted);font-size:11px;margin-top:3px;">' + meta.join(' · ') + '</div>' : '') +
+      (d.notiz ? '<div style="color:var(--muted);font-size:11px;margin-top:2px;font-style:italic;">"' + d.notiz + '"</div>' : '') +
+      '</div>' +
+      (!selectMode ? '<div style="display:flex;gap:6px;">' +
+      '<button class="btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="openEditModal(' + d.id + ')">✎</button>' +
+      '<button class="btn-danger" onclick="deleteEntry(' + d.id + ')">×</button>' +
+      '</div>' : '') +
+      '</div>';
+  }).join('');
+  if (selectMode) updateDeleteBtn();
+}
+
+let selectMode = false;
+let selectedIds = new Set();
+
+function toggleSelectMode() {
+  selectMode = true;
+  selectedIds.clear();
+  document.getElementById('btn-select-mode').style.display = 'none';
+  const sa = document.getElementById('select-actions');
+  sa.style.display = 'flex';
+  sa.style.gap = '8px';
+  renderHistory();
+}
+
+function cancelSelectMode() {
+  selectMode = false;
+  selectedIds.clear();
+  document.getElementById('btn-select-mode').style.display = '';
+  document.getElementById('select-actions').style.display = 'none';
+  renderHistory();
+}
+
+function selectAll() {
+  const checkboxes = document.querySelectorAll('.entry-checkbox');
+  const allChecked = checkboxes.length > 0 && [...checkboxes].every(c => c.checked);
+  checkboxes.forEach(c => {
+    c.checked = !allChecked;
+    const id = parseInt(c.dataset.id);
+    if (!allChecked) selectedIds.add(id); else selectedIds.delete(id);
+  });
+  updateDeleteBtn();
+}
+
+function toggleSelect(id) {
+  id = Number(id);
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  updateDeleteBtn();
+}
+
+function updateDeleteBtn() {
+  const btn = document.getElementById('btn-delete-selected');
+  const n = selectedIds.size;
+  btn.textContent = n > 0 ? n + ' Eintrag' + (n > 1 ? 'e' : '') + ' löschen' : 'Auswahl löschen';
+  btn.style.opacity = n > 0 ? '1' : '0.5';
+  btn.disabled = n === 0;
+}
+
+function deleteSelected() {
+  const n = selectedIds.size;
+  if (n === 0) { showToast('Keine Einträge ausgewählt'); return; }
+  // show inline confirm banner instead of confirm()
+  const banner = document.getElementById('delete-confirm-banner');
+  document.getElementById('delete-confirm-text').textContent = n + ' Eintrag' + (n > 1 ? 'e' : '') + ' wirklich löschen?';
+  banner.style.display = 'flex';
+}
+
+function confirmDeleteSelected() {
+  document.getElementById('delete-confirm-banner').style.display = 'none';
+  const toDelete = new Set([...selectedIds].map(Number));
+  const before = data.length;
+  data = data.filter(d => !toDelete.has(Number(d.id)));
+  const removed = before - data.length;
+  saveData();
+  cancelSelectMode();
+  renderDashboard();
+  showToast(removed + ' Eintrag' + (removed !== 1 ? 'e' : '') + ' gelöscht');
+}
+
+function deleteEntry(id) {
+  if (!window.confirm('Eintrag löschen?')) return;
+  data = data.filter(d => d.id !== id);
+  saveData();
+  renderHistory();
+  renderDashboard();
+  showToast('Eintrag gelöscht');
+}
+
+let editId = null;
+let editRatings = { schlaf: 0, energie: 0 };
+
+function setEditRating(type, val) {
+  editRatings[type] = val;
+  document.querySelectorAll('#edit-rating-' + type + ' .rating-btn').forEach((b, i) => b.classList.toggle('selected', i < val));
+}
+
+function toggleEditFields() {
+  const t = document.getElementById('edit-type').value;
+  document.getElementById('edit-fields-kraft').style.display = (t === 'pull' || t === 'push') ? 'block' : 'none';
+  document.getElementById('edit-fields-lauf').style.display = ['lauf','intervall','reko'].includes(t) ? 'block' : 'none';
+  document.getElementById('edit-fields-intervall').style.display = t === 'intervall' ? 'block' : 'none';
+}
+
+function openEditModal(id) {
+  const d = data.find(e => e.id === id);
+  if (!d) return;
+  editId = id;
+  editRatings = { schlaf: d.schlaf || 0, energie: d.energie || 0 };
+
+  document.getElementById('edit-date').value = d.datum || '';
+  document.getElementById('edit-type').value = d.type || 'pull';
+  toggleEditFields();
+
+  if (d.variante) document.getElementById('edit-variante').value = d.variante;
+  document.getElementById('edit-sets').value = d.sets || '';
+  document.getElementById('edit-pr').value = d.pr ? 'ja' : 'nein';
+  document.getElementById('edit-distanz').value = d.distanz || '';
+  document.getElementById('edit-pace').value = d.pace || '';
+  document.getElementById('edit-hf').value = d.hf || '';
+  document.getElementById('edit-hf-max').value = d.hf_max || '';
+  document.getElementById('edit-intervall-detail').value = d.intervall_detail || '';
+  document.getElementById('edit-gewicht').value = d.gewicht || '';
+  document.getElementById('edit-kalorien').value = d.kalorien || '';
+  document.getElementById('edit-protein').value = d.protein || '';
+  document.getElementById('edit-carbs').value = d.carbs || '';
+  document.getElementById('edit-rhf').value = d.rhf || '';
+  document.getElementById('edit-schritte').value = d.schritte || '';
+  document.getElementById('edit-volumen').value = d.volumen || 'ja';
+  document.getElementById('edit-notiz').value = d.notiz || '';
+
+  ['schlaf','energie'].forEach(t => {
+    document.querySelectorAll('#edit-rating-' + t + ' .rating-btn').forEach((b, i) => b.classList.toggle('selected', i < editRatings[t]));
+  });
+
+  document.getElementById('edit-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  editId = null;
+}
+
+function saveEdit() {
+  const idx = data.findIndex(e => e.id === editId);
+  if (idx === -1) return;
+
+  const type = document.getElementById('edit-type').value;
+  const d = data[idx];
+
+  d.datum = document.getElementById('edit-date').value;
+  d.type = type;
+  d.gewicht = parseFloat(document.getElementById('edit-gewicht').value) || null;
+  d.kalorien = parseInt(document.getElementById('edit-kalorien').value) || null;
+  d.protein = parseInt(document.getElementById('edit-protein').value) || null;
+  d.carbs = parseInt(document.getElementById('edit-carbs').value) || null;
+  d.rhf = parseInt(document.getElementById('edit-rhf').value) || null;
+  d.schritte = parseInt(document.getElementById('edit-schritte').value) || null;
+  d.schlaf = editRatings.schlaf || null;
+  d.energie = editRatings.energie || null;
+  d.volumen = document.getElementById('edit-volumen').value;
+  d.notiz = document.getElementById('edit-notiz').value.trim();
+
+  if (type === 'pull' || type === 'push') {
+    d.variante = document.getElementById('edit-variante').value;
+    d.sets = document.getElementById('edit-sets').value;
+    d.pr = document.getElementById('edit-pr').value === 'ja';
+    const reps = d.sets.split('-').map(Number).filter(n => !isNaN(n) && n > 0);
+    d.total_reps = reps.reduce((a,b) => a+b, 0);
+    d.first_set = reps[0] || null;
+    d.distanz = null; d.pace = null; d.hf = null; d.hf_max = null;
+  }
+
+  if (['lauf','intervall','reko'].includes(type)) {
+    d.distanz = parseFloat(document.getElementById('edit-distanz').value) || null;
+    d.pace = document.getElementById('edit-pace').value;
+    d.hf = parseInt(document.getElementById('edit-hf').value) || null;
+    d.hf_max = parseInt(document.getElementById('edit-hf-max').value) || null;
+    d.intervall_detail = type === 'intervall' ? document.getElementById('edit-intervall-detail').value : null;
+    d.variante = null; d.sets = null; d.first_set = null; d.total_reps = null;
+  }
+
+  // Resort by date descending
+  data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
+  saveData();
+  closeEditModal();
+  renderHistory();
+  renderDashboard();
+  showToast('✓ Eintrag aktualisiert');
+}
+
+function renderPullChart() {
+  const tick = '#666';
+  const grid = 'rgba(255,255,255,0.06)';
+  destroyChart('pull');
+  const canvas = getCanvas('pull');
+  if (!canvas) return;
+
+  const sel = document.getElementById('prog-select');
+  if (!sel) return;
+
+  // Dynamisch alle vorhandenen Varianten aus den Daten ermitteln
+  const pullVarianten = [...new Set(data.filter(d => d.type === 'pull' && d.variante).map(d => d.variante))].sort();
+  const pushVarianten = [...new Set(data.filter(d => d.type === 'push' && d.variante).map(d => d.variante))].sort();
+
+  const currentVal = sel.value;
+  sel.innerHTML =
+    '<optgroup label="Pull-ups">' +
+    pullVarianten.map(v => `<option value="pull|${v}">${v}</option>`).join('') +
+    (pullVarianten.length > 1 ? '<option value="pull|alle">Pull — alle Varianten</option>' : '') +
+    '</optgroup>' +
+    '<optgroup label="Push-ups">' +
+    pushVarianten.map(v => `<option value="push|${v}">${v}</option>`).join('') +
+    (pushVarianten.length > 1 ? '<option value="push|alle">Push — alle Varianten</option>' : '') +
+    '</optgroup>' +
+    '<optgroup label="Aktivität"><option value="schritte|tag">Schritte pro Tag</option></optgroup>';
+
+  // Vorherige Auswahl wiederherstellen falls noch vorhanden
+  if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
+
+  const val = sel.value;
+  if (!val) { showEmptyState('pull'); return; }
+
+  const [filterType, filterVariante] = val.split('|');
+
+  // --- Schritte-Modus ---
+  if (filterType === 'schritte') {
+    const schritteData = filterByRange(data.filter(d => d.schritte)).reverse();
+    if (!schritteData.length) { showEmptyState('pull'); return; }
+    chartInstances['pull'] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: schritteData.map(d => d.datum),
+        datasets: [{
+          label: 'Schritte',
+          data: schritteData.map(d => d.schritte),
+          backgroundColor: schritteData.map(d => d.schritte >= 10000 ? '#44ff8899' : '#e8ff4799'),
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' Schritte' } } },
+        scales: {
+          x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 }, grid: { color: grid } },
+          y: { ticks: { color: tick, font: { size: 11 }, callback: v => (v/1000).toFixed(0) + 'k' }, grid: { color: grid } }
+        },
+        annotation: { annotations: [{ type: 'line', yMin: 10000, yMax: 10000, borderColor: '#44ff88', borderWidth: 1, borderDash: [4,4] }] }
+      }
+    });
+    return;
+  }
+
+  const isPull = filterType === 'pull';
+
+  const varianteColors = {
+    'Regulär': '#ff6b35', 'Reverse Grip': '#e8ff47', 'Hammer Grip': '#AFA9EC',
+    'Weit': '#44ff88', 'Eng': '#1D9E75', 'Diamond': '#5DCAA5', 'Elevated Feet': '#9FE1CB',
+    'Breit': '#ff6b35'
+  };
+  const defaultColor = isPull ? '#ff6b35' : '#44ff88';
+
+  let entries = filterByRange(data.filter(d => d.type === filterType && d.first_set));
+
+  if (filterVariante === 'alle') {
+    const byVariante = {};
+    entries.forEach(d => {
+      if (!byVariante[d.variante]) byVariante[d.variante] = [];
+      byVariante[d.variante].push(d);
+    });
+    const datasets = Object.entries(byVariante).map(([v, rows]) => {
+      const sorted = rows.slice().reverse();
+      const color = varianteColors[v] || defaultColor;
+      return {
+        label: v,
+        data: sorted.map(d => ({ x: d.datum, y: d.first_set })),
+        borderColor: color,
+        backgroundColor: color + '22',
+        pointBackgroundColor: sorted.map(d => d.pr ? '#e8ff47' : color),
+        pointRadius: sorted.map(d => d.pr ? 7 : 4),
+        borderWidth: 2, fill: false, tension: 0.3
+      };
+    });
+    if (!datasets.length) { showEmptyState('pull'); return; }
+    const allDates = [...new Set(entries.map(d => d.datum))].sort();
+    chartInstances['pull'] = new Chart(canvas, {
+      type: 'line',
+      data: { labels: allDates, datasets },
+      options: {
+        ...baseLineOptions(tick, grid, v => v + ' Reps', false),
+        plugins: { legend: { display: true, labels: { color: tick, font: { size: 11 }, boxWidth: 10, padding: 12 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + ' Reps' } } }
+      }
+    });
+  } else {
+    const filtered = entries.filter(d => d.variante === filterVariante).reverse();
+    if (!filtered.length) { showEmptyState('pull'); return; }
+    const color = varianteColors[filterVariante] || defaultColor;
+    chartInstances['pull'] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: filtered.map(d => d.datum),
+        datasets: [{
+          label: filterVariante + ' — 1. Satz',
+          data: filtered.map(d => d.first_set),
+          borderColor: color,
+          backgroundColor: color + '18',
+          pointBackgroundColor: filtered.map(d => d.pr ? '#e8ff47' : color),
+          pointRadius: filtered.map(d => d.pr ? 7 : 4),
+          borderWidth: 2, fill: true, tension: 0.3
+        }]
+      },
+      options: {
+        ...baseLineOptions(tick, grid, v => v + ' Reps', false),
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' Reps' + (filtered[ctx.dataIndex]?.pr ? ' 🏆 PR' : '') } } }
+      }
+    });
+  }
+}
+
+
+function loadChartJS(cb) {
+  if (window.Chart) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+// --- Analyse ---
+let analyseWeeks = 4;
+let chartInstances = {};
+
+function setAnalyseRange(weeks) {
+  analyseWeeks = weeks;
+  ['4','8','12','0'].forEach(w => {
+    const el = document.getElementById('az-' + w);
+    if (el) el.classList.toggle('active', parseInt(w) === weeks);
+  });
+  renderAnalyse();
+}
+
+function getAnalyseCutoff() {
+  if (!analyseWeeks) return null;
+  return new Date(Date.now() - analyseWeeks * 7 * 86400000);
+}
+
+function filterByRange(arr) {
+  const cutoff = getAnalyseCutoff();
+  if (!cutoff) return arr;
+  return arr.filter(d => new Date(d.datum) >= cutoff);
+}
+
+function destroyChart(id) {
+  if (chartInstances[id]) {
+    try { chartInstances[id].destroy(); } catch(e) {}
+    delete chartInstances[id];
+  }
+  // Restore canvas if it was replaced by emptyState
+  const wrapper = document.getElementById('chart-wrapper-' + id);
+  if (wrapper) {
+    const existing = wrapper.querySelector('canvas');
+    if (!existing) {
+      const c = document.createElement('canvas');
+      c.id = 'chart-' + id;
+      wrapper.innerHTML = '';
+      wrapper.appendChild(c);
+    }
+  }
+}
+
+function showEmptyState(id, msg) {
+  const wrapper = document.getElementById('chart-wrapper-' + id);
+  if (!wrapper) return;
+  // destroy existing chart first
+  if (chartInstances[id]) { try { chartInstances[id].destroy(); } catch(e) {} delete chartInstances[id]; }
+  wrapper.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:12px;">' + (msg || 'Noch keine Daten im gewählten Zeitraum') + '</div>';
+}
+
+function paceToMin(pace) {
+  if (!pace) return null;
+  const parts = pace.split(':');
+  if (parts.length !== 2) return null;
+  const val = parseInt(parts[0]) + parseInt(parts[1]) / 60;
+  return isNaN(val) ? null : parseFloat(val.toFixed(3));
+}
+
+function minToPace(val) {
+  if (!val) return '—';
+  const m = Math.floor(val);
+  const s = Math.round((val - m) * 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function getCanvas(id) {
+  const wrapper = document.getElementById('chart-wrapper-' + id);
+  if (!wrapper) return null;
+  let c = wrapper.querySelector('canvas');
+  if (!c) { c = document.createElement('canvas'); c.id = 'chart-' + id; wrapper.appendChild(c); }
+  return c;
+}
+
+function renderAnalyse() {
+  const tick = '#666';
+  const grid = 'rgba(255,255,255,0.06)';
+
+  // 1. Progression (pull/push mit Varianten-Dropdown)
+  renderPullChart();
+
+  // 2. Lauf-Pace
+  destroyChart('pace');
+  const runs = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.pace)).reverse();
+  if (runs.length) {
+    const colors = { lauf: '#e8ff47', intervall: '#ff6b35', reko: '#44ff88' };
+    chartInstances['pace'] = new Chart(getCanvas('pace'), {
+      type: 'scatter',
+      data: {
+        datasets: ['lauf','intervall','reko'].map(type => ({
+          label: { lauf:'Grundlage', intervall:'Intervall', reko:'Reko' }[type],
+          data: runs.filter(d => d.type === type).map(d => ({ x: d.datum, y: paceToMin(d.pace) })).filter(p => p.y),
+          backgroundColor: colors[type] + 'CC',
+          pointRadius: 5
+        })).filter(ds => ds.data.length)
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: tick, font: { size: 11 }, boxWidth: 10 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + minToPace(ctx.parsed.y) + '/km' } } },
+        scales: {
+          x: { type: 'category', ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 10 }, grid: { color: grid } },
+          y: { reverse: true, ticks: { color: tick, font: { size: 11 }, callback: v => minToPace(v) }, grid: { color: grid } }
+        }
+      }
+    });
+  } else { showEmptyState('pace'); }
+
+  // 3. Wöchentliches Laufvolumen
+  destroyChart('km');
+  const allRuns = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.distanz));
+  if (allRuns.length) {
+    const weekMap = {};
+    allRuns.forEach(d => {
+      const date = new Date(d.datum);
+      const day = date.getDay() || 7;
+      const mon = new Date(date); mon.setDate(date.getDate() - day + 1);
+      const key = mon.toISOString().split('T')[0];
+      weekMap[key] = (weekMap[key] || 0) + d.distanz;
+    });
+    const weeks = Object.keys(weekMap).sort();
+    chartInstances['km'] = new Chart(getCanvas('km'), {
+      type: 'bar',
+      data: {
+        labels: weeks,
+        datasets: [{ label: 'km', data: weeks.map(w => parseFloat(weekMap[w].toFixed(1))), backgroundColor: '#e8ff47AA', borderRadius: 3 }]
+      },
+      options: baseBarOptions(tick, grid, v => v + ' km')
+    });
+  } else { showEmptyState('km'); }
+
+  // 4. Gewicht
+  destroyChart('weight');
+  const weights = filterByRange(data.filter(d => d.gewicht)).reverse();
+  if (weights.length) {
+    chartInstances['weight'] = new Chart(getCanvas('weight'), {
+      type: 'line',
+      data: {
+        labels: weights.map(d => d.datum),
+        datasets: [{ label: 'Gewicht (kg)', data: weights.map(d => d.gewicht), borderColor: '#e8ff47', backgroundColor: 'rgba(232,255,71,0.08)', borderWidth: 2, pointRadius: 3, fill: true, tension: 0.3 }]
+      },
+      options: baseLineOptions(tick, grid, v => v.toFixed(1) + ' kg', true)
+    });
+  } else { showEmptyState('weight'); }
+
+  // 5. Kalorien
+  destroyChart('kcal');
+  const kcals = filterByRange(data.filter(d => d.kalorien)).reverse();
+  if (kcals.length) {
+    const laufTage = new Set(data.filter(d => ['lauf','intervall','reko'].includes(d.type)).map(d => d.datum));
+    chartInstances['kcal'] = new Chart(getCanvas('kcal'), {
+      type: 'bar',
+      data: {
+        labels: kcals.map(d => d.datum),
+        datasets: [{ label: 'kcal', data: kcals.map(d => d.kalorien), backgroundColor: kcals.map(d => laufTage.has(d.datum) ? '#ff6b35AA' : '#44ff8866'), borderRadius: 3 }]
+      },
+      options: {
+        ...baseBarOptions(tick, grid, v => v + ' kcal'),
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' kcal' + (laufTage.has(kcals[ctx.dataIndex]?.datum) ? ' (Lauftag)' : '') } } }
+      }
+    });
+  } else { showEmptyState('kcal'); }
+
+  // 6. Herzfrequenz
+  destroyChart('hf');
+  const hfRuns = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.hf)).reverse();
+  if (hfRuns.length) {
+    chartInstances['hf'] = new Chart(getCanvas('hf'), {
+      type: 'line',
+      data: {
+        labels: hfRuns.map(d => d.datum),
+        datasets: [{ label: 'Ø HF (bpm)', data: hfRuns.map(d => d.hf), borderColor: '#ff4444', backgroundColor: 'rgba(255,68,68,0.08)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3 }]
+      },
+      options: baseLineOptions(tick, grid, v => v + ' bpm', true)
+    });
+  } else {
+    showEmptyState('hf', 'Noch keine Brustgurt-HF geloggt');
+  }
+}
+
+function baseLineOptions(tick, grid, tooltipFmt, showLegend) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => tooltipFmt(ctx.parsed.y) } } },
+    scales: {
+      x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 8 }, grid: { color: grid } },
+      y: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid } }
+    }
+  };
+}
+
+function baseBarOptions(tick, grid, tooltipFmt) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => tooltipFmt(ctx.parsed.y) } } },
+    scales: {
+      x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 10 }, grid: { color: grid } },
+      y: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid } }
+    }
+  };
+}
+
+function emptyState() {
+  return '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:12px;">Noch keine Daten im gewählten Zeitraum</div>';
+}
+
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW failed:', e));
+  });
+}
+</script>
+</body>
+</html>

@@ -225,9 +225,8 @@
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('log')">Einheit loggen</button>
-  <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
-  <button class="tab" onclick="switchTab('history')">Verlauf</button>
   <button class="tab" onclick="switchTab('analyse')">Analyse</button>
+  <button class="tab" onclick="switchTab('history')">Daten</button>
 </div>
 
 <!-- LOG -->
@@ -589,9 +588,11 @@
     <div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Zeitraum</div>
       <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;">
-        <button class="tab active az-range-btn" data-w="4"  onclick="setAZ('range',4)">4W</button>
-        <button class="tab az-range-btn"        data-w="8"  onclick="setAZ('range',8)">8W</button>
-        <button class="tab az-range-btn"        data-w="12" onclick="setAZ('range',12)">12W</button>
+        <button class="tab active az-range-btn" data-w="4"  onclick="setAZ('range',4)">1M</button>
+        <button class="tab az-range-btn"        data-w="8"  onclick="setAZ('range',8)">2M</button>
+        <button class="tab az-range-btn"        data-w="13" onclick="setAZ('range',13)">3M</button>
+        <button class="tab az-range-btn"        data-w="26" onclick="setAZ('range',26)">6M</button>
+        <button class="tab az-range-btn"        data-w="52" onclick="setAZ('range',52)">12M</button>
         <button class="tab az-range-btn"        data-w="0"  onclick="setAZ('range',0)">Alles</button>
       </div>
     </div>
@@ -601,6 +602,7 @@
         <button class="tab active az-agg-btn" data-a="tag"   onclick="setAZ('agg','tag')">Tage</button>
         <button class="tab az-agg-btn"        data-a="woche" onclick="setAZ('agg','woche')">Wochen</button>
         <button class="tab az-agg-btn"        data-a="monat" onclick="setAZ('agg','monat')">Monate</button>
+        <button class="tab az-agg-btn"        data-a="jahr"  onclick="setAZ('agg','jahr')">Jahre</button>
       </div>
     </div>
     <div>
@@ -715,7 +717,7 @@ function loadData() {
     const hasMigrated = localStorage.getItem('ep_migrated_tageslog_v1');
     if (!hasMigrated) {
       loaded = migrateToTageslog(loaded);
-      data = loaded.filter(d => !d.datum || d.datum >= '2023-01-01');
+      data = loaded.filter(d => !d.datum || d.datum >= '2024-03-20');
       // Save migrated data immediately
       try { localStorage.setItem(LS_DATA, JSON.stringify(data)); } catch(e) {}
       localStorage.setItem('ep_migrated_tageslog_v1', '1');
@@ -725,7 +727,7 @@ function loadData() {
         setTimeout(() => newTagesl.forEach(e => window.fbSaveEntry(e)), 2000);
       }
     } else {
-      data = loaded.filter(d => !d.datum || d.datum >= '2023-01-01');
+      data = loaded.filter(d => !d.datum || d.datum >= '2024-03-20');
     }
   }
   catch(e) { data = []; }
@@ -789,7 +791,6 @@ function switchTab(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelector('[onclick="switchTab(\'' + tab + '\')"]').classList.add('active');
   document.getElementById('panel-' + tab).classList.add('active');
-  if (tab === 'dashboard') renderDashboard();
   if (tab === 'history') renderHistory();
   if (tab === 'analyse') { loadChartJS(() => { populateVarSelects(); renderFlexChart(); }); }
 }
@@ -994,13 +995,13 @@ async function importGarminCSV(e) {
 
       const mappedType = TYPE_MAP[rawType];
       if (!mappedType) continue; // skip E-Bike etc.
-      if (datum < '2023-01-01') continue; // skip pre-2023
-      const today = new Date().toISOString().split('T')[0];
-      if (datum >= today) continue; // skip today — data may be incomplete
 
       const rawDate = parseVal(row, iDate);
       if (!rawDate) continue;
       const datum = rawDate.split(' ')[0]; // YYYY-MM-DD
+      if (datum < '2024-03-20') continue; // skip pre-2023
+      const today = new Date().toISOString().split('T')[0];
+      if (datum >= today) continue; // skip today — data may be incomplete
 
       const distanz = parseFloat(parseVal(row, iDist)) || null;
       const pace = parseVal(row, iPace);
@@ -1107,7 +1108,7 @@ async function importFDDBCSV(e) {
       const m = rawDate.match(/(\d{2})\.(\d{2})\.(\d{4})/);
       if (!m) continue;
       const datum = m[3] + '-' + m[2] + '-' + m[1];
-      if (datum < '2023-01-01') continue;
+      if (datum < '2024-03-20') continue;
 
       const parseNum = s => parseFloat((s||'').replace(/"/g,'').replace(',','.')) || 0;
       const kj       = parseNum(parts[3]);
@@ -1204,7 +1205,7 @@ async function importData(e) {
     const imported = JSON.parse(text);
     if (Array.isArray(imported)) {
       const existing = new Set(data.map(d => d.id));
-      const fresh = imported.filter(d => !existing.has(d.id) && (!d.datum || d.datum >= '2023-01-01'));
+      const fresh = imported.filter(d => !existing.has(d.id) && (!d.datum || d.datum >= '2024-03-20'));
       data = [...data, ...fresh].sort((a,b) => new Date(b.datum) - new Date(a.datum));
       saveData(fresh, null);
       renderDashboard();
@@ -1317,11 +1318,11 @@ function renderHistory() {
     if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
     if (d.intervall_detail) detail += ' · ' + d.intervall_detail;
     const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString():null].filter(Boolean);
-    const isSelected = selectedIds.has(d.id);
+    const isSelected = selectedIds.has(String(d.id));
     const rowBg = selectMode && isSelected ? 'background:rgba(232,255,71,0.06);' : '';
     return '<div class="entry-row" style="' + rowBg + '">' +
       (selectMode
-        ? '<input type="checkbox" class="entry-checkbox" data-id="' + d.id + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(' + d.id + ')" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">'
+        ? '<input type="checkbox" class="entry-checkbox" data-id="' + d.id + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(\'' + d.id + '\')" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">'
         : '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>') +
       (selectMode ? '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>' : '') +
       '<span class="tag ' + tagCls + '">' + typeLbl + '</span>' +
@@ -1364,16 +1365,22 @@ function selectAll() {
   const allChecked = checkboxes.length > 0 && [...checkboxes].every(c => c.checked);
   checkboxes.forEach(c => {
     c.checked = !allChecked;
-    const id = parseInt(c.dataset.id);
+    const id = String(c.dataset.id);
     if (!allChecked) selectedIds.add(id); else selectedIds.delete(id);
   });
   updateDeleteBtn();
 }
 
 function toggleSelect(id) {
-  id = Number(id);
+  id = String(id);
   if (selectedIds.has(id)) selectedIds.delete(id);
   else selectedIds.add(id);
+  // Update row background immediately without full re-render
+  const cb = document.querySelector('.entry-checkbox[data-id="' + id + '"]');
+  if (cb) {
+    const row = cb.closest('.entry-row');
+    if (row) row.style.background = selectedIds.has(id) ? 'var(--surface2)' : '';
+  }
   updateDeleteBtn();
 }
 
@@ -1396,9 +1403,9 @@ function deleteSelected() {
 
 function confirmDeleteSelected() {
   document.getElementById('delete-confirm-banner').style.display = 'none';
-  const toDelete = new Set([...selectedIds].map(Number));
+  const toDelete = new Set([...selectedIds].map(String));
   const before = data.length;
-  data = data.filter(d => !toDelete.has(Number(d.id)));
+  data = data.filter(d => !toDelete.has(String(d.id)));
   const removed = before - data.length;
   saveData(null, [...toDelete]);
   cancelSelectMode();
@@ -1519,7 +1526,98 @@ function saveEdit() {
   showToast('✓ Eintrag aktualisiert');
 }
 
-// ── ANALYSE ─────────────────────────────────────────────────────────────────
+// ── ANALYSE SUMMARY (ZNS) ────────────────────────────────────────────────────
+
+function renderAnalyseSummary() {
+  const el = document.getElementById('analyse-zns-summary');
+  if (!el) return;
+
+  const tageslog = data.filter(d => d.type === 'tageslog').sort((a,b) => b.datum.localeCompare(a.datum));
+  const recent7  = tageslog.slice(0, 7);
+  const zns      = calcZNS(recent7);
+
+  // Latest values
+  const latest   = tageslog[0] || {};
+  const gewicht  = tageslog.find(d => d.gewicht)?.gewicht;
+  const rhf      = tageslog.find(d => d.rhf)?.rhf;
+
+  // Pull streak — consecutive days with pull entry
+  const todayStr = new Date().toISOString().split('T')[0];
+  const pullDates = new Set(data.filter(d => d.type === 'pull').map(d => d.datum));
+  let streak = 0;
+  let check = new Date();
+  for (let i = 0; i < 30; i++) {
+    const ds = check.toISOString().split('T')[0];
+    if (pullDates.has(ds)) { streak++; check.setDate(check.getDate() - 1); }
+    else break;
+  }
+
+  const scoreColor = zns.alertCls === 'ok' ? 'var(--ok)' : zns.alertCls === 'warn' ? 'var(--warn)' : 'var(--danger)';
+  const scoreBg    = zns.alertCls === 'ok' ? '#f0fdf4' : zns.alertCls === 'warn' ? '#fefce8' : '#fef2f2';
+  const scoreBorder= zns.alertCls === 'ok' ? '#bbf7d0' : zns.alertCls === 'warn' ? '#fef08a' : '#fecaca';
+
+  const metric = (label, value, unit='') => value != null
+    ? `<div style="text-align:center;padding:12px 16px;">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${label}</div>
+        <div style="font-size:24px;font-weight:600;color:var(--text);line-height:1;">${value}<span style="font-size:12px;color:var(--muted);margin-left:2px;">${unit}</span></div>
+      </div>`
+    : '';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;">
+
+      <!-- ZNS Score card -->
+      <div style="background:${scoreBg};border:1px solid ${scoreBorder};border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:20px;">
+        <div>
+          <div style="font-size:10px;color:${scoreColor};text-transform:uppercase;letter-spacing:1px;font-weight:500;margin-bottom:4px;">ZNS-Score heute</div>
+          <div style="font-size:32px;font-weight:700;color:${scoreColor};line-height:1;">${zns.score}</div>
+          <div style="font-size:12px;color:${scoreColor};margin-top:6px;line-height:1.5;">${zns.msg}</div>
+        </div>
+        <div style="flex:1;">
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:12px;">
+            <div style="height:100%;width:${zns.pct}%;background:${scoreColor};border-radius:3px;transition:width 0.5s;"></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0;">
+            ${metric('Schlaf', latest.schlaf ? '★'.repeat(latest.schlaf) + '☆'.repeat(5-latest.schlaf) : null)}
+            ${metric('Energie', latest.energie ? '★'.repeat(latest.energie) + '☆'.repeat(5-latest.energie) : null)}
+            ${metric('RHF', rhf, 'bpm')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Key metrics -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+        ${gewicht ? `<div class="metric-card" style="padding:12px 16px;">
+          <div class="metric-label">Gewicht</div>
+          <div class="metric-value" style="font-size:22px;">${gewicht}<span style="font-size:11px;color:var(--muted);margin-left:2px;">kg</span></div>
+        </div>` : ''}
+        ${streak > 1 ? `<div class="metric-card" style="padding:12px 16px;">
+          <div class="metric-label">Klimmzug-Serie</div>
+          <div class="metric-value" style="font-size:22px;">${streak}<span style="font-size:11px;color:var(--muted);margin-left:2px;">Tage</span></div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <!-- Last 7 days ZNS table -->
+    ${recent7.filter(d => d.schlaf || d.energie || d.rhf).length ? `
+    <div style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div style="display:grid;grid-template-columns:100px 1fr 1fr 1fr 1fr 1fr;gap:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;padding:10px 16px;border-bottom:1px solid var(--border);">
+        <span>Datum</span><span>Schlaf</span><span>Energie</span><span>RHF</span><span>Kal.</span><span>Protein</span>
+      </div>
+      ${recent7.filter(d => d.schlaf || d.energie || d.rhf || d.kalorien).map(d => `
+      <div style="display:grid;grid-template-columns:100px 1fr 1fr 1fr 1fr 1fr;gap:8px;font-size:12px;padding:8px 16px;border-bottom:1px solid var(--border);">
+        <span style="color:var(--muted)">${d.datum}</span>
+        <span>${d.schlaf ? '★'.repeat(d.schlaf) : '—'}</span>
+        <span>${d.energie ? '★'.repeat(d.energie) : '—'}</span>
+        <span>${d.rhf ? d.rhf + ' bpm' : '—'}</span>
+        <span>${d.kalorien ? d.kalorien + ' kcal' : '—'}</span>
+        <span>${d.protein ? d.protein + 'g' : '—'}</span>
+      </div>`).join('')}
+    </div>` : ''}
+  `;
+}
+
+// ── ANALYSE CHART ─────────────────────────────────────────────────────────────
 
 function loadChartJS(cb) {
   if (window.Chart) { cb(); return; }
@@ -1549,6 +1647,8 @@ const AZ_VARS = [
   { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Laufen',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
   { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Laufen',    type: 'lauf',     field: 'hf',       agg: 'avg' },
   { id: 'lauf_kcal', label: 'Lauf-Kalorien (kcal)',    group: 'Laufen',    type: 'lauf',     field: 'kalorien', agg: 'sum' },
+  // ZNS computed
+  { id: 'zns_score', label: 'ZNS-Score (0-100)',       group: 'ZNS',       type: '__zns__',  field: 'zns',      agg: 'avg', fmt: 'pct' },
   // Kraft
   { id: 'pull_1st',  label: 'Klimmzug 1. Satz (Reps)',group: 'Kraft',     type: 'pull',     field: 'first_set',agg: 'max' },
   { id: 'pull_tot',  label: 'Klimmzug Total (Reps)',   group: 'Kraft',     type: 'pull',     field: 'total_reps',agg:'sum' },
@@ -1608,6 +1708,7 @@ function periodKey(dateStr) {
   if (azState.agg === 'tag') return dateStr;
   if (azState.agg === 'woche') return isoWeek(dateStr);
   if (azState.agg === 'monat') return dateStr.slice(0,7);
+  if (azState.agg === 'jahr') return dateStr.slice(0,4);
   return dateStr;
 }
 
@@ -1626,11 +1727,39 @@ function minToPace(val) {
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
+function computeZNSForDate(datum) {
+  // Compute ZNS score for a given date using that date as "most recent"
+  const sorted = data.filter(d => d.type === 'tageslog' && d.datum <= datum)
+    .sort((a,b) => b.datum.localeCompare(a.datum)).slice(0,7);
+  const zns = calcZNS(sorted);
+  return zns.pct; // 0-100
+}
+
 function buildDataset(varId) {
   const def = AZ_VARS.find(v => v.id === varId);
   if (!def) return null;
 
   const cutoff = getAZCutoff();
+
+  // Special: ZNS computed per tageslog day
+  if (def.type === '__zns__') {
+    const tagesl = data.filter(d => d.type === 'tageslog' && (!cutoff || new Date(d.datum) >= cutoff))
+      .sort((a,b) => a.datum.localeCompare(b.datum));
+    const grouped = {};
+    tagesl.forEach(d => {
+      if (!d.schlaf && !d.energie) return;
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(computeZNSForDate(d.datum));
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => {
+      const arr = grouped[k];
+      return arr.reduce((a,b) => a+b, 0) / arr.length;
+    });
+    return { periods, values, def };
+  }
+
   let entries = data.filter(d => {
     if (cutoff && new Date(d.datum) < cutoff) return false;
     if (def.type === 'lauf') return ['lauf','intervall','reko'].includes(d.type);
@@ -1660,6 +1789,46 @@ function buildDataset(varId) {
   });
 
   return { periods, values, def };
+}
+
+function linReg(values) {
+  // Returns slope and intercept for simple linear regression
+  const pts = values.map((v,i) => [i, v]).filter(p => p[1] != null);
+  if (pts.length < 2) return null;
+  const n = pts.length;
+  const sumX  = pts.reduce((s,p) => s + p[0], 0);
+  const sumY  = pts.reduce((s,p) => s + p[1], 0);
+  const sumXY = pts.reduce((s,p) => s + p[0]*p[1], 0);
+  const sumX2 = pts.reduce((s,p) => s + p[0]*p[0], 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (!denom) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
+function buildTrendDataset(sourceData, color, yAxisID, length) {
+  const reg = linReg(sourceData);
+  if (!reg) return null;
+  const trendData = Array.from({ length }, (_, i) => {
+    const v = reg.intercept + reg.slope * i;
+    return parseFloat(v.toFixed(3));
+  });
+  return {
+    label: '_trend_',
+    data: trendData,
+    borderColor: color,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: [5, 4],
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    fill: false,
+    tension: 0,
+    spanGaps: true,
+    yAxisID,
+    type: 'line',
+  };
 }
 
 function renderFlexChart() {
@@ -1735,24 +1904,43 @@ function renderFlexChart() {
     }
   };
 
+  const fmtTick = (v, fmt) => {
+    if (fmt === 'pace') return minToPace(v);
+    if (fmt === 'pct') return Math.round(v) + '%';
+    const n = Math.round(v);
+    return n >= 1000 ? n.toLocaleString('de-DE') : String(n);
+  };
+
   const axisKeys = [...new Set(datasets.map(d => d.yAxisID))];
   axisKeys.forEach((axId, i) => {
     const def = datasets.find(d => d.yAxisID === axId).def;
+    const colorIdx = datasets.findIndex(d => d.yAxisID === axId);
     scales[axId] = {
       position: i === 0 ? 'left' : 'right',
+      min: def.fmt === 'pace' ? undefined : 0,
       ticks: {
-        color: VAR_COLORS[datasets.findIndex(d => d.yAxisID === axId)],
+        color: VAR_COLORS[colorIdx],
         font: { size: 11 },
-        callback: def.fmt === 'pace' ? v => minToPace(v) : v => v
+        callback: v => fmtTick(v, def.fmt)
       },
       grid: { drawOnChartArea: i === 0, color: grid },
       title: { display: false }
     };
   });
 
+  // Build trendline datasets
+  const trendDatasets = [];
+  datasets.forEach(({ ds, def, yAxisID }, i) => {
+    const rawVals = ds.data;
+    const td = buildTrendDataset(rawVals, VAR_COLORS[i], yAxisID, labels.length);
+    if (td) trendDatasets.push(td);
+  });
+
+  const allDatasets = [...datasets.map(d => d.ds), ...trendDatasets];
+
   flexChartInstance = new Chart(canvas, {
     type: azState.ctype === 'bar' ? 'bar' : 'line',
-    data: { labels, datasets: datasets.map(d => d.ds) },
+    data: { labels, datasets: allDatasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1760,16 +1948,23 @@ function renderFlexChart() {
       plugins: {
         legend: {
           display: true,
-          labels: { color: tick, font: { size: 11 }, boxWidth: 10, padding: 16,
-            usePointStyle: azState.ctype === 'line' }
+          labels: {
+            color: tick, font: { size: 11 }, boxWidth: 10, padding: 16,
+            usePointStyle: azState.ctype === 'line',
+            filter: item => item.text !== '_trend_'
+          }
         },
         tooltip: {
           callbacks: {
             label: ctx => {
+              if (ctx.dataset.label === '_trend_') return null;
               const def = defs[ctx.datasetIndex]?.result?.def;
               if (!def) return ctx.dataset.label + ': ' + ctx.parsed.y;
               const v = ctx.parsed.y;
-              const fmt = def.fmt === 'pace' ? minToPace(v) : (v != null ? v.toFixed(1) : '—');
+              let fmt;
+              if (def.fmt === 'pace') fmt = minToPace(v);
+              else if (def.fmt === 'pct') fmt = Math.round(v) + '%';
+              else fmt = v != null ? (Math.round(v) >= 1000 ? Math.round(v).toLocaleString('de-DE') : Math.round(v).toString()) : '—';
               return ctx.dataset.label + ': ' + fmt;
             }
           }

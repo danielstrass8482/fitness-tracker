@@ -322,7 +322,7 @@
             <div class="form-group"><label>Protein (g)</label><input type="number" id="log-protein" placeholder="150"></div>
             <div class="form-group"><label>Kohlenhydrate (g)</label><input type="number" id="log-carbs" placeholder="300"></div>
           </div>
-          <div class="form-group"><label>Schritte (Tag gesamt)</label><input type="number" id="log-schritte" placeholder="12000"></div>
+          <div class="form-group"><label>Gesamtschritte (inkl. Sport)</label><input type="number" id="log-schritte" placeholder="12000"></div>
         </div>
       </div>
       <div>
@@ -450,6 +450,7 @@
           <option value="intervall">Intervall</option>
           <option value="reko">Reko-Lauf</option>
           <option value="gehen">Gehen</option>
+          <option value="tageslog">Tageslog</option>
         </select>
       </div>
     </div>
@@ -495,7 +496,7 @@
       <div class="form-group"><label>Protein (g)</label><input type="number" id="edit-protein"></div>
       <div class="form-group"><label>Kohlenhydrate (g)</label><input type="number" id="edit-carbs"></div>
     </div>
-    <div class="form-group" style="margin-bottom:14px;"><label>Schritte (Tag gesamt)</label><input type="number" id="edit-schritte"></div>
+    <div class="form-group" style="margin-bottom:14px;"><label>Gesamtschritte (inkl. Sport)</label><input type="number" id="edit-schritte"></div>
     <div class="grid-2" style="margin-bottom:14px;">
       <div class="form-group"><label>Ruheherzfrequenz (bpm)</label><input type="number" id="edit-rhf"></div>
       <div class="form-group"><label>Volumen absolviert?</label>
@@ -1302,7 +1303,7 @@ function renderHistory() {
     let detail = d.sets ? d.variante + ' · ' + d.sets + ' (' + d.total_reps + ' Reps)' + (d.pr ? ' 🏆' : '') : '';
     if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
     if (d.intervall_detail) detail += ' · ' + d.intervall_detail;
-    const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString():null].filter(Boolean);
+    const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString()+' Schritte':null].filter(Boolean);
     const isSelected = selectedIds.has(String(d.id));
     const rowCls = selectMode ? 'entry-row select-mode' : 'entry-row';
     const rowBg = selectMode && isSelected ? 'var(--surface2)' : '';
@@ -1423,8 +1424,9 @@ function setEditRating(type, val) {
 function toggleEditFields() {
   const t = document.getElementById('edit-type').value;
   document.getElementById('edit-fields-kraft').style.display = (t === 'pull' || t === 'push') ? 'block' : 'none';
-  document.getElementById('edit-fields-lauf').style.display = ['lauf','intervall','reko'].includes(t) ? 'block' : 'none';
+  document.getElementById('edit-fields-lauf').style.display = ['lauf','intervall','reko','gehen'].includes(t) ? 'block' : 'none';
   document.getElementById('edit-fields-intervall').style.display = t === 'intervall' ? 'block' : 'none';
+  // Tageslog fields (gewicht, kalorien etc.) are always visible — no need to hide
 }
 
 function openEditModal(id) {
@@ -1628,7 +1630,9 @@ const AZ_VARS = [
   { id: 'kalorien',  label: 'Kalorien gegessen (kcal)',group: 'Körper',    type: 'tageslog', field: 'kalorien', agg: 'sum' },
   { id: 'protein',   label: 'Protein (g)',             group: 'Körper',    type: 'tageslog', field: 'protein',  agg: 'sum' },
   { id: 'carbs',     label: 'Kohlenhydrate (g)',        group: 'Körper',    type: 'tageslog', field: 'carbs',    agg: 'sum' },
-  { id: 'schritte',  label: 'Schritte',                group: 'Körper',    type: 'tageslog', field: 'schritte', agg: 'sum' },
+  { id: 'schritte',       label: 'Gesamtschritte',          group: 'Körper', type: 'tageslog',       field: 'schritte', agg: 'sum' },
+  { id: 'act_schritte',  label: 'Schritte aus Aktivitäten', group: 'Körper', type: '__act_steps__',  field: 'steps',    agg: 'sum' },
+  { id: 'extra_schritte',label: 'Zusätzliche Schritte',     group: 'Körper', type: '__extra_steps__',field: 'steps',    agg: 'sum' },
   { id: 'rhf',       label: 'Ruheherzfrequenz (bpm)',  group: 'ZNS',       type: 'tageslog', field: 'rhf',      agg: 'avg' },
   { id: 'schlaf',    label: 'Schlafqualität (1-5)',     group: 'ZNS',       type: 'tageslog', field: 'schlaf',   agg: 'avg' },
   { id: 'energie',   label: 'Energie vor Training (1-5)',group:'ZNS',       type: 'tageslog', field: 'energie',  agg: 'avg' },
@@ -1739,11 +1743,12 @@ function getTdeeForDate(datum, mode) {
   // Get tageslog for this date
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   // Get sport activities for this date
-  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type));
+  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type)); // sport kcal still all types
+  const actStepEntries = data.filter(d => d.datum === datum && ['lauf','intervall'].includes(d.type));
   const sportKcal = acts.reduce((s, a) => s + (a.kalorien || 0), 0);
   // Subtract activity steps from total to avoid double-counting
   const totalSchritte = tl?.schritte || 0;
-  const actSchritte   = acts.reduce((s, a) => s + (a.act_schritte || 0), 0);
+  const actSchritte   = actStepEntries.reduce((s, a) => s + (a.act_schritte || 0), 0);
   const alldaySchritte = Math.max(0, totalSchritte - actSchritte);
   const stepKcal  = Math.round(alldaySchritte * KCAL_PER_STEP);
 
@@ -1786,6 +1791,37 @@ function buildDataset(varId) {
   const cutoff = getAZCutoff();
 
   // Special: ZNS computed per tageslog day
+  if (def.type === '__act_steps__') {
+    // Sum act_schritte from all sport activities per period
+    const acts = data.filter(d => (!cutoff || new Date(d.datum) >= cutoff) && ['lauf','intervall'].includes(d.type) && d.act_schritte);
+    const grouped = {};
+    acts.forEach(d => {
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(d.act_schritte);
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => grouped[k].reduce((a,b) => a+b, 0));
+    return { periods, values, def };
+  }
+
+  if (def.type === '__extra_steps__') {
+    // Gesamtschritte minus Aktivitätsschritte = zusätzliche Alltagsschritte
+    const tagesl = data.filter(d => d.type === 'tageslog' && d.schritte && (!cutoff || new Date(d.datum) >= cutoff));
+    const grouped = {};
+    tagesl.forEach(d => {
+      const acts = data.filter(a => a.datum === d.datum && ['lauf','intervall'].includes(a.type));
+      const actSteps = acts.reduce((s, a) => s + (a.act_schritte || 0), 0);
+      const extra = Math.max(0, d.schritte - actSteps);
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(extra);
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => grouped[k].reduce((a,b) => a+b, 0));
+    return { periods, values, def };
+  }
+
   if (def.type === '__kcal_fix__' || def.type === '__kcal_dyn__' || def.type === '__kcal_def__') {
     const mode = def.type === '__kcal_fix__' ? 'fix' : def.type === '__kcal_dyn__' ? 'dyn' : 'def';
     const tagesl = data.filter(d => d.type === 'tageslog' && (!cutoff || new Date(d.datum) >= cutoff))

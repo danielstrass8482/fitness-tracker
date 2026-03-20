@@ -1646,7 +1646,6 @@ const AZ_VARS = [
   // ZNS computed
   { id: 'zns_score',    label: 'ZNS-Score (0-100)',          group: 'ZNS',    type: '__zns__',   field: 'zns',      agg: 'avg', fmt: 'pct' },
   { id: 'kcal_bedarf',  label: 'Kalorienbedarf Fix (kcal)',      group: 'Körper', type: '__kcal_fix__', field: 'kcal', agg: 'avg' },
-  { id: 'kcal_dynm',   label: 'Kalorienbedarf Dynamisch (kcal)', group: 'Körper', type: '__kcal_dyn__', field: 'kcal', agg: 'avg' },
   { id: 'kcal_defizit',label: 'Kalorien Defizit/Überschuss',     group: 'Körper', type: '__kcal_def__', field: 'kcal', agg: 'avg' },
   // Kraft
   { id: 'pull_1st',  label: 'Klimmzug 1. Satz (Reps)',group: 'Kraft',     type: 'pull',     field: 'first_set',agg: 'max' },
@@ -1729,17 +1728,10 @@ function minToPace(val) {
 // ── KALORIENBEDARF ───────────────────────────────────────────────────────────
 // Harris-Benedict (männlich): 88.36 + (13.4 × kg) + (4.8 × 179cm) - (5.7 × 44J)
 // Fix-Grundumsatz: 2300 kcal (user-tracked, stable)
-const HB_HEIGHT = 179;
-const HB_AGE    = 44;
 const FIX_BMR   = 2300;
 const KCAL_PER_STEP = 0.04; // kcal per step for allday activity
 
-function calcHBMR(gewicht) {
-  if (!gewicht) return null;
-  return Math.round(88.36 + 13.4 * gewicht + 4.8 * HB_HEIGHT - 5.7 * HB_AGE);
-}
-
-function getTdeeForDate(datum, mode) {
+function getTdeeForDate(datum) {
   // Get tageslog for this date
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   // Get sport activities for this date
@@ -1752,27 +1744,18 @@ function getTdeeForDate(datum, mode) {
   const alldaySchritte = Math.max(0, totalSchritte - actSchritte);
   const stepKcal  = Math.round(alldaySchritte * KCAL_PER_STEP);
 
-  if (mode === 'fix') {
-    // Fix BMR + steps + sport
-    return FIX_BMR + stepKcal + sportKcal;
-  } else {
-    // Dynamic Harris-Benedict BMR + steps + sport
-    const gewicht = tl?.gewicht || data.filter(d => d.type === 'tageslog' && d.gewicht && d.datum <= datum)
-      .sort((a,b) => b.datum.localeCompare(a.datum))[0]?.gewicht;
-    const bmr = calcHBMR(gewicht);
-    if (!bmr) return null;
-    return bmr + stepKcal + sportKcal;
+  return FIX_BMR + stepKcal + sportKcal;
   }
 }
 
-function computeKcalForDate(datum, mode) {
-  return getTdeeForDate(datum, mode);
+function computeKcalForDate(datum) {
+  return getTdeeForDate(datum);
 }
 
 function computeDefizitForDate(datum) {
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   if (!tl?.kalorien) return null;
-  const tdee = getTdeeForDate(datum, 'fix');
+  const tdee = getTdeeForDate(datum);
   return tl.kalorien - tdee; // negative = Defizit, positive = Überschuss
 }
 
@@ -1822,14 +1805,14 @@ function buildDataset(varId) {
     return { periods, values, def };
   }
 
-  if (def.type === '__kcal_fix__' || def.type === '__kcal_dyn__' || def.type === '__kcal_def__') {
+  if (def.type === '__kcal_fix__' || def.type === '__kcal_def__') {
     const mode = def.type === '__kcal_fix__' ? 'fix' : def.type === '__kcal_dyn__' ? 'dyn' : 'def';
     const tagesl = data.filter(d => d.type === 'tageslog' && (!cutoff || new Date(d.datum) >= cutoff))
       .sort((a,b) => a.datum.localeCompare(b.datum));
     const grouped = {};
     tagesl.forEach(d => {
       const val = mode === 'def' ? computeDefizitForDate(d.datum)
-                : computeKcalForDate(d.datum, mode);
+                : computeKcalForDate(d.datum);
       if (val == null) return;
       const key = periodKey(d.datum);
       if (!grouped[key]) grouped[key] = [];

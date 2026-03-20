@@ -201,6 +201,8 @@
       <button class="btn-ghost" id="auth-btn" onclick="window.fbSignIn && window.fbSignIn()">Mit Google anmelden</button>
       <button class="btn-ghost" onclick="manualExport()">Export JSON</button>
       <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">Import JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
+      <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">Garmin CSV<input type="file" accept=".csv" onchange="importGarminCSV(event)" style="display:none;"></label>
+      <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">FDDB CSV<input type="file" accept=".csv" onchange="importFDDBCSV(event)" style="display:none;"></label>
     </div>
     <div class="storage-info">
       <span><span class="dot-ok" id="sync-dot" title="Offline"></span><span id="auth-info">Nicht angemeldet</span></span>
@@ -265,7 +267,7 @@
                 <option>Regulär</option><option>Reverse Grip</option><option>Hammer Grip</option>
               </optgroup>
               <optgroup label="Push-ups">
-                <option>Weit</option><option>Eng</option><option>Diamond</option><option>Elevated Feet</option>
+                <option>Weit</option><option>Eng</option><option>Diamond</option>
               </optgroup>
             </select>
           </div>
@@ -413,6 +415,7 @@
         <option value="alle">Alle Typen</option><option value="pull">Klimmzüge</option>
         <option value="push">Push-ups</option><option value="lauf">Laufen</option>
         <option value="intervall">Intervall</option><option value="reko">Reko</option>
+        <option value="tageslog">Tageslog</option>
       </select>
       <select id="filter-weeks" onchange="renderHistory()" style="width:150px;">
         <option value="4">Letzte 4 Wochen</option><option value="8">Letzte 8 Wochen</option>
@@ -461,7 +464,7 @@
               <option>Regulär</option><option>Reverse Grip</option><option>Hammer Grip</option>
             </optgroup>
             <optgroup label="Push-ups">
-              <option>Weit</option><option>Eng</option><option>Diamond</option><option>Elevated Feet</option>
+              <option>Weit</option><option>Eng</option><option>Diamond</option>
             </optgroup>
           </select>
         </div>
@@ -528,6 +531,50 @@
   </div>
 </div>
 
+<!-- FDDB PREVIEW MODAL -->
+<div id="fddb-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);z-index:100;overflow-y:auto;padding:24px;">
+  <div style="max-width:600px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,0.12);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-size:18px;font-weight:600;color:var(--text);">FDDB Import — Vorschau</h2>
+      <button class="btn-ghost" onclick="document.getElementById('fddb-preview-modal').style.display='none';document.body.style.overflow='';">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.8px;" id="fddb-preview-summary"></div>
+    <div style="display:grid;grid-template-columns:100px 70px 60px 60px 60px;gap:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px;">
+      <span>Datum</span><span>Kalorien</span><span>Protein</span><span>Carbs</span><span>Fett</span>
+    </div>
+    <div id="fddb-preview-list" style="max-height:360px;overflow-y:auto;"></div>
+    <div style="margin-top:20px;display:flex;gap:10px;">
+      <button class="btn" id="fddb-confirm-btn">Importieren →</button>
+      <button class="btn-ghost" onclick="document.getElementById('fddb-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6;">
+      Importiert werden Tage als Tageslog-Einträge. Gewicht, Schritte und ZNS-Werte kannst du manuell ergänzen. Bereits vorhandene Tage werden übersprungen.
+    </div>
+  </div>
+</div>
+
+<!-- GARMIN PREVIEW MODAL -->
+<div id="garmin-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);z-index:100;overflow-y:auto;padding:24px;">
+  <div style="max-width:720px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,0.12);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-size:18px;font-weight:600;color:var(--text);">Garmin Import — Vorschau</h2>
+      <button class="btn-ghost" onclick="document.getElementById('garmin-preview-modal').style.display='none';document.body.style.overflow='';">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.8px;" id="garmin-preview-summary"></div>
+    <div style="display:grid;grid-template-columns:90px 80px 1fr 60px;gap:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px;">
+      <span>Datum</span><span>Typ</span><span>Details</span><span>Kcal</span>
+    </div>
+    <div id="garmin-preview-list" style="max-height:360px;overflow-y:auto;"></div>
+    <div style="margin-top:20px;display:flex;gap:10px;">
+      <button class="btn" id="garmin-confirm-btn">Importieren →</button>
+      <button class="btn-ghost" onclick="document.getElementById('garmin-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6;">
+      Schritte und Kalorien kannst du danach über den Tageslog ergänzen. Typ-Erkennung: Intervall = Titel enthält "Intervall", Reko = Training Effect ≤ 2.5.
+    </div>
+  </div>
+</div>
+
 <div id="delete-confirm-banner" style="display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid #fecaca;border-radius:10px;padding:14px 20px;z-index:200;gap:14px;align-items:center;box-shadow:0 8px 32px rgba(0,0,0,0.12);white-space:nowrap;">
   <span id="delete-confirm-text" style="font-size:13px;color:var(--text);"></span>
   <button onclick="confirmDeleteSelected()" style="background:var(--danger);color:#fff;border:none;border-radius:7px;padding:7px 16px;font-family:'DM Sans',sans-serif;font-weight:500;font-size:12px;cursor:pointer;">Löschen</button>
@@ -537,68 +584,54 @@
 
 <!-- ANALYSE PANEL -->
 <div id="panel-analyse" class="panel">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
-    <span style="font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Zeitraum</span>
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);">
-      <button class="tab active" id="az-4"  onclick="setAnalyseRange(4)"  style="padding:5px 14px;">4W</button>
-      <button class="tab"        id="az-8"  onclick="setAnalyseRange(8)"  style="padding:5px 14px;">8W</button>
-      <button class="tab"        id="az-12" onclick="setAnalyseRange(12)" style="padding:5px 14px;">12W</button>
-      <button class="tab"        id="az-0"  onclick="setAnalyseRange(0)"  style="padding:5px 14px;">Alles</button>
-    </div>
-  </div>
 
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div class="card-title" style="margin-bottom:0;">Progression — 1. Satz</div>
-        <select id="prog-select" onchange="renderPullChart()" style="width:auto;font-size:11px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);">
-          <optgroup label="Pull-ups">
-            <option value="pull|Regulär">Pull — Regulär</option>
-            <option value="pull|Reverse Grip">Pull — Reverse Grip</option>
-            <option value="pull|Hammer Grip">Pull — Hammer Grip</option>
-            <option value="pull|alle">Pull — alle Varianten</option>
-          </optgroup>
-          <optgroup label="Push-ups">
-            <option value="push|Weit">Push — Weit</option>
-            <option value="push|Eng">Push — Eng</option>
-            <option value="push|Diamond">Push — Diamond</option>
-            <option value="push|Elevated Feet">Push — Elevated Feet</option>
-            <option value="push|alle">Push — alle Varianten</option>
-          </optgroup>
-          <optgroup label="Aktivität">
-            <option value="schritte|tag">Schritte pro Tag</option>
-          </optgroup>
-        </select>
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:20px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Zeitraum</div>
+      <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;">
+        <button class="tab active az-range-btn" data-w="4"  onclick="setAZ('range',4)">4W</button>
+        <button class="tab az-range-btn"        data-w="8"  onclick="setAZ('range',8)">8W</button>
+        <button class="tab az-range-btn"        data-w="12" onclick="setAZ('range',12)">12W</button>
+        <button class="tab az-range-btn"        data-w="0"  onclick="setAZ('range',0)">Alles</button>
       </div>
-      <div id="chart-wrapper-pull" style="position:relative;height:200px;"><canvas id="chart-pull"></canvas></div>
     </div>
-    <div class="card">
-      <div class="card-title">Lauf-Pace über Zeit (min/km)</div>
-      <div id="chart-wrapper-pace" style="position:relative;height:200px;"><canvas id="chart-pace"></canvas></div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Ansicht</div>
+      <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;">
+        <button class="tab active az-agg-btn" data-a="tag"   onclick="setAZ('agg','tag')">Tage</button>
+        <button class="tab az-agg-btn"        data-a="woche" onclick="setAZ('agg','woche')">Wochen</button>
+        <button class="tab az-agg-btn"        data-a="monat" onclick="setAZ('agg','monat')">Monate</button>
+      </div>
     </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">Wöchentliches Laufvolumen (km)</div>
-    <div id="chart-wrapper-km" style="position:relative;height:180px;"><canvas id="chart-km"></canvas></div>
-  </div>
-
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card">
-      <div class="card-title">Gewichtsverlauf (kg)</div>
-      <div id="chart-wrapper-weight" style="position:relative;height:180px;"><canvas id="chart-weight"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Kalorien pro Tag (kcal)</div>
-      <div id="chart-wrapper-kcal" style="position:relative;height:180px;"><canvas id="chart-kcal"></canvas></div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Charttyp</div>
+      <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;">
+        <button class="tab active az-ctype-btn" data-ct="line" onclick="setAZ('ctype','line')">Linie</button>
+        <button class="tab az-ctype-btn"        data-ct="bar"  onclick="setAZ('ctype','bar')">Balken</button>
+      </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">Herzfrequenz bei Läufen — Ø HF (Brustgurt)</div>
-    <div id="chart-wrapper-hf" style="position:relative;height:180px;"><canvas id="chart-hf"></canvas></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;">Nur Einträge mit Brustgurt-HF werden angezeigt.</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 1</div>
+      <select id="az-var1" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 2</div>
+      <select id="az-var2" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 3</div>
+      <select id="az-var3" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
+    </div>
   </div>
+
+  <div class="card" style="padding:20px;">
+    <div id="chart-wrapper-flex" style="position:relative;height:420px;"><canvas id="chart-flex"></canvas></div>
+    <div id="az-empty" style="display:none;text-align:center;color:var(--muted);font-size:12px;padding:60px 0;">Variable ausw&#228;hlen um den Chart zu bef&#252;llen</div>
+  </div>
+
 </div>
 
 <script>
@@ -620,15 +653,80 @@ window._setData = function(cloudData) {
   renderTodayEntries();
 };
 
+function migrateToTageslog(entries) {
+  const TRAINING_TYPES = new Set(['pull','push','lauf','intervall','reko']);
+  const TAGESLOG_FIELDS = ['gewicht','kalorien','protein','carbs','schritte','rhf','schlaf','energie','volumen'];
+
+  const toAdd = [];
+  const byDate = {};
+
+  // Group existing tageslog entries by date
+  entries.filter(d => d.type === 'tageslog').forEach(d => { byDate[d.datum] = true; });
+
+  entries.forEach(d => {
+    if (!TRAINING_TYPES.has(d.type)) return;
+
+    // Check if this training entry has tageslog data
+    const hasTageslogData = TAGESLOG_FIELDS.some(f =>
+      f === 'volumen' ? (d[f] && d[f] !== 'ja') : d[f] != null
+    );
+    if (!hasTageslogData) return;
+    if (byDate[d.datum]) return; // tageslog already exists for this date
+
+    // Create tageslog entry from training entry data
+    const tageslog = {
+      id: d.id + 0.5,
+      datum: d.datum,
+      type: 'tageslog',
+      gewicht: d.gewicht || null,
+      kalorien: d.kalorien || null,
+      protein: d.protein || null,
+      carbs: d.carbs || null,
+      schritte: d.schritte || null,
+      rhf: d.rhf || null,
+      schlaf: d.schlaf || null,
+      energie: d.energie || null,
+      volumen: d.volumen || 'ja',
+    };
+    toAdd.push(tageslog);
+    byDate[d.datum] = true;
+  });
+
+  // Strip tageslog fields from training entries
+  entries.forEach(d => {
+    if (!TRAINING_TYPES.has(d.type)) return;
+    TAGESLOG_FIELDS.forEach(f => { if (f !== 'volumen') delete d[f]; });
+    d.volumen = 'ja'; // reset to default
+  });
+
+  return [...entries, ...toAdd].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+}
+
 function loadData() {
   try {
     const r = localStorage.getItem(LS_DATA);
-    const loaded = r ? JSON.parse(r) : [];
+    let loaded = r ? JSON.parse(r) : [];
     loaded.forEach(d => {
       d.id = Number(d.id);
       if (d.variante && VARIANTE_MAP[d.variante]) d.variante = VARIANTE_MAP[d.variante];
     });
-    data = loaded;
+
+    // One-time migration: extract tageslog data from training entries
+    const hasMigrated = localStorage.getItem('ep_migrated_tageslog_v1');
+    if (!hasMigrated) {
+      loaded = migrateToTageslog(loaded);
+      data = loaded.filter(d => !d.datum || d.datum >= '2023-01-01');
+      // Save migrated data immediately
+      try { localStorage.setItem(LS_DATA, JSON.stringify(data)); } catch(e) {}
+      localStorage.setItem('ep_migrated_tageslog_v1', '1');
+      // Sync new tageslog entries to Firebase if signed in
+      const newTagesl = loaded.filter(d => d.type === 'tageslog');
+      if (window.fbSaveEntry && newTagesl.length) {
+        setTimeout(() => newTagesl.forEach(e => window.fbSaveEntry(e)), 2000);
+      }
+    } else {
+      data = loaded.filter(d => !d.datum || d.datum >= '2023-01-01');
+    }
   }
   catch(e) { data = []; }
 }
@@ -693,7 +791,7 @@ function switchTab(tab) {
   document.getElementById('panel-' + tab).classList.add('active');
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'history') renderHistory();
-  if (tab === 'analyse') { loadChartJS(renderAnalyse); }
+  if (tab === 'analyse') { loadChartJS(() => { populateVarSelects(); renderFlexChart(); }); }
 }
 
 function toggleFields() {
@@ -842,6 +940,262 @@ function manualExport() {
   showToast('✓ Backup gespeichert');
 }
 
+async function importGarminCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) { showToast('CSV leer oder ungültig'); return; }
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+    const idx = (name) => headers.findIndex(h => h === name);
+    const iType = idx('Aktivitätstyp');
+    const iDate = idx('Datum');
+    const iTitle = idx('Titel');
+    const iDist = idx('Distanz');
+    const iKal = idx('Kalorien');
+    const iTime = idx('Zeit');
+    const iHF = idx('Ø Herzfrequenz');
+    const iHFmax = idx('Maximale Herzfrequenz');
+    const iPace = idx('Ø Pace');
+    const iTE = idx('Aerober TE');
+
+    const TYPE_MAP = {
+      'Laufen': 'lauf',
+      'Laufbandtraining': 'lauf',
+      'Gehen': 'reko',
+    };
+
+    const parseVal = (row, i) => {
+      if (i < 0) return null;
+      const v = row[i] ? row[i].replace(/^"|"$/g, '').replace(',', '.').trim() : null;
+      return (v && v !== '--' && v !== '') ? v : null;
+    };
+
+    const existing = new Set(data.map(d => d.datum + '_' + (d.distanz || '') + '_' + d.type));
+    const imported = [];
+    const skipped = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      // Parse CSV line respecting quoted fields
+      const row = [];
+      let cur = '', inQ = false;
+      for (const ch of lines[i]) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { row.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      row.push(cur);
+
+      const rawType = parseVal(row, iType);
+      if (!rawType) continue;
+
+      const mappedType = TYPE_MAP[rawType];
+      if (!mappedType) continue; // skip E-Bike etc.
+      if (datum < '2023-01-01') continue; // skip pre-2023
+      const today = new Date().toISOString().split('T')[0];
+      if (datum >= today) continue; // skip today — data may be incomplete
+
+      const rawDate = parseVal(row, iDate);
+      if (!rawDate) continue;
+      const datum = rawDate.split(' ')[0]; // YYYY-MM-DD
+
+      const distanz = parseFloat(parseVal(row, iDist)) || null;
+      const pace = parseVal(row, iPace);
+      const hf = parseInt(parseVal(row, iHF)) || null;
+      const hf_max = parseInt(parseVal(row, iHFmax)) || null;
+      const kalorien = parseInt(parseVal(row, iKal)) || null;
+      const te = parseFloat(parseVal(row, iTE)) || null;
+      const title = parseVal(row, iTitle) || '';
+
+      // Detect intervall by title or TE
+      let finalType = mappedType;
+      if (mappedType === 'lauf') {
+        const titleLower = title.toLowerCase();
+        if (titleLower.includes('intervall') || titleLower.includes('interval')) finalType = 'intervall';
+        else if (te && te <= 2.5) finalType = 'reko';
+      }
+
+      const dedupeKey = datum + '_' + (distanz || '') + '_' + finalType;
+      if (existing.has(dedupeKey)) { skipped.push(datum); continue; }
+
+      const entry = {
+        id: Date.now() + i,
+        datum,
+        type: finalType,
+        distanz,
+        pace,
+        hf,
+        hf_max,
+        kalorien,
+        notiz: title,
+        // placeholders — user fills via tageslog
+        gewicht: null, protein: null, carbs: null, schritte: null,
+        rhf: null, schlaf: null, energie: null, volumen: 'ja'
+      };
+
+      imported.push(entry);
+      existing.add(dedupeKey);
+    }
+
+    if (!imported.length) {
+      showToast('Keine neuen Aktivitäten — alle bereits vorhanden');
+      return;
+    }
+
+    // Show preview modal before saving
+    showGarminPreview(imported, skipped);
+
+  } catch(err) {
+    console.error(err);
+    showToast('Fehler beim Lesen der CSV');
+  }
+}
+
+function showGarminPreview(entries, skipped) {
+  const modal = document.getElementById('garmin-preview-modal');
+  const list = document.getElementById('garmin-preview-list');
+  const summary = document.getElementById('garmin-preview-summary');
+
+  const typeLabel = { lauf:'Laufen', intervall:'Intervall', reko:'Reko' };
+  list.innerHTML = entries.map(e =>
+    '<div style="display:grid;grid-template-columns:90px 80px 1fr 60px;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+    '<span style="color:var(--muted)">' + e.datum + '</span>' +
+    '<span class="tag tag-lauf">' + (typeLabel[e.type]||e.type) + '</span>' +
+    '<span>' + (e.distanz ? e.distanz + ' km @ ' + (e.pace||'—') + '/km' : '—') +
+    (e.hf ? ' · HF ' + e.hf : '') + (e.notiz ? ' · ' + e.notiz : '') + '</span>' +
+    '<span style="color:var(--muted)">' + (e.kalorien ? e.kalorien + ' kcal' : '—') + '</span>' +
+    '</div>'
+  ).join('');
+
+  summary.textContent = entries.length + ' neue Aktivitäten' +
+    (skipped.length ? ' · ' + skipped.length + ' bereits vorhanden übersprungen' : '');
+
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+
+  document.getElementById('garmin-confirm-btn').onclick = async () => {
+    data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+    saveData(entries, null);
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    renderDashboard();
+    renderHistory();
+    showToast('✓ ' + entries.length + ' Aktivitäten importiert');
+  };
+}
+
+async function importFDDBCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) { showToast('CSV leer oder ungültig'); return; }
+
+    // Aggregate by date
+    const days = {};
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(';');
+      if (parts.length < 8) continue;
+      const rawDate = parts[0].replace(/"/g,'').trim();
+      if (!rawDate) continue;
+
+      // Parse date: DD.MM.YYYY HH:MM
+      const m = rawDate.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+      if (!m) continue;
+      const datum = m[3] + '-' + m[2] + '-' + m[1];
+      if (datum < '2023-01-01') continue;
+
+      const parseNum = s => parseFloat((s||'').replace(/"/g,'').replace(',','.')) || 0;
+      const kj       = parseNum(parts[3]);
+      const fett     = parseNum(parts[5]);
+      const kh       = parseNum(parts[6]);
+      const protein  = parseNum(parts[7]);
+
+      if (!days[datum]) days[datum] = { kj:0, fett:0, kh:0, protein:0 };
+      days[datum].kj      += kj;
+      days[datum].fett    += fett;
+      days[datum].kh      += kh;
+      days[datum].protein += protein;
+    }
+
+    // Build tageslog entries — skip dates where tageslog already exists with nutrition data
+    const existingTageslog = new Set(
+      data.filter(d => d.type === 'tageslog' && d.kalorien).map(d => d.datum)
+    );
+
+    const toAdd = [];
+    const skipped = [];
+
+    Object.entries(days).forEach(([datum, v]) => {
+      const today = new Date().toISOString().split('T')[0];
+      if (datum >= today) { skipped.push(datum); return; } // skip today — not complete yet
+      if (existingTageslog.has(datum)) { skipped.push(datum); return; }
+      const kcal = Math.round(v.kj / 4.184);
+      if (kcal < 100) return; // skip near-empty days
+      toAdd.push({
+        id: Date.now() + toAdd.length + Math.random(),
+        datum,
+        type: 'tageslog',
+        kalorien: kcal,
+        protein: Math.round(v.protein),
+        carbs: Math.round(v.kh),
+        fett: Math.round(v.fett),
+        gewicht: null, schritte: null, rhf: null,
+        schlaf: null, energie: null, volumen: 'ja'
+      });
+    });
+
+    if (!toAdd.length) { showToast('Keine neuen Tage — alle bereits vorhanden'); return; }
+
+    // Show preview
+    showFDDBPreview(toAdd, skipped);
+
+  } catch(err) {
+    console.error(err);
+    showToast('Fehler beim Lesen der FDDB-CSV');
+  }
+}
+
+function showFDDBPreview(entries, skipped) {
+  const modal = document.getElementById('fddb-preview-modal');
+  const list  = document.getElementById('fddb-preview-list');
+  const summ  = document.getElementById('fddb-preview-summary');
+
+  // Show first 10 + last 5 as sample
+  const sample = entries.length <= 15 ? entries : [...entries.slice(0,10), null, ...entries.slice(-5)];
+
+  list.innerHTML = sample.map(e => {
+    if (!e) return '<div style="padding:6px 0;color:var(--muted);font-size:11px;text-align:center;">… ' + (entries.length - 15) + ' weitere …</div>';
+    return '<div style="display:grid;grid-template-columns:100px 70px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+      '<span style="color:var(--muted)">' + e.datum + '</span>' +
+      '<span>' + e.kalorien + ' kcal</span>' +
+      '<span style="color:var(--muted)">P ' + e.protein + 'g</span>' +
+      '<span style="color:var(--muted)">KH ' + e.carbs + 'g</span>' +
+      '<span style="color:var(--muted)">F ' + e.fett + 'g</span>' +
+      '</div>';
+  }).join('');
+
+  summ.textContent = entries.length + ' neue Tage' +
+    (skipped.length ? ' · ' + skipped.length + ' bereits vorhanden übersprungen' : '');
+
+  modal.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+
+  document.getElementById('fddb-confirm-btn').onclick = async () => {
+    data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+    saveData(entries, null);
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    renderDashboard();
+    renderHistory();
+    showToast('✓ ' + entries.length + ' Tage aus FDDB importiert');
+  };
+}
+
 async function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -850,7 +1204,7 @@ async function importData(e) {
     const imported = JSON.parse(text);
     if (Array.isArray(imported)) {
       const existing = new Set(data.map(d => d.id));
-      const fresh = imported.filter(d => !existing.has(d.id));
+      const fresh = imported.filter(d => !existing.has(d.id) && (!d.datum || d.datum >= '2023-01-01'));
       data = [...data, ...fresh].sort((a,b) => new Date(b.datum) - new Date(a.datum));
       saveData(fresh, null);
       renderDashboard();
@@ -1165,134 +1519,7 @@ function saveEdit() {
   showToast('✓ Eintrag aktualisiert');
 }
 
-function renderPullChart() {
-  const tick = '#666';
-  const grid = 'rgba(255,255,255,0.06)';
-  destroyChart('pull');
-  const canvas = getCanvas('pull');
-  if (!canvas) return;
-
-  const sel = document.getElementById('prog-select');
-  if (!sel) return;
-
-  // Dynamisch alle vorhandenen Varianten aus den Daten ermitteln
-  const pullVarianten = [...new Set(data.filter(d => d.type === 'pull' && d.variante).map(d => d.variante))].sort();
-  const pushVarianten = [...new Set(data.filter(d => d.type === 'push' && d.variante).map(d => d.variante))].sort();
-
-  const currentVal = sel.value;
-  sel.innerHTML =
-    '<optgroup label="Pull-ups">' +
-    pullVarianten.map(v => `<option value="pull|${v}">${v}</option>`).join('') +
-    (pullVarianten.length > 1 ? '<option value="pull|alle">Pull — alle Varianten</option>' : '') +
-    '</optgroup>' +
-    '<optgroup label="Push-ups">' +
-    pushVarianten.map(v => `<option value="push|${v}">${v}</option>`).join('') +
-    (pushVarianten.length > 1 ? '<option value="push|alle">Push — alle Varianten</option>' : '') +
-    '</optgroup>' +
-    '<optgroup label="Aktivität"><option value="schritte|tag">Schritte pro Tag</option></optgroup>';
-
-  // Vorherige Auswahl wiederherstellen falls noch vorhanden
-  if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
-
-  const val = sel.value;
-  if (!val) { showEmptyState('pull'); return; }
-
-  const [filterType, filterVariante] = val.split('|');
-
-  // --- Schritte-Modus ---
-  if (filterType === 'schritte') {
-    const schritteData = filterByRange(data.filter(d => d.schritte)).reverse();
-    if (!schritteData.length) { showEmptyState('pull'); return; }
-    chartInstances['pull'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: schritteData.map(d => d.datum),
-        datasets: [{
-          label: 'Schritte',
-          data: schritteData.map(d => d.schritte),
-          backgroundColor: schritteData.map(d => d.schritte >= 10000 ? '#44ff8899' : '#e8ff4799'),
-          borderRadius: 3
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' Schritte' } } },
-        scales: {
-          x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 }, grid: { color: grid } },
-          y: { ticks: { color: tick, font: { size: 11 }, callback: v => (v/1000).toFixed(0) + 'k' }, grid: { color: grid } }
-        },
-        annotation: { annotations: [{ type: 'line', yMin: 10000, yMax: 10000, borderColor: '#44ff88', borderWidth: 1, borderDash: [4,4] }] }
-      }
-    });
-    return;
-  }
-
-  const isPull = filterType === 'pull';
-
-  const varianteColors = {
-    'Regulär': '#ff6b35', 'Reverse Grip': '#e8ff47', 'Hammer Grip': '#AFA9EC',
-    'Weit': '#44ff88', 'Eng': '#1D9E75', 'Diamond': '#5DCAA5', 'Elevated Feet': '#9FE1CB',
-    'Breit': '#ff6b35'
-  };
-  const defaultColor = isPull ? '#ff6b35' : '#44ff88';
-
-  let entries = filterByRange(data.filter(d => d.type === filterType && d.first_set));
-
-  if (filterVariante === 'alle') {
-    const byVariante = {};
-    entries.forEach(d => {
-      if (!byVariante[d.variante]) byVariante[d.variante] = [];
-      byVariante[d.variante].push(d);
-    });
-    const datasets = Object.entries(byVariante).map(([v, rows]) => {
-      const sorted = rows.slice().reverse();
-      const color = varianteColors[v] || defaultColor;
-      return {
-        label: v,
-        data: sorted.map(d => ({ x: d.datum, y: d.first_set })),
-        borderColor: color,
-        backgroundColor: color + '22',
-        pointBackgroundColor: sorted.map(d => d.pr ? '#e8ff47' : color),
-        pointRadius: sorted.map(d => d.pr ? 7 : 4),
-        borderWidth: 2, fill: false, tension: 0.3
-      };
-    });
-    if (!datasets.length) { showEmptyState('pull'); return; }
-    const allDates = [...new Set(entries.map(d => d.datum))].sort();
-    chartInstances['pull'] = new Chart(canvas, {
-      type: 'line',
-      data: { labels: allDates, datasets },
-      options: {
-        ...baseLineOptions(tick, grid, v => v + ' Reps', false),
-        plugins: { legend: { display: true, labels: { color: tick, font: { size: 11 }, boxWidth: 10, padding: 12 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + ' Reps' } } }
-      }
-    });
-  } else {
-    const filtered = entries.filter(d => d.variante === filterVariante).reverse();
-    if (!filtered.length) { showEmptyState('pull'); return; }
-    const color = varianteColors[filterVariante] || defaultColor;
-    chartInstances['pull'] = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: filtered.map(d => d.datum),
-        datasets: [{
-          label: filterVariante + ' — 1. Satz',
-          data: filtered.map(d => d.first_set),
-          borderColor: color,
-          backgroundColor: color + '18',
-          pointBackgroundColor: filtered.map(d => d.pr ? '#e8ff47' : color),
-          pointRadius: filtered.map(d => d.pr ? 7 : 4),
-          borderWidth: 2, fill: true, tension: 0.3
-        }]
-      },
-      options: {
-        ...baseLineOptions(tick, grid, v => v + ' Reps', false),
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' Reps' + (filtered[ctx.dataIndex]?.pr ? ' 🏆 PR' : '') } } }
-      }
-    });
-  }
-}
-
+// ── ANALYSE ─────────────────────────────────────────────────────────────────
 
 function loadChartJS(cb) {
   if (window.Chart) { cb(); return; }
@@ -1302,62 +1529,94 @@ function loadChartJS(cb) {
   document.head.appendChild(s);
 }
 
-// --- Analyse ---
-let analyseWeeks = 4;
-let chartInstances = {};
+// State
+const azState = { range: 4, agg: 'tag', ctype: 'line' };
+let flexChartInstance = null;
 
-function setAnalyseRange(weeks) {
-  analyseWeeks = weeks;
-  ['4','8','12','0'].forEach(w => {
-    const el = document.getElementById('az-' + w);
-    if (el) el.classList.toggle('active', parseInt(w) === weeks);
+// All available variables
+const AZ_VARS = [
+  // Tageslog
+  { id: 'gewicht',   label: 'Gewicht (kg)',           group: 'Körper',    type: 'tageslog', field: 'gewicht',  agg: 'avg' },
+  { id: 'kalorien',  label: 'Kalorien gegessen (kcal)',group: 'Körper',    type: 'tageslog', field: 'kalorien', agg: 'sum' },
+  { id: 'protein',   label: 'Protein (g)',             group: 'Körper',    type: 'tageslog', field: 'protein',  agg: 'sum' },
+  { id: 'carbs',     label: 'Kohlenhydrate (g)',        group: 'Körper',    type: 'tageslog', field: 'carbs',    agg: 'sum' },
+  { id: 'schritte',  label: 'Schritte',                group: 'Körper',    type: 'tageslog', field: 'schritte', agg: 'sum' },
+  { id: 'rhf',       label: 'Ruheherzfrequenz (bpm)',  group: 'ZNS',       type: 'tageslog', field: 'rhf',      agg: 'avg' },
+  { id: 'schlaf',    label: 'Schlafqualität (1-5)',     group: 'ZNS',       type: 'tageslog', field: 'schlaf',   agg: 'avg' },
+  { id: 'energie',   label: 'Energie vor Training (1-5)',group:'ZNS',       type: 'tageslog', field: 'energie',  agg: 'avg' },
+  // Laufen
+  { id: 'lauf_km',   label: 'Laufvolumen (km)',        group: 'Laufen',    type: 'lauf',     field: 'distanz',  agg: 'sum' },
+  { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Laufen',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
+  { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Laufen',    type: 'lauf',     field: 'hf',       agg: 'avg' },
+  { id: 'lauf_kcal', label: 'Lauf-Kalorien (kcal)',    group: 'Laufen',    type: 'lauf',     field: 'kalorien', agg: 'sum' },
+  // Kraft
+  { id: 'pull_1st',  label: 'Klimmzug 1. Satz (Reps)',group: 'Kraft',     type: 'pull',     field: 'first_set',agg: 'max' },
+  { id: 'pull_tot',  label: 'Klimmzug Total (Reps)',   group: 'Kraft',     type: 'pull',     field: 'total_reps',agg:'sum' },
+  { id: 'push_1st',  label: 'Push-up 1. Satz (Reps)', group: 'Kraft',     type: 'push',     field: 'first_set',agg: 'max' },
+  { id: 'push_tot',  label: 'Push-up Total (Reps)',    group: 'Kraft',     type: 'push',     field: 'total_reps',agg:'sum' },
+];
+
+const VAR_COLORS = ['#4f46e5','#e8ff47','#e05d44'];
+
+function setAZ(key, val) {
+  azState[key] = val;
+  document.querySelectorAll('.az-' + key + '-btn').forEach(b => {
+    const bval = key === 'range' ? parseInt(b.dataset.w) : (key === 'agg' ? b.dataset.a : b.dataset.ct);
+    b.classList.toggle('active', bval == val);
   });
-  renderAnalyse();
+  renderFlexChart();
 }
 
-function getAnalyseCutoff() {
-  if (!analyseWeeks) return null;
-  return new Date(Date.now() - analyseWeeks * 7 * 86400000);
+function populateVarSelects() {
+  const groups = {};
+  AZ_VARS.forEach(v => { if (!groups[v.group]) groups[v.group] = []; groups[v.group].push(v); });
+
+  ['az-var1','az-var2','az-var3'].forEach((id, i) => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">&#8212; keine &#8212;</option>';
+    Object.entries(groups).forEach(([grp, vars]) => {
+      const og = document.createElement('optgroup');
+      og.label = grp;
+      vars.forEach(v => {
+        const o = document.createElement('option');
+        o.value = v.id;
+        o.textContent = v.label;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+    if (cur) sel.value = cur;
+  });
 }
 
-function filterByRange(arr) {
-  const cutoff = getAnalyseCutoff();
-  if (!cutoff) return arr;
-  return arr.filter(d => new Date(d.datum) >= cutoff);
+function getAZCutoff() {
+  if (!azState.range) return null;
+  return new Date(Date.now() - azState.range * 7 * 86400000);
 }
 
-function destroyChart(id) {
-  if (chartInstances[id]) {
-    try { chartInstances[id].destroy(); } catch(e) {}
-    delete chartInstances[id];
-  }
-  // Restore canvas if it was replaced by emptyState
-  const wrapper = document.getElementById('chart-wrapper-' + id);
-  if (wrapper) {
-    const existing = wrapper.querySelector('canvas');
-    if (!existing) {
-      const c = document.createElement('canvas');
-      c.id = 'chart-' + id;
-      wrapper.innerHTML = '';
-      wrapper.appendChild(c);
-    }
-  }
+function isoWeek(dateStr) {
+  const d = new Date(dateStr);
+  const thu = new Date(d); thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
+  const jan4 = new Date(thu.getFullYear(), 0, 4);
+  const week = 1 + Math.round(((thu - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  return thu.getFullYear() + '-KW' + String(week).padStart(2,'0');
 }
 
-function showEmptyState(id, msg) {
-  const wrapper = document.getElementById('chart-wrapper-' + id);
-  if (!wrapper) return;
-  // destroy existing chart first
-  if (chartInstances[id]) { try { chartInstances[id].destroy(); } catch(e) {} delete chartInstances[id]; }
-  wrapper.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:12px;">' + (msg || 'Noch keine Daten im gewählten Zeitraum') + '</div>';
+function periodKey(dateStr) {
+  const d = new Date(dateStr);
+  if (azState.agg === 'tag') return dateStr;
+  if (azState.agg === 'woche') return isoWeek(dateStr);
+  if (azState.agg === 'monat') return dateStr.slice(0,7);
+  return dateStr;
 }
 
 function paceToMin(pace) {
   if (!pace) return null;
-  const parts = pace.split(':');
-  if (parts.length !== 2) return null;
-  const val = parseInt(parts[0]) + parseInt(parts[1]) / 60;
-  return isNaN(val) ? null : parseFloat(val.toFixed(3));
+  const p = String(pace).split(':');
+  if (p.length !== 2) return null;
+  const v = parseInt(p[0]) + parseInt(p[1]) / 60;
+  return isNaN(v) ? null : parseFloat(v.toFixed(3));
 }
 
 function minToPace(val) {
@@ -1367,145 +1626,159 @@ function minToPace(val) {
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
-function getCanvas(id) {
-  const wrapper = document.getElementById('chart-wrapper-' + id);
-  if (!wrapper) return null;
-  let c = wrapper.querySelector('canvas');
-  if (!c) { c = document.createElement('canvas'); c.id = 'chart-' + id; wrapper.appendChild(c); }
-  return c;
+function buildDataset(varId) {
+  const def = AZ_VARS.find(v => v.id === varId);
+  if (!def) return null;
+
+  const cutoff = getAZCutoff();
+  let entries = data.filter(d => {
+    if (cutoff && new Date(d.datum) < cutoff) return false;
+    if (def.type === 'lauf') return ['lauf','intervall','reko'].includes(d.type);
+    return d.type === def.type;
+  });
+
+  // Group by period
+  const grouped = {};
+  entries.forEach(d => {
+    const raw = d[def.field];
+    if (raw == null) return;
+    const val = def.fmt === 'pace' ? paceToMin(raw) : parseFloat(raw);
+    if (isNaN(val) || val == null) return;
+    const key = periodKey(d.datum);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(val);
+  });
+
+  // Aggregate
+  const periods = Object.keys(grouped).sort();
+  const values = periods.map(k => {
+    const arr = grouped[k];
+    if (def.agg === 'sum') return arr.reduce((a,b) => a+b, 0);
+    if (def.agg === 'avg') return arr.reduce((a,b) => a+b, 0) / arr.length;
+    if (def.agg === 'max') return Math.max(...arr);
+    return arr[arr.length - 1];
+  });
+
+  return { periods, values, def };
 }
 
-function renderAnalyse() {
-  const tick = '#666';
-  const grid = 'rgba(255,255,255,0.06)';
+function renderFlexChart() {
+  const ids = ['az-var1','az-var2','az-var3'].map(id => document.getElementById(id)?.value).filter(Boolean);
 
-  // 1. Progression (pull/push mit Varianten-Dropdown)
-  renderPullChart();
+  const canvas = document.getElementById('chart-flex');
+  const empty = document.getElementById('az-empty');
+  const wrapper = document.getElementById('chart-wrapper-flex');
 
-  // 2. Lauf-Pace
-  destroyChart('pace');
-  const runs = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.pace)).reverse();
-  if (runs.length) {
-    const colors = { lauf: '#e8ff47', intervall: '#ff6b35', reko: '#44ff88' };
-    chartInstances['pace'] = new Chart(getCanvas('pace'), {
-      type: 'scatter',
-      data: {
-        datasets: ['lauf','intervall','reko'].map(type => ({
-          label: { lauf:'Grundlage', intervall:'Intervall', reko:'Reko' }[type],
-          data: runs.filter(d => d.type === type).map(d => ({ x: d.datum, y: paceToMin(d.pace) })).filter(p => p.y),
-          backgroundColor: colors[type] + 'CC',
-          pointRadius: 5
-        })).filter(ds => ds.data.length)
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: tick, font: { size: 11 }, boxWidth: 10 } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + minToPace(ctx.parsed.y) + '/km' } } },
-        scales: {
-          x: { type: 'category', ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 10 }, grid: { color: grid } },
-          y: { reverse: true, ticks: { color: tick, font: { size: 11 }, callback: v => minToPace(v) }, grid: { color: grid } }
-        }
-      }
-    });
-  } else { showEmptyState('pace'); }
+  if (flexChartInstance) { try { flexChartInstance.destroy(); } catch(e) {} flexChartInstance = null; }
 
-  // 3. Wöchentliches Laufvolumen
-  destroyChart('km');
-  const allRuns = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.distanz));
-  if (allRuns.length) {
-    const weekMap = {};
-    allRuns.forEach(d => {
-      const date = new Date(d.datum);
-      const day = date.getDay() || 7;
-      const mon = new Date(date); mon.setDate(date.getDate() - day + 1);
-      const key = mon.toISOString().split('T')[0];
-      weekMap[key] = (weekMap[key] || 0) + d.distanz;
-    });
-    const weeks = Object.keys(weekMap).sort();
-    chartInstances['km'] = new Chart(getCanvas('km'), {
-      type: 'bar',
-      data: {
-        labels: weeks,
-        datasets: [{ label: 'km', data: weeks.map(w => parseFloat(weekMap[w].toFixed(1))), backgroundColor: '#e8ff47AA', borderRadius: 3 }]
-      },
-      options: baseBarOptions(tick, grid, v => v + ' km')
-    });
-  } else { showEmptyState('km'); }
-
-  // 4. Gewicht
-  destroyChart('weight');
-  const weights = filterByRange(data.filter(d => d.gewicht)).reverse();
-  if (weights.length) {
-    chartInstances['weight'] = new Chart(getCanvas('weight'), {
-      type: 'line',
-      data: {
-        labels: weights.map(d => d.datum),
-        datasets: [{ label: 'Gewicht (kg)', data: weights.map(d => d.gewicht), borderColor: '#e8ff47', backgroundColor: 'rgba(232,255,71,0.08)', borderWidth: 2, pointRadius: 3, fill: true, tension: 0.3 }]
-      },
-      options: baseLineOptions(tick, grid, v => v.toFixed(1) + ' kg', true)
-    });
-  } else { showEmptyState('weight'); }
-
-  // 5. Kalorien
-  destroyChart('kcal');
-  const kcals = filterByRange(data.filter(d => d.kalorien)).reverse();
-  if (kcals.length) {
-    const laufTage = new Set(data.filter(d => ['lauf','intervall','reko'].includes(d.type)).map(d => d.datum));
-    chartInstances['kcal'] = new Chart(getCanvas('kcal'), {
-      type: 'bar',
-      data: {
-        labels: kcals.map(d => d.datum),
-        datasets: [{ label: 'kcal', data: kcals.map(d => d.kalorien), backgroundColor: kcals.map(d => laufTage.has(d.datum) ? '#ff6b35AA' : '#44ff8866'), borderRadius: 3 }]
-      },
-      options: {
-        ...baseBarOptions(tick, grid, v => v + ' kcal'),
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' kcal' + (laufTage.has(kcals[ctx.dataIndex]?.datum) ? ' (Lauftag)' : '') } } }
-      }
-    });
-  } else { showEmptyState('kcal'); }
-
-  // 6. Herzfrequenz
-  destroyChart('hf');
-  const hfRuns = filterByRange(data.filter(d => ['lauf','intervall','reko'].includes(d.type) && d.hf)).reverse();
-  if (hfRuns.length) {
-    chartInstances['hf'] = new Chart(getCanvas('hf'), {
-      type: 'line',
-      data: {
-        labels: hfRuns.map(d => d.datum),
-        datasets: [{ label: 'Ø HF (bpm)', data: hfRuns.map(d => d.hf), borderColor: '#ff4444', backgroundColor: 'rgba(255,68,68,0.08)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3 }]
-      },
-      options: baseLineOptions(tick, grid, v => v + ' bpm', true)
-    });
-  } else {
-    showEmptyState('hf', 'Noch keine Brustgurt-HF geloggt');
+  if (!ids.length) {
+    wrapper.style.display = 'none';
+    empty.style.display = 'block';
+    return;
   }
-}
+  wrapper.style.display = 'block';
+  empty.style.display = 'none';
 
-function baseLineOptions(tick, grid, tooltipFmt, showLegend) {
-  return {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => tooltipFmt(ctx.parsed.y) } } },
-    scales: {
-      x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 8 }, grid: { color: grid } },
-      y: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid } }
+  // Build datasets
+  const datasets = [];
+  const allPeriods = new Set();
+  const defs = [];
+
+  ids.forEach((id, i) => {
+    const result = buildDataset(id);
+    if (!result) return;
+    result.periods.forEach(p => allPeriods.add(p));
+    defs.push({ result, color: VAR_COLORS[i] });
+  });
+
+  const labels = [...allPeriods].sort();
+  const tick = '#888';
+  const grid = 'rgba(0,0,0,0.06)';
+
+  // Build Chart.js datasets — use dual Y axes if units differ
+  const usedAxes = {};
+  let axisCount = 0;
+
+  defs.forEach(({ result, color }, i) => {
+    const { periods, values, def } = result;
+    const valueMap = {};
+    periods.forEach((p, j) => { valueMap[p] = values[j]; });
+    const chartData = labels.map(l => valueMap[l] != null ? parseFloat(valueMap[l].toFixed(2)) : null);
+
+    // Assign Y axis — group same units together
+    const unitKey = def.group + '_' + def.field;
+    if (usedAxes[unitKey] == null) { usedAxes[unitKey] = axisCount < 2 ? 'y' + (axisCount > 0 ? axisCount : '') : 'y'; axisCount++; }
+    const yAxisID = usedAxes[unitKey];
+
+    const ds = {
+      label: def.label,
+      data: chartData,
+      borderColor: color,
+      backgroundColor: azState.ctype === 'bar' ? color + '99' : color + '18',
+      borderWidth: azState.ctype === 'bar' ? 0 : 2,
+      pointRadius: azState.ctype === 'bar' ? 0 : 4,
+      pointBackgroundColor: color,
+      fill: azState.ctype === 'line',
+      tension: 0.3,
+      spanGaps: true,
+      yAxisID,
+      borderRadius: azState.ctype === 'bar' ? 3 : 0,
+    };
+    datasets.push({ ds, def, yAxisID });
+  });
+
+  // Build scales
+  const scales = {
+    x: {
+      ticks: { color: tick, font: { size: 11 }, maxRotation: 45, maxTicksLimit: 16 },
+      grid: { color: grid }
     }
   };
-}
 
-function baseBarOptions(tick, grid, tooltipFmt) {
-  return {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => tooltipFmt(ctx.parsed.y) } } },
-    scales: {
-      x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 10 }, grid: { color: grid } },
-      y: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid } }
+  const axisKeys = [...new Set(datasets.map(d => d.yAxisID))];
+  axisKeys.forEach((axId, i) => {
+    const def = datasets.find(d => d.yAxisID === axId).def;
+    scales[axId] = {
+      position: i === 0 ? 'left' : 'right',
+      ticks: {
+        color: VAR_COLORS[datasets.findIndex(d => d.yAxisID === axId)],
+        font: { size: 11 },
+        callback: def.fmt === 'pace' ? v => minToPace(v) : v => v
+      },
+      grid: { drawOnChartArea: i === 0, color: grid },
+      title: { display: false }
+    };
+  });
+
+  flexChartInstance = new Chart(canvas, {
+    type: azState.ctype === 'bar' ? 'bar' : 'line',
+    data: { labels, datasets: datasets.map(d => d.ds) },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: tick, font: { size: 11 }, boxWidth: 10, padding: 16,
+            usePointStyle: azState.ctype === 'line' }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const def = defs[ctx.datasetIndex]?.result?.def;
+              if (!def) return ctx.dataset.label + ': ' + ctx.parsed.y;
+              const v = ctx.parsed.y;
+              const fmt = def.fmt === 'pace' ? minToPace(v) : (v != null ? v.toFixed(1) : '—');
+              return ctx.dataset.label + ': ' + fmt;
+            }
+          }
+        }
+      },
+      scales
     }
-  };
+  });
 }
-
-function emptyState() {
-  return '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:12px;">Noch keine Daten im gewählten Zeitraum</div>';
-}
-
 </script>
 <script>
 if ('serviceWorker' in navigator) {

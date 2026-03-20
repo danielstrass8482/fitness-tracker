@@ -166,11 +166,13 @@
   .zns-bar { height: 3px; border-radius: 2px; background: var(--border); margin-top: 10px; overflow: hidden; }
   .zns-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
   .entry-row { display: grid; grid-template-columns: 90px 100px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .entry-row.select-mode { grid-template-columns: 24px 90px 100px 1fr; }
   .entry-row:last-child { border-bottom: none; }
   .tag { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
   .tag-lauf { background: var(--pill-run); color: var(--pill-run-text); }
   .tag-pull { background: var(--pill-pull); color: var(--pill-pull-text); }
   .tag-push { background: var(--pill-push); color: var(--pill-push-text); }
+  .tag-gehen { background: #ede9fe; color: #5b21b6; }
   .signal-ok { color: var(--ok); } .signal-warn { color: var(--warn); } .signal-danger { color: var(--danger); }
   .zns-alert { border-radius: 8px; padding: 12px 16px; font-size: 12px; margin-bottom: 20px; line-height: 1.6; }
   .zns-alert.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: var(--ok); }
@@ -200,7 +202,6 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-ghost" id="auth-btn" onclick="window.fbSignIn && window.fbSignIn()">Mit Google anmelden</button>
       <button class="btn-ghost" onclick="manualExport()">Export JSON</button>
-      <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">Import JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
       <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">Garmin CSV<input type="file" accept=".csv" onchange="importGarminCSV(event)" style="display:none;"></label>
       <label style="cursor:pointer;display:inline-flex;align-items:center;background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;transition:all 0.15s;" onmouseenter="this.style.borderColor='var(--border-strong)';this.style.color='var(--text)';this.style.background='var(--surface2)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='none'">FDDB CSV<input type="file" accept=".csv" onchange="importFDDBCSV(event)" style="display:none;"></label>
     </div>
@@ -250,9 +251,6 @@
               <select id="log-type" onchange="toggleFields()">
                 <option value="pull">Klimmzüge (Pull)</option>
                 <option value="push">Push-ups (Push)</option>
-                <option value="lauf">Laufen</option>
-                <option value="intervall">Intervall</option>
-                <option value="reko">Reko-Lauf</option>
               </select>
             </div>
           </div>
@@ -414,7 +412,7 @@
         <option value="alle">Alle Typen</option><option value="pull">Klimmzüge</option>
         <option value="push">Push-ups</option><option value="lauf">Laufen</option>
         <option value="intervall">Intervall</option><option value="reko">Reko</option>
-        <option value="tageslog">Tageslog</option>
+        <option value="gehen">Gehen</option><option value="tageslog">Tageslog</option>
       </select>
       <select id="filter-weeks" onchange="renderHistory()" style="width:150px;">
         <option value="4">Letzte 4 Wochen</option><option value="8">Letzte 8 Wochen</option>
@@ -451,6 +449,7 @@
           <option value="lauf">Laufen</option>
           <option value="intervall">Intervall</option>
           <option value="reko">Reko-Lauf</option>
+          <option value="gehen">Gehen</option>
         </select>
       </div>
     </div>
@@ -966,7 +965,7 @@ async function importGarminCSV(e) {
     const TYPE_MAP = {
       'Laufen': 'lauf',
       'Laufbandtraining': 'lauf',
-      'Gehen': 'reko',
+      'Gehen': 'gehen',
     };
 
     const parseVal = (row, i) => {
@@ -1000,8 +999,6 @@ async function importGarminCSV(e) {
       if (!rawDate) continue;
       const datum = rawDate.split(' ')[0]; // YYYY-MM-DD
       if (datum < '2024-03-20') continue; // skip pre-2023
-      const today = new Date().toISOString().split('T')[0];
-      if (datum >= today) continue; // skip today — data may be incomplete
 
       const distanz = parseFloat(parseVal(row, iDist)) || null;
       const pace = parseVal(row, iPace);
@@ -1197,23 +1194,6 @@ function showFDDBPreview(entries, skipped) {
   };
 }
 
-async function importData(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const imported = JSON.parse(text);
-    if (Array.isArray(imported)) {
-      const existing = new Set(data.map(d => d.id));
-      const fresh = imported.filter(d => !existing.has(d.id) && (!d.datum || d.datum >= '2024-03-20'));
-      data = [...data, ...fresh].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-      saveData(fresh, null);
-      renderDashboard();
-      renderHistory();
-      showToast('✓ ' + fresh.length + ' neue Einträge importiert');
-    }
-  } catch(err) { showToast('Fehler beim Import'); }
-}
 
 // --- Dashboard ---
 function renderDashboard() {
@@ -1312,31 +1292,36 @@ function renderHistory() {
   const el = document.getElementById('history-list');
   if (!filtered.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:12px;">Keine Einträge</div>'; return; }
   el.innerHTML = filtered.map(d => {
-    const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : 'tag-' + d.type;
-    const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', tageslog:'Tageslog' }[d.type] || d.type;
+    const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : d.type === 'gehen' ? 'tag-gehen' : 'tag-' + d.type;
+    const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', gehen:'Gehen', tageslog:'Tageslog' }[d.type] || d.type;
     let detail = d.sets ? d.variante + ' · ' + d.sets + ' (' + d.total_reps + ' Reps)' + (d.pr ? ' 🏆' : '') : '';
     if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
     if (d.intervall_detail) detail += ' · ' + d.intervall_detail;
     const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString():null].filter(Boolean);
     const isSelected = selectedIds.has(String(d.id));
-    const rowBg = selectMode && isSelected ? 'background:rgba(232,255,71,0.06);' : '';
-    return '<div class="entry-row" style="' + rowBg + '">' +
-      (selectMode
-        ? '<input type="checkbox" class="entry-checkbox" data-id="' + d.id + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(\'' + d.id + '\')" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">'
-        : '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>') +
-      (selectMode ? '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>' : '') +
+    const rowCls = selectMode ? 'entry-row select-mode' : 'entry-row';
+    const rowBg = selectMode && isSelected ? 'var(--surface2)' : '';
+    return '<div class="' + rowCls + '" style="background:' + rowBg + '">' +
+      (selectMode ? '<input type="checkbox" class="entry-checkbox" data-id="' + d.id + '" ' + (isSelected ? 'checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent2);cursor:pointer;">' : '') +
+      '<span style="color:var(--muted);font-size:11px;">' + d.datum + '</span>' +
       '<span class="tag ' + tagCls + '">' + typeLbl + '</span>' +
       '<div><div>' + (detail||'—') + '</div>' +
       (meta.length ? '<div style="color:var(--muted);font-size:11px;margin-top:3px;">' + meta.join(' · ') + '</div>' : '') +
-      (d.notiz ? '<div style="color:var(--muted);font-size:11px;margin-top:2px;font-style:italic;">"' + d.notiz + '"</div>' : '') +
+      (d.notiz ? '<div style="color:var(--muted);font-size:11px;margin-top:2px;font-style:italic;">' + d.notiz + '</div>' : '') +
       '</div>' +
       (!selectMode ? '<div style="display:flex;gap:6px;">' +
       '<button class="btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="openEditModal(' + d.id + ')">✎</button>' +
       '<button class="btn-danger" onclick="deleteEntry(' + d.id + ')">×</button>' +
       '</div>' : '') +
       '</div>';
-  }).join('');
-  if (selectMode) updateDeleteBtn();
+    }).join('');
+  if (selectMode) {
+    updateDeleteBtn();
+    // Attach click handlers via delegation to avoid quoting issues
+    document.querySelectorAll('.entry-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => toggleSelect(cb.dataset.id));
+    });
+  }
 }
 
 let selectMode = false;
@@ -1375,9 +1360,9 @@ function toggleSelect(id) {
   id = String(id);
   if (selectedIds.has(id)) selectedIds.delete(id);
   else selectedIds.add(id);
-  // Update row background immediately without full re-render
   const cb = document.querySelector('.entry-checkbox[data-id="' + id + '"]');
   if (cb) {
+    cb.checked = selectedIds.has(id);
     const row = cb.closest('.entry-row');
     if (row) row.style.background = selectedIds.has(id) ? 'var(--surface2)' : '';
   }
@@ -1647,6 +1632,8 @@ const AZ_VARS = [
   { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Laufen',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
   { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Laufen',    type: 'lauf',     field: 'hf',       agg: 'avg' },
   { id: 'lauf_kcal', label: 'Lauf-Kalorien (kcal)',    group: 'Laufen',    type: 'lauf',     field: 'kalorien', agg: 'sum' },
+  { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Laufen',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
+  { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Laufen',    type: 'gehen',    field: 'hf',       agg: 'avg' },
   // ZNS computed
   { id: 'zns_score', label: 'ZNS-Score (0-100)',       group: 'ZNS',       type: '__zns__',  field: 'zns',      agg: 'avg', fmt: 'pct' },
   // Kraft
@@ -1763,6 +1750,7 @@ function buildDataset(varId) {
   let entries = data.filter(d => {
     if (cutoff && new Date(d.datum) < cutoff) return false;
     if (def.type === 'lauf') return ['lauf','intervall','reko'].includes(d.type);
+    if (def.type === 'gehen') return d.type === 'gehen';
     return d.type === def.type;
   });
 

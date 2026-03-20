@@ -961,6 +961,7 @@ async function importGarminCSV(e) {
     const iHFmax = idx('Maximale Herzfrequenz');
     const iPace = idx('Ø Pace');
     const iTE = idx('Aerober TE');
+    const iSteps = idx('Schritte');
 
     const TYPE_MAP = {
       'Laufen': 'lauf',
@@ -1019,6 +1020,9 @@ async function importGarminCSV(e) {
       const dedupeKey = datum + '_' + (distanz || '') + '_' + finalType;
       if (existing.has(dedupeKey)) { skipped.push(datum); continue; }
 
+      const rawSteps = parseVal(row, iSteps);
+      const actSteps = rawSteps ? parseInt(rawSteps.replace(/[^0-9]/g,'')) || null : null;
+
       const entry = {
         id: Date.now() + i,
         datum,
@@ -1028,6 +1032,7 @@ async function importGarminCSV(e) {
         hf,
         hf_max,
         kalorien,
+        act_schritte: actSteps, // steps FROM this activity (to avoid double-counting)
         notiz: title,
         // placeholders — user fills via tageslog
         gewicht: null, protein: null, carbs: null, schritte: null,
@@ -1635,7 +1640,10 @@ const AZ_VARS = [
   { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Laufen',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
   { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Laufen',    type: 'gehen',    field: 'hf',       agg: 'avg' },
   // ZNS computed
-  { id: 'zns_score', label: 'ZNS-Score (0-100)',       group: 'ZNS',       type: '__zns__',  field: 'zns',      agg: 'avg', fmt: 'pct' },
+  { id: 'zns_score',    label: 'ZNS-Score (0-100)',          group: 'ZNS',    type: '__zns__',   field: 'zns',      agg: 'avg', fmt: 'pct' },
+  { id: 'kcal_bedarf',  label: 'Kalorienbedarf Fix (kcal)',    group: 'Kalorien', type: '__kcal_fix__', field: 'kcal', agg: 'avg' },
+  { id: 'kcal_dynm',   label: 'Kalorienbedarf Dynamisch (kcal)',group:'Kalorien', type: '__kcal_dyn__', field: 'kcal', agg: 'avg' },
+  { id: 'kcal_defizit',label: 'Kalorien Defizit/Überschuss',   group: 'Kalorien', type: '__kcal_def__', field: 'kcal', agg: 'avg' },
   // Kraft
   { id: 'pull_1st',  label: 'Klimmzug 1. Satz (Reps)',group: 'Kraft',     type: 'pull',     field: 'first_set',agg: 'max' },
   { id: 'pull_tot',  label: 'Klimmzug Total (Reps)',   group: 'Kraft',     type: 'pull',     field: 'total_reps',agg:'sum' },
@@ -1714,6 +1722,55 @@ function minToPace(val) {
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
+// ── KALORIENBEDARF ───────────────────────────────────────────────────────────
+// Harris-Benedict (männlich): 88.36 + (13.4 × kg) + (4.8 × 179cm) - (5.7 × 44J)
+// Fix-Grundumsatz: 2300 kcal (user-tracked, stable)
+const HB_HEIGHT = 179;
+const HB_AGE    = 44;
+const FIX_BMR   = 2300;
+const KCAL_PER_STEP = 0.04; // kcal per step for allday activity
+
+function calcHBMR(gewicht) {
+  if (!gewicht) return null;
+  return Math.round(88.36 + 13.4 * gewicht + 4.8 * HB_HEIGHT - 5.7 * HB_AGE);
+}
+
+function getTdeeForDate(datum, mode) {
+  // Get tageslog for this date
+  const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
+  // Get sport activities for this date
+  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type));
+  const sportKcal = acts.reduce((s, a) => s + (a.kalorien || 0), 0);
+  // Subtract activity steps from total to avoid double-counting
+  const totalSchritte = tl?.schritte || 0;
+  const actSchritte   = acts.reduce((s, a) => s + (a.act_schritte || 0), 0);
+  const alldaySchritte = Math.max(0, totalSchritte - actSchritte);
+  const stepKcal  = Math.round(alldaySchritte * KCAL_PER_STEP);
+
+  if (mode === 'fix') {
+    // Fix BMR + steps + sport
+    return FIX_BMR + stepKcal + sportKcal;
+  } else {
+    // Dynamic Harris-Benedict BMR + steps + sport
+    const gewicht = tl?.gewicht || data.filter(d => d.type === 'tageslog' && d.gewicht && d.datum <= datum)
+      .sort((a,b) => b.datum.localeCompare(a.datum))[0]?.gewicht;
+    const bmr = calcHBMR(gewicht);
+    if (!bmr) return null;
+    return bmr + stepKcal + sportKcal;
+  }
+}
+
+function computeKcalForDate(datum, mode) {
+  return getTdeeForDate(datum, mode);
+}
+
+function computeDefizitForDate(datum) {
+  const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
+  if (!tl?.kalorien) return null;
+  const tdee = getTdeeForDate(datum, 'fix');
+  return tl.kalorien - tdee; // negative = Defizit, positive = Überschuss
+}
+
 function computeZNSForDate(datum) {
   // Compute ZNS score for a given date using that date as "most recent"
   const sorted = data.filter(d => d.type === 'tageslog' && d.datum <= datum)
@@ -1729,6 +1786,27 @@ function buildDataset(varId) {
   const cutoff = getAZCutoff();
 
   // Special: ZNS computed per tageslog day
+  if (def.type === '__kcal_fix__' || def.type === '__kcal_dyn__' || def.type === '__kcal_def__') {
+    const mode = def.type === '__kcal_fix__' ? 'fix' : def.type === '__kcal_dyn__' ? 'dyn' : 'def';
+    const tagesl = data.filter(d => d.type === 'tageslog' && (!cutoff || new Date(d.datum) >= cutoff))
+      .sort((a,b) => a.datum.localeCompare(b.datum));
+    const grouped = {};
+    tagesl.forEach(d => {
+      const val = mode === 'def' ? computeDefizitForDate(d.datum)
+                : computeKcalForDate(d.datum, mode);
+      if (val == null) return;
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(val);
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => {
+      const arr = grouped[k];
+      return arr.reduce((a,b) => a+b,0) / arr.length;
+    });
+    return { periods, values, def };
+  }
+
   if (def.type === '__zns__') {
     const tagesl = data.filter(d => d.type === 'tageslog' && (!cutoff || new Date(d.datum) >= cutoff))
       .sort((a,b) => a.datum.localeCompare(b.datum));
@@ -1905,7 +1983,7 @@ function renderFlexChart() {
     const colorIdx = datasets.findIndex(d => d.yAxisID === axId);
     scales[axId] = {
       position: i === 0 ? 'left' : 'right',
-      min: def.fmt === 'pace' ? undefined : 0,
+      min: (def.fmt === 'pace' || def.type === '__kcal_def__') ? undefined : 0,
       ticks: {
         color: VAR_COLORS[colorIdx],
         font: { size: 11 },

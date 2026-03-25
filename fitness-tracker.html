@@ -614,7 +614,7 @@
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;">
     <div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 1</div>
       <select id="az-var1" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
@@ -623,10 +623,7 @@
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 2</div>
       <select id="az-var2" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
     </div>
-    <div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:500;margin-bottom:6px;">Variable 3</div>
-      <select id="az-var3" onchange="renderFlexChart()" style="width:100%;font-size:12px;"><option value="">&#8212; keine &#8212;</option></select>
-    </div>
+
   </div>
 
   <div class="card" style="padding:20px;">
@@ -1126,37 +1123,51 @@ async function importFDDBCSV(e) {
       days[datum].protein += protein;
     }
 
-    // Build tageslog entries — skip dates where tageslog already exists with nutrition data
-    const existingTageslog = new Set(
-      data.filter(d => d.type === 'tageslog' && d.kalorien).map(d => d.datum)
-    );
+    // Build tageslog entries — merge with existing if present, only fill missing fields
+    const existingByDate = {};
+    data.filter(d => d.type === 'tageslog').forEach(d => { existingByDate[d.datum] = d; });
 
-    const toAdd = [];
-    const skipped = [];
+    const toAdd = [];    // completely new entries
+    const toMerge = [];  // existing entries to update with missing nutrition data
+    const skipped = [];  // already complete, nothing to do
 
     Object.entries(days).forEach(([datum, v]) => {
       const today = new Date().toISOString().split('T')[0];
-      if (datum >= today) { skipped.push(datum); return; } // skip today — not complete yet
-      if (existingTageslog.has(datum)) { skipped.push(datum); return; }
+      if (datum >= today) return; // skip today — not complete yet
       const kcal = Math.round(v.kj / 4.184);
       if (kcal < 100) return; // skip near-empty days
-      toAdd.push({
-        id: Date.now() + toAdd.length + Math.random(),
-        datum,
-        type: 'tageslog',
-        kalorien: kcal,
-        protein: Math.round(v.protein),
-        carbs: Math.round(v.kh),
-        fett: Math.round(v.fett),
-        gewicht: null, schritte: null, rhf: null,
-        schlaf: null, energie: null, volumen: 'ja'
-      });
+
+      const existing = existingByDate[datum];
+      if (existing) {
+        // Only merge if nutrition fields are missing
+        if (existing.kalorien) { skipped.push(datum); return; }
+        // Merge: keep existing ZNS/body fields, add nutrition
+        toMerge.push({
+          ...existing,
+          kalorien: kcal,
+          protein: Math.round(v.protein),
+          carbs: Math.round(v.kh),
+          fett: Math.round(v.fett),
+        });
+      } else {
+        toAdd.push({
+          id: Date.now() + toAdd.length + Math.random(),
+          datum,
+          type: 'tageslog',
+          kalorien: kcal,
+          protein: Math.round(v.protein),
+          carbs: Math.round(v.kh),
+          fett: Math.round(v.fett),
+          gewicht: null, schritte: null, rhf: null,
+          schlaf: null, energie: null, volumen: 'ja'
+        });
+      }
     });
 
-    if (!toAdd.length) { showToast('Keine neuen Tage — alle bereits vorhanden'); return; }
+    if (!toAdd.length && !toMerge.length) { showToast('Keine neuen Daten — alle Tage bereits vollständig'); return; }
 
     // Show preview
-    showFDDBPreview(toAdd, skipped);
+    showFDDBPreview(toAdd, toMerge, skipped);
 
   } catch(err) {
     console.error(err);
@@ -1164,18 +1175,25 @@ async function importFDDBCSV(e) {
   }
 }
 
-function showFDDBPreview(entries, skipped) {
+function showFDDBPreview(toAdd, toMerge, skipped) {
   const modal = document.getElementById('fddb-preview-modal');
   const list  = document.getElementById('fddb-preview-list');
   const summ  = document.getElementById('fddb-preview-summary');
 
-  // Show first 10 + last 5 as sample
-  const sample = entries.length <= 15 ? entries : [...entries.slice(0,10), null, ...entries.slice(-5)];
+  const allEntries = [
+    ...toAdd.map(e => ({ ...e, _action: 'neu' })),
+    ...toMerge.map(e => ({ ...e, _action: 'merge' }))
+  ].sort((a,b) => b.datum.localeCompare(a.datum));
+
+  const sample = allEntries.length <= 15 ? allEntries : [...allEntries.slice(0,10), null, ...allEntries.slice(-5)];
 
   list.innerHTML = sample.map(e => {
-    if (!e) return '<div style="padding:6px 0;color:var(--muted);font-size:11px;text-align:center;">… ' + (entries.length - 15) + ' weitere …</div>';
-    return '<div style="display:grid;grid-template-columns:100px 70px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
-      '<span style="color:var(--muted)">' + e.datum + '</span>' +
+    if (!e) return '<div style="padding:6px 0;color:var(--muted);font-size:11px;text-align:center;">… ' + (allEntries.length - 15) + ' weitere …</div>';
+    const badge = e._action === 'merge'
+      ? '<span style="font-size:9px;background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 5px;margin-left:4px;">Merge</span>'
+      : '<span style="font-size:9px;background:#dcfce7;color:#14532d;border-radius:4px;padding:1px 5px;margin-left:4px;">Neu</span>';
+    return '<div style="display:grid;grid-template-columns:110px 80px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center;">' +
+      '<span style="color:var(--muted)">' + e.datum + badge + '</span>' +
       '<span>' + e.kalorien + ' kcal</span>' +
       '<span style="color:var(--muted)">P ' + e.protein + 'g</span>' +
       '<span style="color:var(--muted)">KH ' + e.carbs + 'g</span>' +
@@ -1183,20 +1201,30 @@ function showFDDBPreview(entries, skipped) {
       '</div>';
   }).join('');
 
-  summ.textContent = entries.length + ' neue Tage' +
-    (skipped.length ? ' · ' + skipped.length + ' bereits vorhanden übersprungen' : '');
+  const parts = [];
+  if (toAdd.length) parts.push(toAdd.length + ' neue Tage');
+  if (toMerge.length) parts.push(toMerge.length + ' Tage ergänzt (Merge)');
+  if (skipped.length) parts.push(skipped.length + ' bereits vollständig übersprungen');
+  summ.textContent = parts.join(' · ');
 
   modal.style.display = 'block';
   document.body.style.overflow = 'hidden';
 
   document.getElementById('fddb-confirm-btn').onclick = async () => {
-    data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-    saveData(entries, null);
+    // Apply merges: update existing entries in data
+    toMerge.forEach(merged => {
+      const idx = data.findIndex(d => d.id === merged.id);
+      if (idx !== -1) data[idx] = merged;
+    });
+    // Add new entries
+    data = [...data, ...toAdd].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+    saveData([...toAdd, ...toMerge], null);
     modal.style.display = 'none';
     document.body.style.overflow = '';
     renderDashboard();
     renderHistory();
-    showToast('✓ ' + entries.length + ' Tage aus FDDB importiert');
+    const total = toAdd.length + toMerge.length;
+    showToast('✓ ' + total + ' Tage importiert (' + toMerge.length + ' Merge)');
   };
 }
 
@@ -1654,7 +1682,7 @@ const AZ_VARS = [
   { id: 'push_tot',  label: 'Push-up Total (Reps)',    group: 'Kraft',     type: 'push',     field: 'total_reps',agg:'sum' },
 ];
 
-const VAR_COLORS = ['#4f46e5','#e8ff47','#e05d44'];
+const VAR_COLORS = ['#4f46e5','#16a34a','#e05d44'];
 
 function setAZ(key, val) {
   azState[key] = val;
@@ -1669,7 +1697,7 @@ function populateVarSelects() {
   const groups = {};
   AZ_VARS.forEach(v => { if (!groups[v.group]) groups[v.group] = []; groups[v.group].push(v); });
 
-  ['az-var1','az-var2','az-var3'].forEach((id, i) => {
+  ['az-var1','az-var2'].forEach((id, i) => {
     const sel = document.getElementById(id);
     const cur = sel.value;
     sel.innerHTML = '<option value="">&#8212; keine &#8212;</option>';
@@ -1736,7 +1764,7 @@ function getTdeeForDate(datum) {
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   // Get sport activities for this date
   const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type)); // sport kcal still all types
-  const actStepEntries = data.filter(d => d.datum === datum && ['lauf','intervall'].includes(d.type));
+  const actStepEntries = data.filter(d => d.datum === datum && ['lauf','intervall','reko'].includes(d.type));
   const sportKcal = acts.reduce((s, a) => s + (a.kalorien || 0), 0);
   // Subtract activity steps from total to avoid double-counting
   const totalSchritte = tl?.schritte || 0;
@@ -1775,7 +1803,7 @@ function buildDataset(varId) {
   // Special: ZNS computed per tageslog day
   if (def.type === '__act_steps__') {
     // Sum act_schritte from all sport activities per period
-    const acts = data.filter(d => (!cutoff || new Date(d.datum) >= cutoff) && ['lauf','intervall'].includes(d.type) && d.act_schritte);
+    const acts = data.filter(d => (!cutoff || new Date(d.datum) >= cutoff) && ['lauf','intervall','reko'].includes(d.type) && d.act_schritte);
     const grouped = {};
     acts.forEach(d => {
       const key = periodKey(d.datum);
@@ -1792,7 +1820,7 @@ function buildDataset(varId) {
     const tagesl = data.filter(d => d.type === 'tageslog' && d.schritte && (!cutoff || new Date(d.datum) >= cutoff));
     const grouped = {};
     tagesl.forEach(d => {
-      const acts = data.filter(a => a.datum === d.datum && ['lauf','intervall'].includes(a.type));
+      const acts = data.filter(a => a.datum === d.datum && ['lauf','intervall','reko'].includes(a.type));
       const actSteps = acts.reduce((s, a) => s + (a.act_schritte || 0), 0);
       const extra = Math.max(0, d.schritte - actSteps);
       const key = periodKey(d.datum);
@@ -1916,7 +1944,7 @@ function buildTrendDataset(sourceData, color, yAxisID, length) {
 }
 
 function renderFlexChart() {
-  const ids = ['az-var1','az-var2','az-var3'].map(id => document.getElementById(id)?.value).filter(Boolean);
+  const ids = ['az-var1','az-var2'].map(id => document.getElementById(id)?.value).filter(Boolean);
 
   const canvas = document.getElementById('chart-flex');
   const empty = document.getElementById('az-empty');

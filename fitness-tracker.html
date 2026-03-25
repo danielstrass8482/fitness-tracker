@@ -1668,9 +1668,10 @@ const AZ_VARS = [
   { id: 'lauf_km',   label: 'Laufvolumen (km)',        group: 'Laufen',    type: 'lauf',     field: 'distanz',  agg: 'sum' },
   { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Laufen',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
   { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Laufen',    type: 'lauf',     field: 'hf',       agg: 'avg' },
-  { id: 'lauf_kcal', label: 'Lauf-Kalorien (kcal)',    group: 'Laufen',    type: 'lauf',     field: 'kalorien', agg: 'sum' },
+  { id: 'lauf_kcal', label: 'Lauf-Kalorien berechnet (kcal)', group: 'Laufen', type: '__lauf_kcal__', field: 'kcal', agg: 'sum' },
   { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Laufen',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
   { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Laufen',    type: 'gehen',    field: 'hf',       agg: 'avg' },
+  { id: 'gehen_kcal',label: 'Gehen-Kalorien berechnet (kcal)', group: 'Laufen', type: '__gehen_kcal__', field: 'kcal', agg: 'sum' },
   // ZNS computed
   { id: 'zns_score',    label: 'ZNS-Score (0-100)',          group: 'ZNS',    type: '__zns__',   field: 'zns',      agg: 'avg', fmt: 'pct' },
   { id: 'kcal_bedarf',  label: 'Kalorienbedarf Fix (kcal)',      group: 'Körper', type: '__kcal_fix__', field: 'kcal', agg: 'avg' },
@@ -1801,6 +1802,38 @@ function buildDataset(varId) {
   const cutoff = getAZCutoff();
 
   // Special: ZNS computed per tageslog day
+  if (def.type === '__lauf_kcal__' || def.type === '__gehen_kcal__') {
+    const factor = def.type === '__lauf_kcal__' ? 1.0 : 0.4;
+    const actTypes = def.type === '__lauf_kcal__'
+      ? ['lauf','intervall','reko']
+      : ['gehen'];
+
+    // Get all weights sorted by date for lookup
+    const weightEntries = data.filter(d => d.type === 'tageslog' && d.gewicht)
+      .sort((a,b) => a.datum.localeCompare(b.datum));
+
+    const getWeight = (datum) => {
+      // Last known weight on or before this date
+      const found = [...weightEntries].reverse().find(d => d.datum <= datum);
+      return found ? found.gewicht : 75; // fallback 75kg
+    };
+
+    const acts = data.filter(d => actTypes.includes(d.type) && d.distanz
+      && (!cutoff || new Date(d.datum) >= cutoff));
+
+    const grouped = {};
+    acts.forEach(d => {
+      const w = getWeight(d.datum);
+      const kcal = d.distanz * w * factor;
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(kcal);
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => grouped[k].reduce((a,b) => a+b, 0));
+    return { periods, values, def };
+  }
+
   if (def.type === '__act_steps__') {
     // Sum act_schritte from all sport activities per period
     const acts = data.filter(d => (!cutoff || new Date(d.datum) >= cutoff) && ['lauf','intervall','reko'].includes(d.type) && d.act_schritte);

@@ -644,7 +644,30 @@ window.VARIANTE_MAP = VARIANTE_MAP;
 
 // Called by Firebase module when cloud data arrives
 window._setData = function(cloudData) {
-  data = cloudData;
+  // Deduplicate: cloud is source of truth, but merge with any local-only entries
+  const cloudIds = new Set(cloudData.map(d => String(d.id)));
+  const localOnly = (JSON.parse(localStorage.getItem(LS_DATA) || '[]'))
+    .filter(d => !cloudIds.has(String(d.id)));
+  data = [...cloudData, ...localOnly]
+    .filter(d => !d.datum || d.datum >= '2024-03-20')
+    .sort((a,b) => new Date(b.datum) - new Date(a.datum));
+  // Deduplicate tageslog by date — merge all fields, manual entry wins on conflicts
+  const TAGESLOG_MERGE_FIELDS = ['gewicht','kalorien','protein','carbs','schritte','rhf','schlaf','energie','volumen'];
+  const tageslogByDate = {};
+  data.filter(d => d.type === 'tageslog').forEach(d => {
+    const existing = tageslogByDate[d.datum];
+    if (!existing) { tageslogByDate[d.datum] = {...d}; return; }
+    // Merge: fill missing fields from this entry, keep existing values if already set
+    TAGESLOG_MERGE_FIELDS.forEach(f => {
+      if (tageslogByDate[d.datum][f] == null && d[f] != null) {
+        tageslogByDate[d.datum][f] = d[f];
+      }
+    });
+  });
+  // Replace all tageslog entries with merged versions
+  data = data.filter(d => d.type !== 'tageslog');
+  data = [...data, ...Object.values(tageslogByDate)]
+    .sort((a,b) => new Date(b.datum) - new Date(a.datum));
   localStorage.setItem(LS_DATA, JSON.stringify(data));
   updateEntryCount();
   renderDashboard();

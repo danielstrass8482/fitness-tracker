@@ -547,19 +547,22 @@
       <span>Datum</span><span>Kalorien</span><span>Protein</span><span>Carbs</span><span>Fett</span>
     </div>
     <div id="fddb-preview-list" style="max-height:360px;overflow-y:auto;"></div>
-    <div style="margin-top:20px;display:flex;gap:10px;">
-      <div id="fddb-import-mode" style="margin-bottom:12px;font-size:13px;">
-        <label style="margin-right:16px;cursor:pointer;">
-          <input type="radio" name="fddb-mode" value="new" checked style="margin-right:4px;">
+    <div style="margin-top:20px;">
+      <div id="fddb-import-mode" style="margin-bottom:14px;font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Importmodus</div>
+        <label style="display:block;margin-bottom:8px;cursor:pointer;">
+          <input type="radio" name="fddb-mode" value="new" checked style="margin-right:6px;">
           Nur neue Einträge / fehlende Felder ergänzen
         </label>
-        <label style="cursor:pointer;">
-          <input type="radio" name="fddb-mode" value="update" style="margin-right:4px;">
-          Alle Daten aktualisieren (überschreibt vorhandene)
+        <label style="display:block;cursor:pointer;">
+          <input type="radio" name="fddb-mode" value="update" style="margin-right:6px;">
+          Alle aktualisieren (überschreibt Ernährungsdaten, behält Schlaf/Energie/RHF)
         </label>
       </div>
-      <button class="btn" id="fddb-confirm-btn">Importieren →</button>
-      <button class="btn-ghost" onclick="document.getElementById('fddb-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn" id="fddb-confirm-btn">Importieren →</button>
+        <button class="btn-ghost" onclick="document.getElementById('fddb-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+      </div>
     </div>
     <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6;">
       Importiert werden Tage als Tageslog-Einträge. Gewicht, Schritte und ZNS-Werte kannst du manuell ergänzen. Bereits vorhandene Tage werden übersprungen.
@@ -579,19 +582,22 @@
       <span>Datum</span><span>Typ</span><span>Details</span><span>Kcal</span>
     </div>
     <div id="garmin-preview-list" style="max-height:360px;overflow-y:auto;"></div>
-    <div style="margin-top:20px;display:flex;gap:10px;">
-      <div id="garmin-import-mode" style="margin-bottom:12px;font-size:13px;">
-        <label style="margin-right:16px;cursor:pointer;">
-          <input type="radio" name="garmin-mode" value="new" checked style="margin-right:4px;">
-          Nur neue Einträge
+    <div style="margin-top:20px;">
+      <div id="garmin-import-mode" style="margin-bottom:14px;font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Importmodus</div>
+        <label style="display:block;margin-bottom:8px;cursor:pointer;">
+          <input type="radio" name="garmin-mode" value="new" checked style="margin-right:6px;">
+          Nur neue Einträge (vorhandene bleiben unverändert)
         </label>
-        <label style="cursor:pointer;">
-          <input type="radio" name="garmin-mode" value="update" style="margin-right:4px;">
-          Alle Daten aktualisieren (überschreibt vorhandene)
+        <label style="display:block;cursor:pointer;">
+          <input type="radio" name="garmin-mode" value="update" style="margin-right:6px;">
+          Alle aktualisieren (überschreibt vorhandene Aktivitäten)
         </label>
       </div>
-      <button class="btn" id="garmin-confirm-btn">Importieren →</button>
-      <button class="btn-ghost" onclick="document.getElementById('garmin-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn" id="garmin-confirm-btn">Importieren →</button>
+        <button class="btn-ghost" onclick="document.getElementById('garmin-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
+      </div>
     </div>
     <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6;">
       Schritte und Kalorien kannst du danach über den Tageslog ergänzen. Typ-Erkennung: Intervall = Titel enthält "Intervall", Reko = Training Effect ≤ 2.5.

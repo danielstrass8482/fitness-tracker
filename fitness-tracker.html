@@ -416,7 +416,7 @@
         <option value="alle">Alle Typen</option><option value="pull">Klimmzüge</option>
         <option value="push">Push-ups</option><option value="lauf">Laufen</option>
         <option value="intervall">Intervall</option><option value="reko">Reko</option>
-        <option value="gehen">Gehen</option><option value="tageslog">Tageslog</option>
+        <option value="gehen">Gehen</option><option value="rad">Radfahren</option><option value="tageslog">Tageslog</option>
       </select>
       <select id="filter-weeks" onchange="renderHistory()" style="width:150px;">
         <option value="4">Letzte 4 Wochen</option><option value="8">Letzte 8 Wochen</option>
@@ -454,6 +454,7 @@
           <option value="intervall">Intervall</option>
           <option value="reko">Reko-Lauf</option>
           <option value="gehen">Gehen</option>
+          <option value="rad">Radfahren</option>
           <option value="tageslog">Tageslog</option>
         </select>
       </div>
@@ -1012,6 +1013,10 @@ async function importGarminCSV(e) {
       'Laufen': 'lauf',
       'Laufbandtraining': 'lauf',
       'Gehen': 'gehen',
+      'Radfahren': 'rad',
+      'Indoor Cycling': 'rad',
+      'Radfahren, Indoor': 'rad',
+      'Radfahren, draußen': 'rad',
     };
 
     const parseVal = (row, i) => {
@@ -1039,7 +1044,7 @@ async function importGarminCSV(e) {
       if (!rawType) continue;
 
       const mappedType = TYPE_MAP[rawType];
-      if (!mappedType) continue; // skip E-Bike etc.
+      if (!mappedType) continue; // skip unknown types
 
       const rawDate = parseVal(row, iDate);
       if (!rawDate) continue;
@@ -1110,9 +1115,9 @@ async function importGarminCSV(e) {
       row.push(cur2);
       if (row.length < 3) continue;
       const rawType2 = (row[iType]||'').replace(/"/g,'').toLowerCase();
-      const typeMap2 = {'laufen':'lauf','lauf':'lauf','intervall':'intervall','interval':'intervall','reko':'reko','gehen':'gehen','walking':'gehen','radfahren':'ergometer'};
+      const typeMap2 = {'laufen':'lauf','lauf':'lauf','intervall':'intervall','interval':'intervall','reko':'reko','gehen':'gehen','walking':'gehen','radfahren':'rad','indoor cycling':'rad'};
       const mappedType2 = typeMap2[rawType2];
-      if (!mappedType2 || mappedType2 === 'ergometer') continue;
+      if (!mappedType2) continue;
       const rawDate2 = (row[iDate]||'').replace(/"/g,'');
       const dateParts2 = rawDate2.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (!dateParts2) continue;
@@ -1472,7 +1477,7 @@ function renderHistory() {
   const el = document.getElementById('history-list');
   if (!filtered.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:12px;">Keine Einträge</div>'; return; }
   el.innerHTML = filtered.map(d => {
-    const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : d.type === 'gehen' ? 'tag-gehen' : 'tag-' + d.type;
+    const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : ['gehen','rad'].includes(d.type) ? 'tag-gehen' : 'tag-' + d.type;
     const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', gehen:'Gehen', tageslog:'Tageslog' }[d.type] || d.type;
     let detail = d.sets ? d.variante + ' · ' + d.sets + ' (' + d.total_reps + ' Reps)' + (d.pr ? ' 🏆' : '') : '';
     if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
@@ -1598,7 +1603,7 @@ function setEditRating(type, val) {
 function toggleEditFields() {
   const t = document.getElementById('edit-type').value;
   document.getElementById('edit-fields-kraft').style.display = (t === 'pull' || t === 'push') ? 'block' : 'none';
-  document.getElementById('edit-fields-lauf').style.display = ['lauf','intervall','reko','gehen'].includes(t) ? 'block' : 'none';
+  document.getElementById('edit-fields-lauf').style.display = ['lauf','intervall','reko','gehen','rad'].includes(t) ? 'block' : 'none';
   document.getElementById('edit-fields-intervall').style.display = t === 'intervall' ? 'block' : 'none';
   // Tageslog fields (gewicht, kalorien etc.) are always visible — no need to hide
 }
@@ -1818,6 +1823,9 @@ const AZ_VARS = [
   { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Laufen',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
   { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Laufen',    type: 'gehen',    field: 'hf',       agg: 'avg' },
   { id: 'gehen_kcal',label: 'Gehen-Kalorien berechnet (kcal)', group: 'Laufen', type: '__gehen_kcal__', field: 'kcal', agg: 'sum' },
+  { id: 'rad_km',    label: 'Rad Volumen (km)',               group: 'Laufen', type: 'rad',           field: 'distanz', agg: 'sum' },
+  { id: 'rad_hf',    label: 'Rad HF Ø (bpm)',                 group: 'Laufen', type: 'rad',           field: 'hf',      agg: 'avg' },
+  { id: 'rad_kcal',  label: 'Rad-Kalorien berechnet (kcal)',  group: 'Laufen', type: '__rad_kcal__',   field: 'kcal',    agg: 'sum' },
   // ZNS computed
   { id: 'zns_score',    label: 'ZNS-Score (0-100)',          group: 'ZNS',    type: '__zns__',   field: 'zns',      agg: 'avg', fmt: 'pct' },
   { id: 'kcal_bedarf',  label: 'Kalorienbedarf Fix (kcal)',      group: 'Körper', type: '__kcal_fix__', field: 'kcal', agg: 'avg' },
@@ -1918,12 +1926,14 @@ function getTdeeForDate(datum) {
     .sort((a,b) => b.datum.localeCompare(a.datum));
   const gewicht = weightEntries[0]?.gewicht || 75;
 
-  // Calculate sport kcal using OWN formula: only lauf/intervall/reko = dist*kg*1.0
-  // Gehen is NOT included here — its steps are already captured in Gesamtschritte (Zusatzschritte)
-  const laufActs = acts.filter(a => ['lauf','intervall','reko'].includes(a.type));
-  const sportKcal = laufActs.reduce((s, a) => {
+  // Calculate sport kcal using OWN formula:
+  // lauf/intervall/reko = dist*kg*1.0, rad = dist*kg*0.3
+  // Gehen is NOT included — steps already in Gesamtschritte
+  const sportActs = acts.filter(a => ['lauf','intervall','reko','rad'].includes(a.type));
+  const sportKcal = sportActs.reduce((s, a) => {
     if (!a.distanz) return s;
-    return s + Math.round(a.distanz * gewicht * 1.0);
+    const factor = a.type === 'rad' ? 0.3 : 1.0;
+    return s + Math.round(a.distanz * gewicht * factor);
   }, 0);
 
   // Subtract only lauf/intervall/reko steps from total — gehen steps stay in Zusatzschritte
@@ -1961,6 +1971,25 @@ function buildDataset(varId) {
   const cutoff = getAZCutoff();
 
   // Special: ZNS computed per tageslog day
+  if (def.type === '__rad_kcal__') {
+    const radActs = data.filter(d => d.type === 'rad' && d.distanz && (!cutoff || new Date(d.datum) >= cutoff));
+    const weightEntries2 = data.filter(d => d.type === 'tageslog' && d.gewicht).sort((a,b) => a.datum.localeCompare(b.datum));
+    const getWeight2 = (datum) => {
+      const found = [...weightEntries2].reverse().find(d => d.datum <= datum);
+      return found ? found.gewicht : 75;
+    };
+    const grouped = {};
+    radActs.forEach(d => {
+      const kcal = Math.round(d.distanz * getWeight2(d.datum) * 0.3);
+      const key = periodKey(d.datum);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(kcal);
+    });
+    const periods = Object.keys(grouped).sort();
+    const values = periods.map(k => grouped[k].reduce((a,b) => a+b, 0));
+    return { periods, values, def };
+  }
+
   if (def.type === '__lauf_kcal__' || def.type === '__gehen_kcal__') {
     const factor = def.type === '__lauf_kcal__' ? 1.0 : 0.4;
     const actTypes = def.type === '__lauf_kcal__'

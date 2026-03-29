@@ -1910,10 +1910,23 @@ function getTdeeForDate(datum) {
   // Get tageslog for this date
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   // Get sport activities for this date
-  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type)); // sport kcal still all types
+  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type));
   const actStepEntries = data.filter(d => d.datum === datum && ['lauf','intervall','reko'].includes(d.type));
-  const sportKcal = acts.reduce((s, a) => s + (a.kalorien || 0), 0);
-  // Subtract activity steps from total to avoid double-counting
+
+  // Get weight: last known tageslog weight on or before this date
+  const weightEntries = data.filter(d => d.type === 'tageslog' && d.gewicht && d.datum <= datum)
+    .sort((a,b) => b.datum.localeCompare(a.datum));
+  const gewicht = weightEntries[0]?.gewicht || 75;
+
+  // Calculate sport kcal using OWN formula: only lauf/intervall/reko = dist*kg*1.0
+  // Gehen is NOT included here — its steps are already captured in Gesamtschritte (Zusatzschritte)
+  const laufActs = acts.filter(a => ['lauf','intervall','reko'].includes(a.type));
+  const sportKcal = laufActs.reduce((s, a) => {
+    if (!a.distanz) return s;
+    return s + Math.round(a.distanz * gewicht * 1.0);
+  }, 0);
+
+  // Subtract only lauf/intervall/reko steps from total — gehen steps stay in Zusatzschritte
   const totalSchritte = tl?.schritte || 0;
   const actSchritte   = actStepEntries.reduce((s, a) => s + (a.act_schritte || 0), 0);
   const alldaySchritte = Math.max(0, totalSchritte - actSchritte);

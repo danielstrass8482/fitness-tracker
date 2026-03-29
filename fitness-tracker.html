@@ -406,6 +406,10 @@
 
 <!-- HISTORY -->
 <div id="panel-history" class="panel">
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <span style="font-size:12px;color:var(--muted);">🔧 Datenpflege: Berechnungsgrundlagen reparieren ohne Reimport</span>
+    <button class="btn-ghost" onclick="fixActSchritte()" style="font-size:12px;padding:6px 14px;">Aktivitätsschritte bereinigen</button>
+  </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <select id="filter-type" onchange="renderHistory()" style="width:150px;">
@@ -1436,6 +1440,28 @@ function renderZNSTable(recent) {
 }
 
 // --- History ---
+function fixActSchritte() {
+  // Remove act_schritte from gehen entries (they should count as extra steps, not activity steps)
+  // Also ensure lauf/intervall/reko keep their act_schritte
+  let fixed = 0;
+  data.forEach(d => {
+    if (d.type === 'gehen' && d.act_schritte != null) {
+      d.act_schritte = null;
+      fixed++;
+    }
+  });
+  if (fixed === 0) {
+    showToast('Keine Korrekturen nötig — Daten bereits sauber');
+    return;
+  }
+  // Save all affected entries
+  const toSave = data.filter(d => d.type === 'gehen');
+  saveData(toSave, null);
+  renderDashboard();
+  renderHistory();
+  showToast('✓ ' + fixed + ' Gehen-Einträge bereinigt — Kalorienbedarf neu berechnet');
+}
+
 function renderHistory() {
   const tf = document.getElementById('filter-type').value;
   const wf = document.getElementById('filter-weeks').value;

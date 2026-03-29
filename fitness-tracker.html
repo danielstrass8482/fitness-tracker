@@ -543,6 +543,16 @@
     </div>
     <div id="fddb-preview-list" style="max-height:360px;overflow-y:auto;"></div>
     <div style="margin-top:20px;display:flex;gap:10px;">
+      <div id="fddb-import-mode" style="margin-bottom:12px;font-size:13px;">
+        <label style="margin-right:16px;cursor:pointer;">
+          <input type="radio" name="fddb-mode" value="new" checked style="margin-right:4px;">
+          Nur neue Einträge / fehlende Felder ergänzen
+        </label>
+        <label style="cursor:pointer;">
+          <input type="radio" name="fddb-mode" value="update" style="margin-right:4px;">
+          Alle Daten aktualisieren (überschreibt vorhandene)
+        </label>
+      </div>
       <button class="btn" id="fddb-confirm-btn">Importieren →</button>
       <button class="btn-ghost" onclick="document.getElementById('fddb-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
     </div>
@@ -565,6 +575,16 @@
     </div>
     <div id="garmin-preview-list" style="max-height:360px;overflow-y:auto;"></div>
     <div style="margin-top:20px;display:flex;gap:10px;">
+      <div id="garmin-import-mode" style="margin-bottom:12px;font-size:13px;">
+        <label style="margin-right:16px;cursor:pointer;">
+          <input type="radio" name="garmin-mode" value="new" checked style="margin-right:4px;">
+          Nur neue Einträge
+        </label>
+        <label style="cursor:pointer;">
+          <input type="radio" name="garmin-mode" value="update" style="margin-right:4px;">
+          Alle Daten aktualisieren (überschreibt vorhandene)
+        </label>
+      </div>
       <button class="btn" id="garmin-confirm-btn">Importieren →</button>
       <button class="btn-ghost" onclick="document.getElementById('garmin-preview-modal').style.display='none';document.body.style.overflow='';">Abbrechen</button>
     </div>
@@ -1070,7 +1090,42 @@ async function importGarminCSV(e) {
     }
 
     // Show preview modal before saving
-    showGarminPreview(imported, skipped);
+    // For update mode preview: also find entries that would be refreshed
+    const existingByKey = {};
+    data.forEach(d => { existingByKey[d.datum + '_' + (d.distanz||'') + '_' + d.type] = d; });
+    const toUpdate = [];
+    // Re-parse to find duplicates that would be updated
+    for (let i = 1; i < lines.length; i++) {
+      const row = [];
+      let cur2 = '', inQ2 = false;
+      for (const ch of lines[i]) {
+        if (ch === '"') { inQ2 = !inQ2; }
+        else if (ch === ',' && !inQ2) { row.push(cur2); cur2 = ''; }
+        else cur2 += ch;
+      }
+      row.push(cur2);
+      if (row.length < 3) continue;
+      const rawType2 = (row[iType]||'').replace(/"/g,'').toLowerCase();
+      const typeMap2 = {'laufen':'lauf','lauf':'lauf','intervall':'intervall','interval':'intervall','reko':'reko','gehen':'gehen','walking':'gehen','radfahren':'ergometer'};
+      const mappedType2 = typeMap2[rawType2];
+      if (!mappedType2 || mappedType2 === 'ergometer') continue;
+      const rawDate2 = (row[iDate]||'').replace(/"/g,'');
+      const dateParts2 = rawDate2.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (!dateParts2) continue;
+      const datum2 = dateParts2[1] + '-' + dateParts2[2] + '-' + dateParts2[3];
+      if (datum2 < '2024-03-20') continue;
+      const distRaw2 = (row[iDist]||'').replace(/"/g,'').replace(',','.');
+      const distanz2 = parseFloat(distRaw2) || null;
+      let finalType2 = mappedType2;
+      const title2 = (row[iTitle]||'').replace(/"/g,'');
+      if (mappedType2 === 'lauf') {
+        if (title2.toLowerCase().includes('intervall')) finalType2 = 'intervall';
+        else if (row[iTE] && parseFloat((row[iTE]||'').replace(',','.')) <= 2.5) finalType2 = 'reko';
+      }
+      const key2 = datum2 + '_' + (distanz2||'') + '_' + finalType2;
+      if (existingByKey[key2]) toUpdate.push({...existingByKey[key2], _willUpdate: true});
+    }
+    showGarminPreview(imported, skipped, toUpdate);
 
   } catch(err) {
     console.error(err);
@@ -1078,7 +1133,7 @@ async function importGarminCSV(e) {
   }
 }
 
-function showGarminPreview(entries, skipped) {
+function showGarminPreview(entries, skipped, toUpdate) {
   const modal = document.getElementById('garmin-preview-modal');
   const list = document.getElementById('garmin-preview-list');
   const summary = document.getElementById('garmin-preview-summary');
@@ -1094,20 +1149,37 @@ function showGarminPreview(entries, skipped) {
     '</div>'
   ).join('');
 
+  const updateCount = (toUpdate||[]).length;
   summary.textContent = entries.length + ' neue Aktivitäten' +
-    (skipped.length ? ' · ' + skipped.length + ' bereits vorhanden übersprungen' : '');
+    (skipped.length ? ' · ' + skipped.length + ' übersprungen' : '') +
+    (updateCount ? ' · ' + updateCount + ' würden bei „Aktualisieren" überschrieben' : '');
 
   modal.style.display = 'block';
   document.body.style.overflow = 'hidden';
 
   document.getElementById('garmin-confirm-btn').onclick = async () => {
-    data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-    saveData(entries, null);
+    const mode = document.querySelector('input[name="garmin-mode"]:checked')?.value || 'new';
+    let toSave = [];
+    if (mode === 'update') {
+      // Remove existing entries that match by dedupeKey, then add fresh ones
+      const incomingKeys = new Set(entries.map(e => e.datum + '_' + (e.distanz||'') + '_' + e.type));
+      data = data.filter(d => {
+        const k = d.datum + '_' + (d.distanz||'') + '_' + d.type;
+        return !incomingKeys.has(k);
+      });
+      data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+      toSave = entries;
+    } else {
+      data = [...data, ...entries].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+      toSave = entries;
+    }
+    saveData(toSave, null);
     modal.style.display = 'none';
     document.body.style.overflow = '';
     renderDashboard();
     renderHistory();
-    showToast('✓ ' + entries.length + ' Aktivitäten importiert');
+    const modeLabel = mode === 'update' ? ' (aktualisiert)' : '';
+    showToast('✓ ' + entries.length + ' Aktivitäten importiert' + modeLabel);
   };
 }
 
@@ -1234,20 +1306,45 @@ function showFDDBPreview(toAdd, toMerge, skipped) {
   document.body.style.overflow = 'hidden';
 
   document.getElementById('fddb-confirm-btn').onclick = async () => {
-    // Apply merges: update existing entries in data
-    toMerge.forEach(merged => {
-      const idx = data.findIndex(d => d.id === merged.id);
-      if (idx !== -1) data[idx] = merged;
-    });
-    // Add new entries
-    data = [...data, ...toAdd].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-    saveData([...toAdd, ...toMerge], null);
+    const mode = document.querySelector('input[name="fddb-mode"]:checked')?.value || 'new';
+    let toSave = [];
+    if (mode === 'update') {
+      // Update mode: overwrite nutrition fields but KEEP manual fields (schlaf, energie, rhf, gewicht, schritte)
+      const MANUAL_FIELDS = ['schlaf','energie','rhf','gewicht','schritte'];
+      const allNew = [...toAdd, ...toMerge];
+      allNew.forEach(entry => {
+        const existing = data.find(d => d.type === 'tageslog' && d.datum === entry.datum);
+        if (existing) {
+          // Preserve manual fields from existing entry
+          MANUAL_FIELDS.forEach(f => { if (existing[f] != null) entry[f] = existing[f]; });
+          // Update the existing entry in place
+          const idx = data.findIndex(d => d.id === existing.id);
+          if (idx !== -1) data[idx] = { ...existing, ...entry, id: existing.id };
+        } else {
+          data = [...data, entry];
+        }
+      });
+      data = data.sort((a,b) => new Date(b.datum) - new Date(a.datum));
+      toSave = allNew;
+      saveData(toSave, null);
+      const total = allNew.length;
+      showToast('✓ ' + total + ' Tage aktualisiert (manuelle Felder erhalten)');
+    } else {
+      // Default merge behaviour
+      toMerge.forEach(merged => {
+        const idx = data.findIndex(d => d.id === merged.id);
+        if (idx !== -1) data[idx] = merged;
+      });
+      data = [...data, ...toAdd].sort((a,b) => new Date(b.datum) - new Date(a.datum));
+      toSave = [...toAdd, ...toMerge];
+      saveData(toSave, null);
+      const total = toAdd.length + toMerge.length;
+      showToast('✓ ' + total + ' Tage importiert (' + toMerge.length + ' Merge)');
+    }
     modal.style.display = 'none';
     document.body.style.overflow = '';
     renderDashboard();
     renderHistory();
-    const total = toAdd.length + toMerge.length;
-    showToast('✓ ' + total + ' Tage importiert (' + toMerge.length + ' Merge)');
   };
 }
 

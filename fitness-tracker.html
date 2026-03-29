@@ -1452,15 +1452,6 @@ function renderZNSTable(recent) {
 
 // --- History ---
 function fixActSchritte() {
-  // Debug: show all unique types
-  const uniqueTypes = [...new Set(data.map(d => d.type))].sort();
-  const VALID = new Set(['lauf','intervall','reko','gehen','rad','pull','push','tageslog']);
-  const nonStandard = [...new Set(data.filter(d => !VALID.has(d.type)).map(d => d.type))];
-  if (nonStandard.length) {
-    alert('Gefundene nicht-standard Typen:\n' + nonStandard.join('\n'));
-  } else {
-    alert('Alle Typen bereits standard:\n' + uniqueTypes.join('\n'));
-  }
   // Normalize old type names and fix act_schritte
   // Normalize map — checked case-insensitively
   const TYPE_NORMALIZE_MAP = [
@@ -1965,7 +1956,7 @@ function getTdeeForDate(datum) {
   // Get tageslog for this date
   const tl = data.find(d => d.type === 'tageslog' && d.datum === datum);
   // Get sport activities for this date
-  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen'].includes(d.type));
+  const acts = data.filter(d => d.datum === datum && ['lauf','intervall','reko','gehen','rad'].includes(d.type));
   const actStepEntries = data.filter(d => d.datum === datum && ['lauf','intervall','reko'].includes(d.type));
 
   // Get weight: last known tageslog weight on or before this date

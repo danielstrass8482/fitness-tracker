@@ -1453,18 +1453,17 @@ function renderZNSTable(recent) {
 // --- History ---
 function fixActSchritte() {
   // Normalize old type names and fix act_schritte
-  const TYPE_NORMALIZE = {
-    'Indoor Cycling': 'rad',
-    'Radfahren, Indoor': 'rad',
-    'Radfahren, draußen': 'rad',
-    'Radfahren': 'rad',
-    'cycling': 'rad',
-    'indoor_cycling': 'rad',
-    'Laufen': 'lauf',
-    'Laufbandtraining': 'lauf',
-    'Gehen': 'gehen',
-    'Walking': 'gehen',
-  };
+  // Normalize map — checked case-insensitively
+  const TYPE_NORMALIZE_MAP = [
+    { match: ['indoor cycling', 'indoor_cycling', 'radfahren, indoor', 'radfahren, draußen', 'radfahren', 'cycling', 'ergometer'], target: 'rad' },
+    { match: ['laufen', 'laufbandtraining'], target: 'lauf' },
+    { match: ['gehen', 'walking'], target: 'gehen' },
+    { match: ['intervall', 'interval'], target: 'intervall' },
+    { match: ['reko', 'regeneration'], target: 'reko' },
+  ];
+
+  // Valid types that need no change
+  const VALID_TYPES = new Set(['lauf','intervall','reko','gehen','rad','pull','push','tageslog']);
 
   let fixed = 0;
   const toSave = [];
@@ -1472,10 +1471,16 @@ function fixActSchritte() {
   data.forEach(d => {
     let changed = false;
 
-    // Normalize type
-    if (TYPE_NORMALIZE[d.type]) {
-      d.type = TYPE_NORMALIZE[d.type];
-      changed = true;
+    // Normalize type if not already a valid type
+    if (!VALID_TYPES.has(d.type)) {
+      const typeLower = (d.type || '').toLowerCase().trim();
+      for (const rule of TYPE_NORMALIZE_MAP) {
+        if (rule.match.includes(typeLower)) {
+          d.type = rule.target;
+          changed = true;
+          break;
+        }
+      }
     }
 
     // Remove act_schritte from gehen entries

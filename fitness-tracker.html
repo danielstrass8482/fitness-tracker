@@ -408,7 +408,7 @@
 <div id="panel-history" class="panel">
   <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
     <span style="font-size:12px;color:var(--muted);">🔧 Datenpflege: Berechnungsgrundlagen reparieren ohne Reimport</span>
-    <button class="btn-ghost" onclick="fixActSchritte()" style="font-size:12px;padding:6px 14px;">Aktivitätsschritte bereinigen</button>
+    <button class="btn-ghost" onclick="fixActSchritte()" style="font-size:12px;padding:6px 14px;">Neu berechnen</button>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1452,25 +1452,52 @@ function renderZNSTable(recent) {
 
 // --- History ---
 function fixActSchritte() {
-  // Remove act_schritte from gehen entries (they should count as extra steps, not activity steps)
-  // Also ensure lauf/intervall/reko keep their act_schritte
+  // Normalize old type names and fix act_schritte
+  const TYPE_NORMALIZE = {
+    'Indoor Cycling': 'rad',
+    'Radfahren, Indoor': 'rad',
+    'Radfahren, draußen': 'rad',
+    'Radfahren': 'rad',
+    'cycling': 'rad',
+    'indoor_cycling': 'rad',
+    'Laufen': 'lauf',
+    'Laufbandtraining': 'lauf',
+    'Gehen': 'gehen',
+    'Walking': 'gehen',
+  };
+
   let fixed = 0;
+  const toSave = [];
+
   data.forEach(d => {
+    let changed = false;
+
+    // Normalize type
+    if (TYPE_NORMALIZE[d.type]) {
+      d.type = TYPE_NORMALIZE[d.type];
+      changed = true;
+    }
+
+    // Remove act_schritte from gehen entries
     if (d.type === 'gehen' && d.act_schritte != null) {
       d.act_schritte = null;
+      changed = true;
+    }
+
+    if (changed) {
       fixed++;
+      toSave.push(d);
     }
   });
+
   if (fixed === 0) {
     showToast('Keine Korrekturen nötig — Daten bereits sauber');
     return;
   }
-  // Save all affected entries
-  const toSave = data.filter(d => d.type === 'gehen');
   saveData(toSave, null);
   renderDashboard();
   renderHistory();
-  showToast('✓ ' + fixed + ' Gehen-Einträge bereinigt — Kalorienbedarf neu berechnet');
+  showToast('✓ ' + fixed + ' Einträge bereinigt');
 }
 
 function renderHistory() {

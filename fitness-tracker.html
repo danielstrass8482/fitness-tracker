@@ -1516,11 +1516,21 @@ function renderHistory() {
   if (!filtered.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:12px;">Keine Einträge</div>'; return; }
   el.innerHTML = filtered.map(d => {
     const tagCls = ['intervall','reko'].includes(d.type) ? 'tag-lauf' : d.type === 'tageslog' ? 'tag-push' : ['gehen','rad'].includes(d.type) ? 'tag-gehen' : 'tag-' + d.type;
-    const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', gehen:'Gehen', tageslog:'Tageslog' }[d.type] || d.type;
+    const typeLbl = { pull:'Klimmzüge', push:'Push-ups', lauf:'Laufen', intervall:'Intervall', reko:'Reko', gehen:'Gehen', rad:'Radfahren', tageslog:'Tageslog' }[d.type] || d.type;
     let detail = d.sets ? d.variante + ' · ' + d.sets + ' (' + d.total_reps + ' Reps)' + (d.pr ? ' 🏆' : '') : '';
     if (d.distanz) detail = d.distanz + ' km @ ' + (d.pace||'—') + '/km' + (d.hf ? ' · HF ' + d.hf + ' bpm' : '');
     if (d.intervall_detail) detail += ' · ' + d.intervall_detail;
-    const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, d.kalorien?'🔥 '+d.kalorien+' kcal':null, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString()+' Schritte':null].filter(Boolean);
+    // Calculate kcal for sport activities using own formula
+    let calcKcal = null;
+    if (['lauf','intervall','reko'].includes(d.type) && d.distanz) {
+      const w = data.filter(x => x.type==='tageslog' && x.gewicht && x.datum<=d.datum).sort((a,b)=>b.datum.localeCompare(a.datum))[0]?.gewicht || 75;
+      calcKcal = Math.round(d.distanz * w * 1.0);
+    } else if (d.type === 'rad' && d.distanz) {
+      const w = data.filter(x => x.type==='tageslog' && x.gewicht && x.datum<=d.datum).sort((a,b)=>b.datum.localeCompare(a.datum))[0]?.gewicht || 75;
+      calcKcal = Math.round(d.distanz * w * 0.3);
+    }
+    const kcalDisplay = calcKcal ? '🔥 ' + calcKcal + ' kcal (berechnet)' : (d.kalorien ? '🔥 ' + d.kalorien + ' kcal (Garmin)' : null);
+    const meta = [d.schlaf?'😴 '+d.schlaf+'/5':null, d.energie?'⚡ '+d.energie+'/5':null, kcalDisplay, d.protein?'🥩 '+d.protein+'g':null, d.gewicht?'⚖ '+d.gewicht+' kg':null, d.schritte?'👣 '+d.schritte.toLocaleString()+' Schritte':null].filter(Boolean);
     const isSelected = selectedIds.has(String(d.id));
     const rowCls = selectMode ? 'entry-row select-mode' : 'entry-row';
     const rowBg = selectMode && isSelected ? 'var(--surface2)' : '';
@@ -1854,16 +1864,16 @@ const AZ_VARS = [
   { id: 'schlaf',    label: 'Schlafqualität (1-5)',     group: 'ZNS',       type: 'tageslog', field: 'schlaf',   agg: 'avg' },
   { id: 'energie',   label: 'Energie vor Training (1-5)',group:'ZNS',       type: 'tageslog', field: 'energie',  agg: 'avg' },
   // Laufen
-  { id: 'lauf_km',   label: 'Laufvolumen (km)',        group: 'Laufen',    type: 'lauf',     field: 'distanz',  agg: 'sum' },
-  { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Laufen',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
-  { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Laufen',    type: 'lauf',     field: 'hf',       agg: 'avg' },
-  { id: 'lauf_kcal', label: 'Lauf-Kalorien berechnet (kcal)', group: 'Laufen', type: '__lauf_kcal__', field: 'kcal', agg: 'sum' },
-  { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Laufen',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
-  { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Laufen',    type: 'gehen',    field: 'hf',       agg: 'avg' },
-  { id: 'gehen_kcal',label: 'Gehen-Kalorien berechnet (kcal)', group: 'Laufen', type: '__gehen_kcal__', field: 'kcal', agg: 'sum' },
-  { id: 'rad_km',    label: 'Rad Volumen (km)',               group: 'Laufen', type: 'rad',           field: 'distanz', agg: 'sum' },
-  { id: 'rad_hf',    label: 'Rad HF Ø (bpm)',                 group: 'Laufen', type: 'rad',           field: 'hf',      agg: 'avg' },
-  { id: 'rad_kcal',  label: 'Rad-Kalorien berechnet (kcal)',  group: 'Laufen', type: '__rad_kcal__',   field: 'kcal',    agg: 'sum' },
+  { id: 'lauf_km',   label: 'Laufvolumen (km)',        group: 'Aktivitäten',    type: 'lauf',     field: 'distanz',  agg: 'sum' },
+  { id: 'lauf_pace', label: 'Lauf-Pace (min/km)',      group: 'Aktivitäten',    type: 'lauf',     field: 'pace',     agg: 'avg', fmt: 'pace' },
+  { id: 'lauf_hf',   label: 'Lauf-HF Ø (bpm)',        group: 'Aktivitäten',    type: 'lauf',     field: 'hf',       agg: 'avg' },
+  { id: 'lauf_kcal', label: 'Lauf-Kalorien berechnet (kcal)', group: 'Aktivitäten', type: '__lauf_kcal__', field: 'kcal', agg: 'sum' },
+  { id: 'gehen_km',  label: 'Gehen Volumen (km)',       group: 'Aktivitäten',    type: 'gehen',    field: 'distanz',  agg: 'sum' },
+  { id: 'gehen_hf',  label: 'Gehen HF Ø (bpm)',         group: 'Aktivitäten',    type: 'gehen',    field: 'hf',       agg: 'avg' },
+  { id: 'gehen_kcal',label: 'Gehen-Kalorien berechnet (kcal)', group: 'Aktivitäten', type: '__gehen_kcal__', field: 'kcal', agg: 'sum' },
+  { id: 'rad_km',    label: 'Rad Volumen (km)',               group: 'Aktivitäten', type: 'rad',           field: 'distanz', agg: 'sum' },
+  { id: 'rad_hf',    label: 'Rad HF Ø (bpm)',                 group: 'Aktivitäten', type: 'rad',           field: 'hf',      agg: 'avg' },
+  { id: 'rad_kcal',  label: 'Rad-Kalorien berechnet (kcal)',  group: 'Aktivitäten', type: '__rad_kcal__',   field: 'kcal',    agg: 'sum' },
   // ZNS computed
   { id: 'zns_score',    label: 'ZNS-Score (0-100)',          group: 'ZNS',    type: '__zns__',   field: 'zns',      agg: 'avg', fmt: 'pct' },
   { id: 'kcal_bedarf',  label: 'Kalorienbedarf Fix (kcal)',      group: 'Körper', type: '__kcal_fix__', field: 'kcal', agg: 'avg' },

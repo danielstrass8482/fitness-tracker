@@ -805,16 +805,21 @@ window.addRecipeIngredient = function(foodId) {
 function renderRecipeIngredients() {
   const container = document.getElementById('recipe-ingredients');
   container.innerHTML = recipeIngredients.map((ing, i) => {
-    // Resolve name from foodId if not present
-    const displayName = ing.name || (foodDB.find(f => String(f.id) === String(ing.foodId))?.name || 'Unbekannt');
+    // Resolve name and food from foodId
+    const food = foodDB.find(f => String(f.id) === String(ing.foodId));
+    const displayName = ing.name || food?.name || 'Unbekannt';
+    const kcal = food ? Math.round((food.kcal / 100) * ing.amount) : 0;
+    
     return `
     <div class="ingredient-row">
       <div class="ingredient-name">${displayName}</div>
-      <div class="ingredient-amount">
-        <input type="number" value="${ing.amount}" onchange="updateIngredientAmount(${i}, this.value)" placeholder="g">
-        <span style="margin-left:4px;color:var(--muted);font-size:11px;">g</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="ingredient-amount">
+          <input type="number" value="${ing.amount}" onchange="updateIngredientAmount(${i}, this.value)" placeholder="g">
+          <span style="margin-left:4px;color:var(--muted);font-size:11px;">g · ${kcal} kcal</span>
+        </div>
+        <button onclick="removeIngredient(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:16px;line-height:1;">×</button>
       </div>
-      <span class="ingredient-del" onclick="removeIngredient(${i})">×</span>
     </div>`;
   }).join('');
   updateRecipeMacroPreview();

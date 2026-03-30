@@ -804,14 +804,19 @@ window.addRecipeIngredient = function(foodId) {
 
 function renderRecipeIngredients() {
   const container = document.getElementById('recipe-ingredients');
-  container.innerHTML = recipeIngredients.map((ing, i) => `
+  container.innerHTML = recipeIngredients.map((ing, i) => {
+    // Resolve name from foodId if not present
+    const displayName = ing.name || (foodDB.find(f => String(f.id) === String(ing.foodId))?.name || 'Unbekannt');
+    return `
     <div class="ingredient-row">
-      <div class="ingredient-name">${ing.name}</div>
+      <div class="ingredient-name">${displayName}</div>
       <div class="ingredient-amount">
         <input type="number" value="${ing.amount}" onchange="updateIngredientAmount(${i}, this.value)" placeholder="g">
+        <span style="margin-left:4px;color:var(--muted);font-size:11px;">g</span>
       </div>
       <span class="ingredient-del" onclick="removeIngredient(${i})">×</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   updateRecipeMacroPreview();
 }
 

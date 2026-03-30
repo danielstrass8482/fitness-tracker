@@ -219,6 +219,10 @@
     </div>
   </div>
   <input type="file" id="fddb-recipe-input" accept=".csv" style="display:none;" onchange="handleFDDBRecipeUpload(event)">
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="recipe-search" placeholder="Rezept suchen..." oninput="renderRecipes()">
+  </div>
   <div id="recipes-list"></div>
 </div>
 
@@ -264,6 +268,10 @@
 
     <!-- RECIPE TAB -->
     <div id="add-panel-recipe" style="display:none;">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="recipe-pick-search" placeholder="Rezept suchen..." oninput="renderRecipePick()">
+      </div>
       <div id="recipe-pick-list"></div>
     </div>
 
@@ -957,8 +965,22 @@ window.saveRecipe = function() {
 
 function renderRecipes() {
   const container = document.getElementById('recipes-list');
-  if (!recipes.length) { container.innerHTML = `<div class="empty"><div class="empty-icon">🍳</div>Noch keine Rezepte</div>`; return; }
-  container.innerHTML = recipes.map(r => `
+  const searchInput = document.getElementById('recipe-search');
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  
+  // Filter recipes by search query
+  const filtered = query 
+    ? recipes.filter(r => r.name.toLowerCase().includes(query))
+    : recipes;
+  
+  if (!filtered.length) { 
+    container.innerHTML = query 
+      ? `<div class="empty"><div class="empty-icon">🔍</div>Keine Rezepte gefunden für "${query}"</div>`
+      : `<div class="empty"><div class="empty-icon">🍳</div>Noch keine Rezepte</div>`; 
+    return; 
+  }
+  
+  container.innerHTML = filtered.map(r => `
     <div class="recipe-card" onclick="openRecipeEat('${r.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="recipe-card-name">${r.name}</div>
@@ -1053,8 +1075,22 @@ window.confirmRecipeEat = function() {
 // ── RECIPE PICK (in add food modal) ──────────────────────────────────────────
 function renderRecipePick() {
   const container = document.getElementById('recipe-pick-list');
-  if (!recipes.length) { container.innerHTML = `<div class="empty"><div class="empty-icon">🍳</div>Noch keine Rezepte</div>`; return; }
-  container.innerHTML = recipes.map(r => `
+  const searchInput = document.getElementById('recipe-pick-search');
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  
+  // Filter recipes by search query
+  const filtered = query 
+    ? recipes.filter(r => r.name.toLowerCase().includes(query))
+    : recipes;
+  
+  if (!filtered.length) { 
+    container.innerHTML = query 
+      ? `<div class="empty"><div class="empty-icon">🔍</div>Keine Rezepte gefunden</div>`
+      : `<div class="empty"><div class="empty-icon">🍳</div>Noch keine Rezepte</div>`; 
+    return; 
+  }
+  
+  container.innerHTML = filtered.map(r => `
     <div class="recipe-card" onclick="pickRecipeFromModal('${r.id}')">
       <div class="recipe-card-name">${r.name}</div>
       <div class="recipe-card-macros">

@@ -26,9 +26,11 @@
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
 
   /* NAV */
-  .nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; }
+  .nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; align-items: center; }
   .nav-btn { flex-shrink: 0; padding: 14px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
   .nav-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .nav-spacer { flex: 1; }
+  .auth-btn { padding: 8px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
 
   /* PANELS */
   .panel { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
@@ -159,6 +161,8 @@
   <button class="nav-btn active" onclick="switchTab('log')">📋 Tagebuch</button>
   <button class="nav-btn" onclick="switchTab('rezepte')">🍳 Rezepte</button>
   <button class="nav-btn" onclick="switchTab('lebensmittel')">🥗 Lebensmittel</button>
+  <div class="nav-spacer"></div>
+  <button class="auth-btn" id="auth-btn" onclick="handleAuth()">Mit Google anmelden</button>
 </nav>
 
 <!-- TAGEBUCH -->
@@ -473,18 +477,41 @@ const PROTEIN_GOAL = 150;
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     userId = user.uid;
+    updateAuthUI(user);
     await loadAll();
     renderAll();
   } else {
-    try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-    } catch(e) {
-      // Load from localStorage as fallback
-      loadLocalStorage();
-      renderAll();
-    }
+    userId = null;
+    updateAuthUI(null);
+    // Load from localStorage as fallback
+    loadLocalStorage();
+    renderAll();
   }
 });
+
+function updateAuthUI(user) {
+  const authBtn = document.getElementById('auth-btn');
+  if (user) {
+    authBtn.textContent = user.displayName || user.email || 'Eingeloggt';
+    authBtn.onclick = () => {
+      if (confirm('Abmelden?')) {
+        auth.signOut();
+      }
+    };
+  } else {
+    authBtn.textContent = 'Mit Google anmelden';
+    authBtn.onclick = handleAuth;
+  }
+}
+
+window.handleAuth = async function() {
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch(e) {
+    console.error('Login failed:', e);
+    showToast('❌ Login fehlgeschlagen');
+  }
+};
 
 function userFoodCol() { return collection(db, 'users', userId, 'foodDB'); }
 function userRecipeCol() { return collection(db, 'users', userId, 'recipes'); }
@@ -1248,16 +1275,36 @@ window.confirmFDDBRecipeImport = async function() {
   // Save to Firebase and localStorage
   if (userId) {
     try {
-      // Save all recipes to Firebase
+      // Save all recipes to Firebase (with delay to avoid rate limiting)
+      let saved = 0;
       for (const recipe of recipes) {
-        await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+        try {
+          await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+          saved++;
+        } catch (e) {
+          console.error(`Failed to save recipe ${recipe.name}:`, e);
+        }
+        // Small delay to avoid rate limiting
+        if (recipes.length > 10) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
       }
+      console.log(`Saved ${saved}/${recipes.length} recipes to Firebase`);
+      
       // Save all foods to Firebase
+      let savedFoods = 0;
       for (const food of foodDB) {
-        await setDoc(doc(userFoodCol(), String(food.id)), food);
+        try {
+          await setDoc(doc(userFoodCol(), String(food.id)), food);
+          savedFoods++;
+        } catch (e) {
+          console.error(`Failed to save food ${food.name}:`, e);
+        }
       }
+      console.log(`Saved ${savedFoods}/${foodDB.length} foods to Firebase`);
     } catch (e) {
       console.error('Firebase save error:', e);
+      showToast('⚠️ Sync-Fehler - Rezepte nur lokal gespeichert');
     }
   }
   
@@ -1266,7 +1313,7 @@ window.confirmFDDBRecipeImport = async function() {
   
   closeModal('modal-fddb-recipe-import');
   renderRecipes();
-  showToast(`✓ ${imported} Rezepte importiert${createdFoods > 0 ? `, ${createdFoods} Lebensmittel angelegt` : ''}`);
+  showToast(`✓ ${imported} Rezepte importiert${createdFoods > 0 ? `, ${createdFoods} Lebensmittel angelegt` : ''}${userId ? ' - Firebase-Sync läuft' : ''}`);
   
   fddbRecipesData = [];
 };

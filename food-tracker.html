@@ -222,8 +222,12 @@
 <div id="panel-lebensmittel" class="panel">
   <div class="section-header">
     <div class="section-title">Lebensmittel-DB</div>
-    <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('food-csv-input').click()">📥 CSV Import</button>
+      <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
+    </div>
   </div>
+  <input type="file" id="food-csv-input" accept=".csv" style="display:none;" onchange="handleFoodCSVUpload(event)">
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
     <input type="text" id="db-search" placeholder="Suchen..." oninput="renderFoodDB()">
@@ -1256,6 +1260,94 @@ window.confirmFDDBRecipeImport = async function() {
   
   fddbRecipesData = [];
 };
+
+// ── LEBENSMITTEL CSV IMPORT ───────────────────────────────────────────────────
+window.handleFoodCSVUpload = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    parseFoodCSV(text);
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = ''; // Reset input
+};
+
+function parseFoodCSV(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) {
+    showToast('❌ Keine Daten in der CSV');
+    return;
+  }
+  
+  // Expected format: name;kcal;protein;carbs;fat
+  // OR: name;kcal;protein;carbs;fat;source
+  const dataLines = lines.slice(1); // Skip header
+  let imported = 0;
+  let updated = 0;
+  let skipped = 0;
+  
+  dataLines.forEach(line => {
+    const parts = line.split(';').map(p => p.trim().replace(/^"|"$/g, ''));
+    if (parts.length < 5) return;
+    
+    const name = parts[0];
+    const kcal = parseFloat(parts[1].replace(',', '.')) || 0;
+    const protein = parseFloat(parts[2].replace(',', '.')) || 0;
+    const carbs = parseFloat(parts[3].replace(',', '.')) || 0;
+    const fat = parseFloat(parts[4].replace(',', '.')) || 0;
+    
+    if (!name) return;
+    
+    // Check if food already exists
+    const existingIndex = foodDB.findIndex(f => f.name.toLowerCase() === name.toLowerCase());
+    
+    if (existingIndex >= 0) {
+      // Update existing
+      foodDB[existingIndex] = {
+        ...foodDB[existingIndex],
+        kcal,
+        protein,
+        carbs,
+        fat
+      };
+      updated++;
+    } else {
+      // Add new
+      const newFood = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        name,
+        kcal,
+        protein,
+        carbs,
+        fat
+      };
+      foodDB.push(newFood);
+      imported++;
+    }
+  });
+  
+  // Save to Firebase and localStorage
+  saveFoodDB();
+  renderFoodDB();
+  
+  showToast(`✓ ${imported} neu, ${updated} aktualisiert${skipped > 0 ? `, ${skipped} übersprungen` : ''}`);
+}
+
+async function saveFoodDB() {
+  if (userId) {
+    try {
+      for (const food of foodDB) {
+        await setDoc(doc(userFoodCol(), String(food.id)), food);
+      }
+    } catch (e) {
+      console.error('Firebase save error:', e);
+    }
+  }
+  saveLS('foodDB', foodDB);
+}
 
 // Init
 updateDateBar();

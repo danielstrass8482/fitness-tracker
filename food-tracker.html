@@ -228,6 +228,7 @@
     <div class="section-title">Lebensmittel-DB</div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-sm btn-secondary" onclick="document.getElementById('food-csv-input').click()">📥 CSV Import</button>
+      <button class="btn btn-sm btn-secondary" onclick="syncAllToFirebase()" id="sync-btn" style="display:none;">☁️ Sync</button>
       <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
     </div>
   </div>
@@ -491,12 +492,16 @@ onAuthStateChanged(auth, async (user) => {
 
 function updateAuthUI(user) {
   const authBtn = document.getElementById('auth-btn');
+  const syncBtn = document.getElementById('sync-btn');
+  
   if (user) {
     authBtn.textContent = user.displayName || user.email || 'Eingeloggt';
     authBtn.onclick = handleSignOut;
+    if (syncBtn) syncBtn.style.display = 'block';
   } else {
     authBtn.textContent = 'Mit Google anmelden';
     authBtn.onclick = handleAuth;
+    if (syncBtn) syncBtn.style.display = 'none';
   }
 }
 
@@ -524,6 +529,45 @@ async function handleSignOut() {
 
 // Make auth functions globally accessible
 window.handleAuth = handleAuth;
+
+// ── MANUAL FIREBASE SYNC ─────────────────────────────────────────────────────
+window.syncAllToFirebase = async function() {
+  if (!userId) {
+    showToast('❌ Bitte zuerst einloggen');
+    return;
+  }
+  
+  const syncBtn = document.getElementById('sync-btn');
+  syncBtn.textContent = '⏳ Sync...';
+  syncBtn.disabled = true;
+  
+  try {
+    // Sync recipes
+    for (const recipe of recipes) {
+      await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+    }
+    
+    // Sync foods
+    for (const food of foodDB) {
+      await setDoc(doc(userFoodCol(), String(food.id)), food);
+    }
+    
+    // Sync log entries
+    for (const date in logEntries) {
+      for (const entry of logEntries[date]) {
+        await setDoc(doc(userLogCol(), String(entry.id)), entry);
+      }
+    }
+    
+    showToast(`✓ ${recipes.length} Rezepte, ${foodDB.length} Lebensmittel synchronisiert`);
+  } catch (e) {
+    console.error('Sync error:', e);
+    showToast('❌ Sync fehlgeschlagen');
+  } finally {
+    syncBtn.textContent = '☁️ Sync';
+    syncBtn.disabled = false;
+  }
+};
 
 function userFoodCol() { return collection(db, 'users', userId, 'foodDB'); }
 function userRecipeCol() { return collection(db, 'users', userId, 'recipes'); }

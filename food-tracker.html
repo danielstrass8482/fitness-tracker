@@ -286,9 +286,15 @@
         <label>Bezeichnung</label>
         <input type="text" id="manual-name" placeholder="z.B. Hähnchenbrust gegrillt">
       </div>
-      <div class="form-group">
-        <label>Menge (g)</label>
-        <input type="number" id="manual-amount" value="100">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group" style="margin:0;">
+          <label>Menge (g)</label>
+          <input type="number" id="manual-amount" value="100">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Uhrzeit</label>
+          <input type="time" id="manual-time" style="font-size:13px;">
+        </div>
       </div>
       <div class="macro-inputs">
         <div class="form-group"><label>Kcal</label><input type="number" id="manual-kcal" placeholder="0"></div>
@@ -795,7 +801,7 @@ function renderLog() {
           ${mealEntries.length ? `<div class="meal-entries">${mealEntries.map(e => `
             <div class="meal-entry">
               <div style="flex:1;">
-                <div class="meal-entry-name">${e.name}</div>
+                <div class="meal-entry-name">${e.time ? `<span style="color:var(--muted);font-size:11px;margin-right:6px;">${e.time}</span>` : ''}${e.name}</div>
                 <div class="meal-entry-sub">${e.amount}g · P ${Math.round(e.protein)}g · K ${Math.round(e.carbs)}g · F ${Math.round(e.fat)}g</div>
               </div>
               <div class="meal-entry-kcal">${formatNum(e.kcal)} kcal</div>
@@ -835,6 +841,11 @@ window.openAddFood = function(meal) {
   switchAddTab('search');
   document.getElementById('food-search-input').value = '';
   document.getElementById('food-search-results').innerHTML = '';
+  
+  // Set current time as default
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  document.getElementById('manual-time').value = timeStr;
 };
 
 window.switchAddTab = function(tab) {
@@ -890,10 +901,14 @@ window.confirmAmount = function() {
   const amount = parseFloat(document.getElementById('amount-input').value) || 0;
   if (!amount || !amountTarget) return;
   const f = amount / 100;
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  
   const entry = {
     id: Date.now() + Math.random(),
     date: currentDate,
     meal: currentMeal,
+    time,
     name: amountTarget.name,
     amount,
     kcal: amountTarget.kcal * f,
@@ -918,10 +933,29 @@ window.addManualEntry = function() {
   const proteinPer = parseFloat(document.getElementById('manual-protein').value) || 0;
   const carbsPer = parseFloat(document.getElementById('manual-carbs').value) || 0;
   const fatPer = parseFloat(document.getElementById('manual-fat').value) || 0;
+  const timeInput = document.getElementById('manual-time').value;
   if (!name) { showToast('Bitte Namen eingeben'); return; }
   const f = amount / 100;
-  const entry = { id: Date.now() + Math.random(), date: currentDate, meal: currentMeal, name, amount,
-    kcal: kcalPer * f, protein: proteinPer * f, carbs: carbsPer * f, fat: fatPer * f };
+  
+  // Use input time or current time
+  let time = timeInput;
+  if (!time) {
+    const now = new Date();
+    time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+  
+  const entry = { 
+    id: Date.now() + Math.random(), 
+    date: currentDate, 
+    meal: currentMeal,
+    time,
+    name, 
+    amount,
+    kcal: kcalPer * f, 
+    protein: proteinPer * f, 
+    carbs: carbsPer * f, 
+    fat: fatPer * f 
+  };
   if (!logEntries[currentDate]) logEntries[currentDate] = [];
   logEntries[currentDate].push(entry);
   saveLogEntry(entry);
@@ -1151,12 +1185,20 @@ window.confirmRecipeEat = function() {
     amount = parseFloat(document.getElementById('re-gram-input').value) || 0;
     f = amount / recipeTarget.totalWeight;
   }
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  
   const entry = {
-    id: Date.now() + Math.random(), date: currentDate, meal: currentMeal,
+    id: Date.now() + Math.random(), 
+    date: currentDate, 
+    meal: currentMeal,
+    time,
     name: recipeTarget.name + (isGram ? ' (' + amount + 'g)' : ''),
     amount,
-    kcal: recipeTarget.kcal * f, protein: recipeTarget.protein * f,
-    carbs: recipeTarget.carbs * f, fat: recipeTarget.fat * f,
+    kcal: recipeTarget.kcal * f, 
+    protein: recipeTarget.protein * f,
+    carbs: recipeTarget.carbs * f, 
+    fat: recipeTarget.fat * f,
   };
   if (!logEntries[currentDate]) logEntries[currentDate] = [];
   logEntries[currentDate].push(entry);
@@ -1326,6 +1368,9 @@ function parseDiaryCSV(csvText) {
     // Parse meal from time
     const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
     const hour = timeMatch ? parseInt(timeMatch[1]) : 12;
+    const minute = timeMatch ? parseInt(timeMatch[2]) : 0;
+    const time = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '12:00';
+    
     let meal = 'Mittags';
     if (hour >= 6 && hour < 12) meal = 'Morgens';
     else if (hour >= 12 && hour <= 14) meal = 'Mittags';
@@ -1336,6 +1381,7 @@ function parseDiaryCSV(csvText) {
     entries.push({
       date,
       meal,
+      time,
       name: bezeichnung,
       kcal: Math.round(kcal),
       protein: Math.round(protein * 10) / 10,
@@ -1362,14 +1408,30 @@ function parseDiaryCSV(csvText) {
   
   // Import entries
   let imported = 0;
+  let skipped = 0;
+  
   entries.forEach(entry => {
     if (!logEntries[entry.date]) logEntries[entry.date] = [];
+    
+    // Check for duplicates (same date, meal, name, kcal)
+    const isDuplicate = logEntries[entry.date].some(e => 
+      e.meal === entry.meal && 
+      e.name === entry.name && 
+      Math.abs(e.kcal - entry.kcal) < 2 &&
+      e.time === entry.time
+    );
+    
+    if (isDuplicate) {
+      skipped++;
+      return;
+    }
     
     // Create log entry
     const logEntry = {
       id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
       date: entry.date,
       meal: entry.meal,
+      time: entry.time || null,
       foodId: null, // Manual entry
       amount: 0,
       name: entry.name,
@@ -1407,15 +1469,21 @@ function parseDiaryCSV(csvText) {
       if (synced < allEntries.length) {
         setTimeout(() => syncBatch(startIdx + batchSize), 100);
       } else {
-        showToast(`✓ ${imported} Einträge importiert und synchronisiert`);
-        renderCurrentDay();
+        const msg = skipped > 0 
+          ? `✓ ${imported} neu importiert, ${skipped} Duplikate übersprungen`
+          : `✓ ${imported} Einträge importiert und synchronisiert`;
+        showToast(msg);
+        renderLog();
       }
     };
     
     syncBatch(0);
   } else {
-    showToast(`✓ ${imported} Einträge importiert (Login für Sync)`);
-    renderCurrentDay();
+    const msg = skipped > 0 
+      ? `✓ ${imported} neu, ${skipped} Duplikate übersprungen (Login für Sync)`
+      : `✓ ${imported} Einträge importiert (Login für Sync)`;
+    showToast(msg);
+    renderLog();
   }
 }
 

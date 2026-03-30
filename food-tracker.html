@@ -730,9 +730,6 @@ function renderLog() {
   const container = document.getElementById('meals-container');
   const entries = getTodayEntries();
 
-  // Helper: Format number with thousands separator
-  const formatNum = (n) => Math.round(n).toLocaleString('de-DE');
-
   container.innerHTML = MEALS.map(meal => {
     const mealEntries = entries.filter(e => e.meal === meal);
     const mealKcal = mealEntries.reduce((s, e) => s + (e.kcal || 0), 0);

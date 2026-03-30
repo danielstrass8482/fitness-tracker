@@ -241,6 +241,9 @@
     <span class="search-icon">🔍</span>
     <input type="text" id="db-search" placeholder="Suchen..." oninput="renderFoodDB()">
   </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <button class="btn btn-sm btn-secondary" onclick="toggleZeroCalFilter()" id="zero-cal-filter-btn">⚠️ Nur 0 kcal anzeigen</button>
+  </div>
   <div id="food-db-list"></div>
 </div>
 
@@ -1106,11 +1109,40 @@ window.pickRecipeFromModal = function(id) {
 };
 
 // ── FOOD DB ───────────────────────────────────────────────────────────────────
+let showOnlyZeroCal = false;
+
+window.toggleZeroCalFilter = function() {
+  showOnlyZeroCal = !showOnlyZeroCal;
+  const btn = document.getElementById('zero-cal-filter-btn');
+  btn.textContent = showOnlyZeroCal ? '✓ Nur 0 kcal' : '⚠️ Nur 0 kcal anzeigen';
+  btn.style.background = showOnlyZeroCal ? 'var(--accent)' : 'var(--surface2)';
+  btn.style.color = showOnlyZeroCal ? '#fff' : 'var(--text)';
+  renderFoodDB();
+};
+
 window.renderFoodDB = function() {
   const q = (document.getElementById('db-search')?.value || '').toLowerCase();
-  const items = q ? foodDB.filter(f => f.name.toLowerCase().includes(q)) : foodDB;
+  let items = foodDB;
+  
+  // Apply zero-cal filter first
+  if (showOnlyZeroCal) {
+    items = items.filter(f => f.kcal === 0 || f.kcal < 5);
+  }
+  
+  // Then apply search
+  if (q) {
+    items = items.filter(f => f.name.toLowerCase().includes(q));
+  }
+  
   const container = document.getElementById('food-db-list');
-  if (!items.length) { container.innerHTML = `<div class="empty"><div class="empty-icon">🥗</div>Keine Lebensmittel gefunden</div>`; return; }
+  if (!items.length) { 
+    const msg = showOnlyZeroCal 
+      ? '✓ Keine Produkte mit 0 kcal' 
+      : 'Keine Lebensmittel gefunden';
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🥗</div>${msg}</div>`; 
+    return; 
+  }
+  
   container.innerHTML = items.map(f => `
     <div class="food-db-item">
       <div>

@@ -484,7 +484,7 @@ let recipeTarget = null;  // recipe being added
 let recipeIngredients = []; // current recipe editor ingredients
 let editRecipeId = null;
 
-const MEALS = ['Frühstück', 'Mittag', 'Abend', 'Snacks'];
+const MEALS = ['Morgens', 'Mittags', 'Nachmittags', 'Abends', 'Nachts'];
 const PROTEIN_GOAL = 150;
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────
@@ -712,11 +712,13 @@ function getDayTotals() {
 
 function renderLog() {
   const totals = getDayTotals();
-  document.getElementById('sum-kcal').textContent = Math.round(totals.kcal);
-  document.getElementById('sum-protein-big').textContent = Math.round(totals.protein) + 'g';
-  document.getElementById('val-protein').textContent = Math.round(totals.protein) + ' / ' + PROTEIN_GOAL + 'g';
-  document.getElementById('val-carbs').textContent = Math.round(totals.carbs) + 'g';
-  document.getElementById('val-fat').textContent = Math.round(totals.fat) + 'g';
+  const formatNum = (n) => Math.round(n).toLocaleString('de-DE');
+  
+  document.getElementById('sum-kcal').textContent = formatNum(totals.kcal);
+  document.getElementById('sum-protein-big').textContent = formatNum(totals.protein) + 'g';
+  document.getElementById('val-protein').textContent = formatNum(totals.protein) + ' / ' + PROTEIN_GOAL + 'g';
+  document.getElementById('val-carbs').textContent = formatNum(totals.carbs) + 'g';
+  document.getElementById('val-fat').textContent = formatNum(totals.fat) + 'g';
   document.getElementById('bar-protein').style.width = Math.min(100, totals.protein / PROTEIN_GOAL * 100) + '%';
   document.getElementById('bar-carbs').style.width = Math.min(100, totals.carbs / 250 * 100) + '%';
   document.getElementById('bar-fat').style.width = Math.min(100, totals.fat / 80 * 100) + '%';
@@ -724,28 +726,51 @@ function renderLog() {
   const container = document.getElementById('meals-container');
   const entries = getTodayEntries();
 
+  // Helper: Format number with thousands separator
+  const formatNum = (n) => Math.round(n).toLocaleString('de-DE');
+
   container.innerHTML = MEALS.map(meal => {
     const mealEntries = entries.filter(e => e.meal === meal);
     const mealKcal = mealEntries.reduce((s, e) => s + (e.kcal || 0), 0);
+    const mealId = meal.toLowerCase().replace(/\s+/g, '-');
+    
     return `
       <div class="meal-section">
-        <div class="meal-header">
-          <div class="meal-title">${meal}</div>
-          <div class="meal-kcal">${Math.round(mealKcal)} kcal</div>
+        <div class="meal-header" onclick="toggleMeal('${mealId}')" style="cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="toggle-${mealId}" style="font-size:14px;transition:transform 0.2s;">▼</span>
+            <div class="meal-title">${meal}</div>
+          </div>
+          <div class="meal-kcal">${formatNum(mealKcal)} kcal</div>
         </div>
-        ${mealEntries.length ? `<div class="meal-entries">${mealEntries.map(e => `
-          <div class="meal-entry">
-            <div style="flex:1;">
-              <div class="meal-entry-name">${e.name}</div>
-              <div class="meal-entry-sub">${e.amount}g · P ${Math.round(e.protein)}g · K ${Math.round(e.carbs)}g · F ${Math.round(e.fat)}g</div>
-            </div>
-            <div class="meal-entry-kcal">${Math.round(e.kcal)} kcal</div>
-            <button class="meal-entry-del" onclick="deleteLogEntry('${e.id}')">×</button>
-          </div>`).join('')}</div>` : ''}
-        <button class="add-food-btn" onclick="openAddFood('${meal}')">＋ Hinzufügen</button>
+        <div id="meal-content-${mealId}">
+          ${mealEntries.length ? `<div class="meal-entries">${mealEntries.map(e => `
+            <div class="meal-entry">
+              <div style="flex:1;">
+                <div class="meal-entry-name">${e.name}</div>
+                <div class="meal-entry-sub">${e.amount}g · P ${Math.round(e.protein)}g · K ${Math.round(e.carbs)}g · F ${Math.round(e.fat)}g</div>
+              </div>
+              <div class="meal-entry-kcal">${formatNum(e.kcal)} kcal</div>
+              <button class="meal-entry-del" onclick="deleteLogEntry('${e.id}')">×</button>
+            </div>`).join('')}</div>` : ''}
+          <button class="add-food-btn" onclick="openAddFood('${meal}')">＋ Hinzufügen</button>
+        </div>
       </div>`;
   }).join('');
 }
+
+window.toggleMeal = function(mealId) {
+  const content = document.getElementById(`meal-content-${mealId}`);
+  const toggle = document.getElementById(`toggle-${mealId}`);
+  
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    toggle.style.transform = 'rotate(0deg)';
+  } else {
+    content.style.display = 'none';
+    toggle.style.transform = 'rotate(-90deg)';
+  }
+};
 
 window.deleteLogEntry = function(id) {
   if (!logEntries[currentDate]) return;
@@ -1248,14 +1273,15 @@ function parseDiaryCSV(csvText) {
     const date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`; // YYYY-MM-DD
     const kcal = Math.round(kj / 4.184); // kJ to kcal
     
-    // Parse meal from time (approximate)
+    // Parse meal from time
     const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
     const hour = timeMatch ? parseInt(timeMatch[1]) : 12;
-    let meal = 'Mittagessen';
-    if (hour < 10) meal = 'Frühstück';
-    else if (hour >= 10 && hour < 14) meal = 'Mittagessen';
-    else if (hour >= 14 && hour < 18) meal = 'Snacks';
-    else meal = 'Abendessen';
+    let meal = 'Mittags';
+    if (hour >= 6 && hour < 12) meal = 'Morgens';
+    else if (hour >= 12 && hour <= 14) meal = 'Mittags';
+    else if (hour > 14 && hour < 17) meal = 'Nachmittags';
+    else if (hour >= 17 && hour <= 21) meal = 'Abends';
+    else meal = 'Nachts'; // >21 or <6
     
     entries.push({
       date,

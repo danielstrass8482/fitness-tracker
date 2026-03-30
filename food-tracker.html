@@ -223,7 +223,7 @@
   <input type="file" id="fddb-recipe-input" accept=".csv" style="display:none;" onchange="handleFDDBRecipeUpload(event)">
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
-    <input type="text" id="recipe-search" placeholder="Rezept suchen..." oninput="renderRecipes()">
+    <input type="text" id="recipe-search" placeholder="Rezept suchen..." oninput="requestAnimationFrame(() => renderRecipes())">
   </div>
   <div id="recipes-list"></div>
 </div>
@@ -671,8 +671,12 @@ window.switchTab = function(tab) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('panel-' + tab).classList.add('active');
   document.querySelector(`.nav-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
-  if (tab === 'rezepte') renderRecipes();
-  if (tab === 'lebensmittel') renderFoodDB();
+  
+  // Use requestAnimationFrame to ensure DOM is ready
+  requestAnimationFrame(() => {
+    if (tab === 'rezepte') renderRecipes();
+    if (tab === 'lebensmittel') renderFoodDB();
+  });
 };
 
 // ── DATE ─────────────────────────────────────────────────────────────────────
@@ -995,6 +999,8 @@ window.saveRecipe = function() {
 
 function renderRecipes() {
   const container = document.getElementById('recipes-list');
+  if (!container) return; // Tab nicht aktiv, Skip
+  
   const searchInput = document.getElementById('recipe-search');
   const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
   

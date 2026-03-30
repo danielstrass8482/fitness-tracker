@@ -172,6 +172,8 @@
     <div style="text-align:center;">
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('diary-csv-input').click()" style="margin-top:8px;font-size:11px;padding:4px 8px;">📥 Tagebuch Import</button>
+      <input type="file" id="diary-csv-input" accept=".csv" style="display:none;" onchange="handleDiaryCSVUpload(event)">
     </div>
     <button onclick="changeDate(1)">›</button>
   </div>
@@ -983,20 +985,37 @@ function renderRecipes() {
     return; 
   }
   
-  container.innerHTML = filtered.map(r => `
+  container.innerHTML = filtered.map(r => {
+    const per100g = {
+      kcal: Math.round((r.kcal / r.totalWeight) * 100),
+      protein: Math.round((r.protein / r.totalWeight) * 100),
+      carbs: Math.round((r.carbs / r.totalWeight) * 100),
+      fat: Math.round((r.fat / r.totalWeight) * 100)
+    };
+    
+    return `
     <div class="recipe-card" onclick="openRecipeEat('${r.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="recipe-card-name">${r.name}</div>
         <button onclick="event.stopPropagation();editRecipe('${r.id}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;">✎</button>
       </div>
       <div class="recipe-card-sub">${r.ingredients.length} Zutaten · ${Math.round(r.totalWeight)}g gesamt</div>
-      <div class="recipe-card-macros">
+      <div class="recipe-card-macros" style="margin-top:4px;">
+        <span style="color:var(--muted);font-size:10px;">Gesamt:</span>
         <span>${Math.round(r.kcal)} kcal</span>
         <span class="tag-p">P ${Math.round(r.protein)}g</span>
         <span class="tag-k">K ${Math.round(r.carbs)}g</span>
         <span class="tag-f">F ${Math.round(r.fat)}g</span>
       </div>
-    </div>`).join('');
+      <div class="recipe-card-macros">
+        <span style="color:var(--muted);font-size:10px;">Pro 100g:</span>
+        <span>${per100g.kcal} kcal</span>
+        <span class="tag-p">P ${per100g.protein}g</span>
+        <span class="tag-k">K ${per100g.carbs}g</span>
+        <span class="tag-f">F ${per100g.fat}g</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 window.editRecipe = function(id) {
@@ -1184,6 +1203,145 @@ window.saveNewFood = function() {
   renderFoodDB();
   showToast('✓ Gespeichert');
 };
+
+// ── TAGEBUCH-IMPORT ──────────────────────────────────────────────────────────
+window.handleDiaryCSVUpload = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    parseDiaryCSV(text);
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = ''; // Reset input
+};
+
+function parseDiaryCSV(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) {
+    showToast('❌ Keine Einträge in der Datei');
+    return;
+  }
+  
+  // Skip header
+  const dataLines = lines.slice(1);
+  const entries = [];
+  
+  dataLines.forEach(line => {
+    // CSV format: datum;bezeichnung;interne_id;kj;kj_aktivitaeten;fett_g;kh_g;protein_g
+    const parts = line.split(';');
+    if (parts.length < 8) return;
+    
+    const datumStr = parts[0].replace(/"/g, '').trim(); // "30.03.2026 12:06"
+    const bezeichnung = parts[1].replace(/"/g, '').trim(); // "300 ml Coke Zero"
+    const kj = parseFloat(parts[3].replace(/"/g, '').replace(',', '.')) || 0;
+    const fett = parseFloat(parts[5].replace(/"/g, '').replace(',', '.')) || 0;
+    const kh = parseFloat(parts[6].replace(/"/g, '').replace(',', '.')) || 0;
+    const protein = parseFloat(parts[7].replace(/"/g, '').replace(',', '.')) || 0;
+    
+    // Parse date: "30.03.2026 12:06" -> "2026-03-30"
+    const dateMatch = datumStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!dateMatch) return;
+    
+    const date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`; // YYYY-MM-DD
+    const kcal = Math.round(kj / 4.184); // kJ to kcal
+    
+    // Parse meal from time (approximate)
+    const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
+    const hour = timeMatch ? parseInt(timeMatch[1]) : 12;
+    let meal = 'Mittagessen';
+    if (hour < 10) meal = 'Frühstück';
+    else if (hour >= 10 && hour < 14) meal = 'Mittagessen';
+    else if (hour >= 14 && hour < 18) meal = 'Snacks';
+    else meal = 'Abendessen';
+    
+    entries.push({
+      date,
+      meal,
+      name: bezeichnung,
+      kcal: Math.round(kcal),
+      protein: Math.round(protein * 10) / 10,
+      carbs: Math.round(kh * 10) / 10,
+      fat: Math.round(fett * 10) / 10
+    });
+  });
+  
+  if (entries.length === 0) {
+    showToast('❌ Keine gültigen Einträge gefunden');
+    return;
+  }
+  
+  // Group by date for stats
+  const byDate = {};
+  entries.forEach(e => {
+    if (!byDate[e.date]) byDate[e.date] = [];
+    byDate[e.date].push(e);
+  });
+  
+  // Confirm import
+  const confirmMsg = `${entries.length} Tagebuch-Einträge gefunden über ${Object.keys(byDate).length} Tage.\n\nImportieren?`;
+  if (!confirm(confirmMsg)) return;
+  
+  // Import entries
+  let imported = 0;
+  entries.forEach(entry => {
+    if (!logEntries[entry.date]) logEntries[entry.date] = [];
+    
+    // Create log entry
+    const logEntry = {
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      date: entry.date,
+      meal: entry.meal,
+      foodId: null, // Manual entry
+      amount: 0,
+      name: entry.name,
+      kcal: entry.kcal,
+      protein: entry.protein,
+      carbs: entry.carbs,
+      fat: entry.fat
+    };
+    
+    logEntries[entry.date].push(logEntry);
+    imported++;
+  });
+  
+  // Save to localStorage and Firebase
+  saveLS('logEntries', logEntries);
+  
+  if (userId) {
+    // Sync to Firebase (batch to avoid rate limits)
+    const allEntries = [];
+    for (const date in logEntries) {
+      for (const entry of logEntries[date]) {
+        allEntries.push(entry);
+      }
+    }
+    
+    // Batch sync with delay
+    let synced = 0;
+    const batchSize = 50;
+    const syncBatch = async (startIdx) => {
+      const batch = allEntries.slice(startIdx, startIdx + batchSize);
+      const promises = batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry));
+      await Promise.all(promises);
+      synced += batch.length;
+      
+      if (synced < allEntries.length) {
+        setTimeout(() => syncBatch(startIdx + batchSize), 100);
+      } else {
+        showToast(`✓ ${imported} Einträge importiert und synchronisiert`);
+        renderCurrentDay();
+      }
+    };
+    
+    syncBatch(0);
+  } else {
+    showToast(`✓ ${imported} Einträge importiert (Login für Sync)`);
+    renderCurrentDay();
+  }
+}
 
 // ── SYNC TO MAIN APP ──────────────────────────────────────────────────────────
 function syncToMainApp() {

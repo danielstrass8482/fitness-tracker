@@ -617,6 +617,34 @@ function loadLocalStorage() {
   foodDB = JSON.parse(localStorage.getItem('ern_foodDB') || '[]');
   recipes = JSON.parse(localStorage.getItem('ern_recipes') || '[]');
   logEntries = JSON.parse(localStorage.getItem('ern_logEntries') || '{}');
+  
+  // Migrate old meal names to new ones
+  const mealNameMap = {
+    'Frühstück': 'Morgens',
+    'Mittag': 'Mittags',
+    'Mittagessen': 'Mittags',
+    'Snacks': 'Nachmittags',
+    'Abend': 'Abends',
+    'Abendessen': 'Abends'
+  };
+  
+  let migrated = false;
+  for (const date in logEntries) {
+    logEntries[date] = logEntries[date].map(e => {
+      if (mealNameMap[e.meal]) {
+        migrated = true;
+        return { ...e, meal: mealNameMap[e.meal] };
+      }
+      return e;
+    });
+  }
+  
+  // Save migrated data
+  if (migrated) {
+    saveLS('logEntries', logEntries);
+    console.log('Migrated old meal names to new names');
+  }
+  
   // Add default foods if empty
   if (!foodDB.length) seedDefaultFoods();
 }
@@ -702,7 +730,26 @@ function updateDateBar() {
 function renderAll() { updateDateBar(); renderLog(); renderRecipes(); renderFoodDB(); syncToMainApp(); }
 
 // ── LOG ──────────────────────────────────────────────────────────────────────
-function getTodayEntries() { return logEntries[currentDate] || []; }
+function getTodayEntries() { 
+  const entries = logEntries[currentDate] || [];
+  
+  // Migrate old meal names to new ones
+  const mealNameMap = {
+    'Frühstück': 'Morgens',
+    'Mittag': 'Mittags',
+    'Mittagessen': 'Mittags',
+    'Snacks': 'Nachmittags',
+    'Abend': 'Abends',
+    'Abendessen': 'Abends'
+  };
+  
+  return entries.map(e => {
+    if (mealNameMap[e.meal]) {
+      return { ...e, meal: mealNameMap[e.meal] };
+    }
+    return e;
+  });
+}
 
 function getDayTotals() {
   const entries = getTodayEntries();

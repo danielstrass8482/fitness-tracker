@@ -493,25 +493,37 @@ function updateAuthUI(user) {
   const authBtn = document.getElementById('auth-btn');
   if (user) {
     authBtn.textContent = user.displayName || user.email || 'Eingeloggt';
-    authBtn.onclick = () => {
-      if (confirm('Abmelden?')) {
-        auth.signOut();
-      }
-    };
+    authBtn.onclick = handleSignOut;
   } else {
     authBtn.textContent = 'Mit Google anmelden';
     authBtn.onclick = handleAuth;
   }
 }
 
-window.handleAuth = async function() {
+async function handleAuth() {
   try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+    showToast('✓ Erfolgreich eingeloggt');
   } catch(e) {
     console.error('Login failed:', e);
-    showToast('❌ Login fehlgeschlagen');
+    showToast(`❌ Login fehlgeschlagen: ${e.message}`);
   }
-};
+}
+
+async function handleSignOut() {
+  if (confirm('Abmelden?')) {
+    try {
+      await auth.signOut();
+      showToast('✓ Abgemeldet');
+    } catch(e) {
+      console.error('Signout failed:', e);
+    }
+  }
+}
+
+// Make auth functions globally accessible
+window.handleAuth = handleAuth;
 
 function userFoodCol() { return collection(db, 'users', userId, 'foodDB'); }
 function userRecipeCol() { return collection(db, 'users', userId, 'recipes'); }

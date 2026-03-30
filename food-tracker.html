@@ -209,8 +209,12 @@
 <div id="panel-rezepte" class="panel">
   <div class="section-header">
     <div class="section-title">Rezepte</div>
-    <button class="btn btn-sm" onclick="openNewRecipe()">+ Neu</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('fddb-recipe-input').click()">📥 FDDB Import</button>
+      <button class="btn btn-sm" onclick="openNewRecipe()">+ Neu</button>
+    </div>
   </div>
+  <input type="file" id="fddb-recipe-input" accept=".csv" style="display:none;" onchange="handleFDDBRecipeUpload(event)">
   <div id="recipes-list"></div>
 </div>
 
@@ -402,6 +406,27 @@
       <div class="amount-preview" id="re-gram-preview"></div>
     </div>
     <button class="btn" style="margin-top:12px;" onclick="confirmRecipeEat()">Hinzufügen →</button>
+  </div>
+</div>
+
+<!-- MODAL: FDDB Rezept-Import -->
+<div class="modal" id="modal-fddb-recipe-import">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">FDDB Rezept-Import</div>
+      <button class="modal-close" onclick="closeModal('modal-fddb-recipe-import')">✕</button>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div id="fddb-recipe-stats" style="font-size:12px;color:var(--muted);margin-bottom:12px;"></div>
+      <div id="fddb-recipe-preview" style="max-height:400px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
+      <strong>Hinweis:</strong> Fehlende Lebensmittel werden automatisch ohne Nährwerte angelegt. Du kannst sie später in der Lebensmittel-DB ergänzen.
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModal('modal-fddb-recipe-import')">Abbrechen</button>
+      <button class="btn" onclick="confirmFDDBRecipeImport()">Importieren →</button>
+    </div>
   </div>
 </div>
 
@@ -1037,6 +1062,199 @@ window.showToast = function(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
+};
+
+// ── FDDB REZEPT-IMPORT ────────────────────────────────────────────────────────
+let fddbRecipesData = [];
+
+window.handleFDDBRecipeUpload = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    parseFDDBRecipes(text);
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = ''; // Reset input
+};
+
+function parseFDDBRecipes(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) {
+    showToast('❌ Keine Rezepte in der Datei');
+    return;
+  }
+  
+  // Skip header
+  const dataLines = lines.slice(1);
+  fddbRecipesData = [];
+  
+  dataLines.forEach(line => {
+    // CSV format: name;beschreibung;kategorie;anzahl_portionen;zeit_vorbereitung;zeit_kochen;produkte;
+    const parts = line.split(';');
+    if (parts.length < 7) return;
+    
+    const name = parts[0].replace(/^"|"$/g, '').trim();
+    const portionen = parseInt(parts[3].replace(/^"|"$/g, '')) || 1;
+    const produkteStr = parts[6].replace(/^"|"$/g, '');
+    
+    // Parse produkte: "250 g Dinkelmehl Type 630, 100 g Butter, ..."
+    const ingredients = [];
+    const produktParts = produkteStr.split(',').map(p => p.trim());
+    
+    produktParts.forEach(prod => {
+      // Match: "250 g Dinkelmehl Type 630" or "100 ml Olivenöl"
+      const match = prod.match(/^([\d.]+)\s*([a-zA-Zµ]+)\s+(.+)$/);
+      if (match) {
+        const amount = parseFloat(match[1]);
+        const unit = match[2];
+        const foodName = match[3].trim();
+        ingredients.push({ amount, unit, foodName, originalText: prod });
+      }
+    });
+    
+    if (name && ingredients.length > 0) {
+      fddbRecipesData.push({ name, portionen, ingredients });
+    }
+  });
+  
+  if (fddbRecipesData.length === 0) {
+    showToast('❌ Keine gültigen Rezepte gefunden');
+    return;
+  }
+  
+  // Show preview
+  showFDDBRecipePreview();
+}
+
+function showFDDBRecipePreview() {
+  const stats = document.getElementById('fddb-recipe-stats');
+  const preview = document.getElementById('fddb-recipe-preview');
+  
+  stats.innerHTML = `<strong>${fddbRecipesData.length}</strong> Rezepte gefunden`;
+  
+  let html = '';
+  fddbRecipesData.forEach((recipe, idx) => {
+    const missingFoods = recipe.ingredients.filter(ing => {
+      return !foodDB.find(f => f.name.toLowerCase() === ing.foodName.toLowerCase());
+    });
+    
+    html += `
+      <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+        <div style="font-weight:600;margin-bottom:6px;">${idx + 1}. ${recipe.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${recipe.portionen} Portion(en), ${recipe.ingredients.length} Zutaten</div>
+        ${missingFoods.length > 0 ? `
+          <div style="font-size:11px;color:var(--accent3);margin-top:4px;">
+            ⚠️ ${missingFoods.length} fehlende Lebensmittel: ${missingFoods.slice(0, 3).map(f => f.foodName).join(', ')}${missingFoods.length > 3 ? '...' : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+  
+  preview.innerHTML = html;
+  openModal('modal-fddb-recipe-import');
+}
+
+window.confirmFDDBRecipeImport = async function() {
+  let imported = 0;
+  let createdFoods = 0;
+  
+  for (const recipe of fddbRecipesData) {
+    const recipeIngredients = [];
+    let totalWeight = 0;
+    
+    for (const ing of recipe.ingredients) {
+      // Find or create food in DB
+      let food = foodDB.find(f => f.name.toLowerCase() === ing.foodName.toLowerCase());
+      
+      if (!food) {
+        // Create placeholder food with zero macros
+        food = {
+          id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          name: ing.foodName,
+          kcal: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0
+        };
+        foodDB.push(food);
+        createdFoods++;
+      }
+      
+      // Convert amount to grams (basic conversion)
+      let amountInGrams = ing.amount;
+      const unit = ing.unit.toLowerCase();
+      
+      // Basic unit conversions
+      if (unit === 'kg') amountInGrams = ing.amount * 1000;
+      else if (unit === 'l') amountInGrams = ing.amount * 1000; // 1 Liter ≈ 1 kg for most liquids
+      else if (unit === 'ml') amountInGrams = ing.amount; // 1 ml ≈ 1 g
+      // Keep 'g' as is, others remain unconverted
+      
+      recipeIngredients.push({
+        foodId: food.id,
+        amount: Math.round(amountInGrams)
+      });
+      
+      totalWeight += amountInGrams;
+    }
+    
+    // Calculate recipe macros
+    const macros = recipeIngredients.reduce((t, ing) => {
+      const food = foodDB.find(f => String(f.id) === String(ing.foodId));
+      if (!food) return t;
+      const factor = ing.amount / 100;
+      return {
+        kcal: t.kcal + (food.kcal * factor),
+        protein: t.protein + (food.protein * factor),
+        carbs: t.carbs + (food.carbs * factor),
+        fat: t.fat + (food.fat * factor)
+      };
+    }, { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    
+    // Create recipe
+    const newRecipe = {
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      name: recipe.name,
+      totalWeight: Math.round(totalWeight),
+      ingredients: recipeIngredients,
+      kcal: Math.round(macros.kcal),
+      protein: Math.round(macros.protein),
+      carbs: Math.round(macros.carbs),
+      fat: Math.round(macros.fat)
+    };
+    
+    recipes.push(newRecipe);
+    imported++;
+  }
+  
+  // Save to Firebase and localStorage
+  if (userId) {
+    try {
+      // Save all recipes to Firebase
+      for (const recipe of recipes) {
+        await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+      }
+      // Save all foods to Firebase
+      for (const food of foodDB) {
+        await setDoc(doc(userFoodCol(), String(food.id)), food);
+      }
+    } catch (e) {
+      console.error('Firebase save error:', e);
+    }
+  }
+  
+  saveLS('recipes', recipes);
+  saveLS('foodDB', foodDB);
+  
+  closeModal('modal-fddb-recipe-import');
+  renderRecipes();
+  showToast(`✓ ${imported} Rezepte importiert${createdFoods > 0 ? `, ${createdFoods} Lebensmittel angelegt` : ''}`);
+  
+  fddbRecipesData = [];
 };
 
 // Init

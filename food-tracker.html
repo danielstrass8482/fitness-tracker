@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Ernährung</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -168,7 +171,7 @@
 <!-- TAGEBUCH -->
 <div id="panel-log" class="panel active">
   <div class="date-bar">
-    <button onclick="changeDate(-1)">‹</button>
+    <button id="date-prev-btn" onclick="changeDate(-1)">‹</button>
     <div style="text-align:center;">
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
@@ -178,7 +181,7 @@
       </div>
       <input type="file" id="diary-csv-input" accept=".csv" style="display:none;" onchange="handleDiaryCSVUpload(event)">
     </div>
-    <button onclick="changeDate(1)">›</button>
+    <button id="date-next-btn" onclick="changeDate(1)">›</button>
   </div>
 
   <div class="macro-summary" id="macro-summary">
@@ -718,9 +721,17 @@ window.switchTab = function(tab) {
 
 // ── DATE ─────────────────────────────────────────────────────────────────────
 window.changeDate = function(delta) {
-  const d = new Date(currentDate);
+  const d = new Date(currentDate + 'T12:00:00');
   d.setDate(d.getDate() + delta);
-  currentDate = d.toISOString().split('T')[0];
+  const newDate = d.toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Don't allow navigation into the future
+  if (newDate > today) {
+    return;
+  }
+  
+  currentDate = newDate;
   updateDateBar();
   renderLog();
 };
@@ -733,6 +744,14 @@ function updateDateBar() {
     currentDate === new Date(Date.now() - 86400000).toISOString().split('T')[0] ? 'Gestern' :
     d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
   document.getElementById('date-sub').textContent = d.toLocaleDateString('de-DE', opts);
+  
+  // Disable next button if we're at today
+  const nextBtn = document.getElementById('date-next-btn');
+  if (nextBtn) {
+    nextBtn.disabled = currentDate === today;
+    nextBtn.style.opacity = currentDate === today ? '0.3' : '1';
+    nextBtn.style.cursor = currentDate === today ? 'not-allowed' : 'pointer';
+  }
 }
 
 // ── RENDER ALL ───────────────────────────────────────────────────────────────

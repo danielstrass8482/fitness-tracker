@@ -1344,20 +1344,40 @@ window.saveNewFood = function() {
 };
 
 // ── TAGEBUCH-IMPORT ──────────────────────────────────────────────────────────
-window.resetDiaryData = function() {
+window.resetDiaryData = async function() {
   if (!confirm('⚠️ ACHTUNG: Alle Tagebuch-Einträge werden gelöscht!\n\nDanach kannst du neu importieren.\n\nFortfahren?')) {
     return;
   }
   
-  // Clear log entries
+  if (!confirm('⚠️ WIRKLICH ALLE DATEN LÖSCHEN?\n\nDies kann nicht rückgängig gemacht werden!')) {
+    return;
+  }
+  
+  // Clear log entries locally
   logEntries = {};
   saveLS('logEntries', logEntries);
   
-  // Clear from Firebase if logged in
+  // Delete from Firebase if logged in
   if (userId) {
-    // Note: This doesn't delete from Firebase, just clears local
-    // Firebase entries will be orphaned but won't reload
-    showToast('✓ Tagebuch-Daten lokal gelöscht. Jetzt neu importieren!');
+    try {
+      showToast('⏳ Lösche Firebase-Daten...');
+      
+      // Get all log entries from Firebase
+      const logSnap = await getDocs(userLogCol());
+      const deletePromises = [];
+      
+      logSnap.forEach(doc => {
+        deletePromises.push(deleteDoc(doc.ref));
+      });
+      
+      await Promise.all(deletePromises);
+      
+      showToast(`✓ ${deletePromises.length} Einträge aus Firebase gelöscht. Jetzt neu importieren!`);
+    } catch (e) {
+      console.error('Firebase delete error:', e);
+      showToast('❌ Firebase-Löschung fehlgeschlagen. Versuche es nochmal.');
+      return;
+    }
   } else {
     showToast('✓ Tagebuch-Daten gelöscht. Jetzt neu importieren!');
   }

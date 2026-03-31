@@ -172,7 +172,10 @@
     <div style="text-align:center;">
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
-      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('diary-csv-input').click()" style="margin-top:8px;font-size:11px;padding:4px 8px;">📥 Tagebuch Import</button>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('diary-csv-input').click()" style="font-size:11px;padding:4px 8px;">📥 Import</button>
+        <button class="btn btn-sm" onclick="resetDiaryData()" style="font-size:11px;padding:4px 8px;background:var(--surface2);color:var(--muted);">🗑️ Reset</button>
+      </div>
       <input type="file" id="diary-csv-input" accept=".csv" style="display:none;" onchange="handleDiaryCSVUpload(event)">
     </div>
     <button onclick="changeDate(1)">›</button>
@@ -1322,6 +1325,27 @@ window.saveNewFood = function() {
 };
 
 // ── TAGEBUCH-IMPORT ──────────────────────────────────────────────────────────
+window.resetDiaryData = function() {
+  if (!confirm('⚠️ ACHTUNG: Alle Tagebuch-Einträge werden gelöscht!\n\nDanach kannst du neu importieren.\n\nFortfahren?')) {
+    return;
+  }
+  
+  // Clear log entries
+  logEntries = {};
+  saveLS('logEntries', logEntries);
+  
+  // Clear from Firebase if logged in
+  if (userId) {
+    // Note: This doesn't delete from Firebase, just clears local
+    // Firebase entries will be orphaned but won't reload
+    showToast('✓ Tagebuch-Daten lokal gelöscht. Jetzt neu importieren!');
+  } else {
+    showToast('✓ Tagebuch-Daten gelöscht. Jetzt neu importieren!');
+  }
+  
+  renderLog();
+};
+
 window.handleDiaryCSVUpload = function(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -1367,9 +1391,22 @@ function parseDiaryCSV(csvText) {
     
     // Parse meal from time
     const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
-    const hour = timeMatch ? parseInt(timeMatch[1]) : 12;
+    let hour = timeMatch ? parseInt(timeMatch[1]) : 12;
     const minute = timeMatch ? parseInt(timeMatch[2]) : 0;
-    const time = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '12:00';
+    
+    // BUGFIX: FDDB exportiert mit aktuellem Timezone-Offset (MESZ=UTC+2)
+    // aber Einträge vor Zeitumstellung (30.03.2026 02:00) waren in MEZ (UTC+1)
+    // → Für Daten vor 30.03.2026: -1 Stunde korrigieren
+    const dstDate = new Date('2026-03-30T02:00:00');
+    const entryDate = new Date(date + 'T00:00:00');
+    
+    if (entryDate < dstDate && timeMatch) {
+      // Korrigiere FDDB-Export-Bug: -1h für Einträge vor Zeitumstellung
+      hour = hour - 1;
+      if (hour < 0) hour = 23; // Wrap around midnight
+    }
+    
+    const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
     
     let meal = 'Mittags';
     if (hour >= 6 && hour < 12) meal = 'Morgens';
@@ -1413,13 +1450,21 @@ function parseDiaryCSV(csvText) {
   entries.forEach(entry => {
     if (!logEntries[entry.date]) logEntries[entry.date] = [];
     
-    // Check for duplicates (same date, meal, name, kcal)
-    const isDuplicate = logEntries[entry.date].some(e => 
-      e.meal === entry.meal && 
-      e.name === entry.name && 
-      Math.abs(e.kcal - entry.kcal) < 2 &&
-      e.time === entry.time
-    );
+    // Check for duplicates (same date, meal, name, kcal within 2 kcal)
+    // Time is optional to catch old imports without time
+    const isDuplicate = logEntries[entry.date].some(e => {
+      const sameBasics = e.meal === entry.meal && 
+                        e.name === entry.name && 
+                        Math.abs(e.kcal - entry.kcal) < 2;
+      
+      // If both have time, check if same
+      if (e.time && entry.time) {
+        return sameBasics && e.time === entry.time;
+      }
+      
+      // Otherwise just check basics (catches old imports)
+      return sameBasics;
+    });
     
     if (isDuplicate) {
       skipped++;

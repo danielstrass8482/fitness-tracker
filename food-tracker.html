@@ -1344,20 +1344,58 @@ window.saveNewFood = function() {
 };
 
 // ── TAGEBUCH-IMPORT ──────────────────────────────────────────────────────────
-window.resetDiaryData = function() {
+window.resetDiaryData = async function() {
   if (!confirm('⚠️ ACHTUNG: Alle Tagebuch-Einträge werden gelöscht!\n\nDanach kannst du neu importieren.\n\nFortfahren?')) {
     return;
   }
   
-  // Clear log entries
+  if (!confirm('⚠️ WIRKLICH ALLE DATEN LÖSCHEN?\n\nDies kann nicht rückgängig gemacht werden!')) {
+    return;
+  }
+  
+  // Clear log entries locally
   logEntries = {};
   saveLS('logEntries', logEntries);
   
-  // Clear from Firebase if logged in
+  // Delete from Firebase if logged in
   if (userId) {
-    // Note: This doesn't delete from Firebase, just clears local
-    // Firebase entries will be orphaned but won't reload
-    showToast('✓ Tagebuch-Daten lokal gelöscht. Jetzt neu importieren!');
+    try {
+      showToast('⏳ Starte Löschvorgang...');
+      
+      // Delete in batches WITHOUT loading all at once
+      const batchSize = 500;
+      let totalDeleted = 0;
+      let batchCount = 0;
+      
+      while (true) {
+        // Query only next batch
+        const snapshot = await getDocs(query(userLogCol(), limit(batchSize)));
+        
+        if (snapshot.size === 0) {
+          // No more documents
+          break;
+        }
+        
+        // Create batch delete
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+        totalDeleted += snapshot.size;
+        batchCount++;
+        
+        // Show progress every batch
+        showToast(`⏳ Batch ${batchCount}: ${totalDeleted} Einträge gelöscht...`);
+      }
+      
+      showToast(`✓ ${totalDeleted} Einträge erfolgreich gelöscht!`);
+    } catch (e) {
+      console.error('Firebase delete error:', e);
+      showToast('❌ Firebase-Löschung fehlgeschlagen: ' + e.message);
+      return;
+    }
   } else {
     showToast('✓ Tagebuch-Daten gelöscht. Jetzt neu importieren!');
   }

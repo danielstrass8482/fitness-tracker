@@ -666,8 +666,8 @@ textarea {
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
-        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()" style="min-width:90px;white-space:nowrap;">📥 Import</button>
-        <button class="btn-sm btn-ghost" onclick="confirmReset()" style="min-width:80px;white-space:nowrap;">🗑️ Reset</button>
+        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()" style="padding:8px 16px;white-space:nowrap;">📥 Import</button>
+        <button class="btn-sm btn-ghost" onclick="confirmReset()" style="padding:8px 16px;white-space:nowrap;">🗑️ Reset</button>
       </div>
       <input type="file" id="fddb-import" accept=".csv" style="display:none;" onchange="handleFDDBImport(event)">
     </div>
@@ -877,9 +877,9 @@ textarea {
 
     <!-- 0 kcal Filter -->
     <div style="margin-bottom:16px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-        <input type="checkbox" id="zero-kcal-filter" onchange="renderFoodDB()">
-        <span style="font-size:13px;">⚠️ Nur 0 kcal anzeigen</span>
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="zero-kcal-filter" onchange="renderFoodDB()" style="width:auto;margin:0;">
+        <span>⚠️ Nur 0 kcal anzeigen</span>
       </label>
     </div>
 
@@ -1867,7 +1867,7 @@ function renderRecipes() {
     return;
   }
   
-  container.innerHTML = filtered.map(r => {
+  container.innerHTML = filtered.map((r, index) => {
     const per100g = r.totalWeight > 0 ? {
       kcal: Math.round((r.kcal / r.totalWeight) * 100),
       protein: Math.round((r.protein / r.totalWeight) * 100),
@@ -1876,8 +1876,8 @@ function renderRecipes() {
     } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
     
     return `
-      <div class="recipe-card">
-        <div class="recipe-card-content" onclick="editRecipe(${r.id})">
+      <div class="recipe-card" data-recipe-id="${r.id}">
+        <div class="recipe-card-content" data-action="edit">
           <div class="recipe-card-name">${r.name}</div>
           <div class="recipe-card-meta">${r.ingredients.length} Zutaten · ${formatNum(r.totalWeight)}g gesamt</div>
           <div class="recipe-card-macros">
@@ -1895,10 +1895,24 @@ function renderRecipes() {
             <span style="color:#ff6b9d;">F ${per100g.fat}g</span>
           </div>
         </div>
-        <div class="recipe-card-arrow" onclick="event.stopPropagation(); openRecipeEat(${r.id})">→</div>
+        <div class="recipe-card-arrow" data-action="eat">→</div>
       </div>
     `;
   }).join('');
+  
+  // Add event listeners after rendering
+  container.querySelectorAll('.recipe-card').forEach(card => {
+    const recipeId = parseInt(card.getAttribute('data-recipe-id'));
+    
+    card.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      editRecipe(recipeId);
+    });
+    
+    card.querySelector('[data-action="eat"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openRecipeEat(recipeId);
+    });
+  });
 }
 
 window.showToast = function(msg) {

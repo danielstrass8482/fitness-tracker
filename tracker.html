@@ -977,9 +977,29 @@ textarea {
         <button class="modal-close" onclick="closeRecipeEatModal()">✕</button>
       </div>
       
-      <div class="form-group">
-        <label>Portionen</label>
-        <input type="number" id="recipe-eat-portions" value="1" min="0.1" step="0.1" oninput="updateRecipeEatPreview()">
+      <!-- Tabs: Portionen / Gramm -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;">
+        <button class="tab active" id="recipe-eat-tab-portions" onclick="switchRecipeEatMode('portions')">Portionen</button>
+        <button class="tab" id="recipe-eat-tab-grams" onclick="switchRecipeEatMode('grams')">Gramm</button>
+      </div>
+      
+      <!-- Portionen Mode -->
+      <div id="recipe-eat-portions-mode">
+        <div class="form-group">
+          <label>Portionen</label>
+          <input type="number" id="recipe-eat-portions" value="1" min="0.1" step="0.1" oninput="updateRecipeEatPreview()">
+        </div>
+      </div>
+      
+      <!-- Gramm Mode -->
+      <div id="recipe-eat-grams-mode" style="display:none;">
+        <div class="form-group">
+          <label>Menge (g)</label>
+          <input type="number" id="recipe-eat-grams" value="100" min="1" step="1" oninput="updateRecipeEatPreview()">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+            Rezept-Gesamtgewicht: <span id="recipe-total-weight">0g</span>
+          </div>
+        </div>
       </div>
       
       <div id="recipe-eat-preview" style="background:var(--surface2);border-radius:8px;padding:16px;margin:16px 0;">
@@ -1067,6 +1087,14 @@ textarea {
   <div class="card">
     <div class="card-title">Export</div>
     <button class="btn" onclick="exportJSON()">JSON Export</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚠️ Alte Daten bereinigen</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+      Falls du alte Daten vom vorherigen Tracker siehst, kannst du sie hier löschen.
+    </p>
+    <button class="btn" style="background:var(--danger);" onclick="clearOldData()">Alte Daten löschen</button>
   </div>
 
   <div class="card">
@@ -1775,15 +1803,26 @@ window.deleteRecipe = async function(id) {
 };
 
 let currentRecipeEatId = null;
+let recipeEatMode = 'portions'; // 'portions' or 'grams'
 
 window.openRecipeEat = function(id) {
   const recipe = recipes.find(r => r.id === id);
   if (!recipe) return;
   
   currentRecipeEatId = id;
+  recipeEatMode = 'portions';
+  
   document.getElementById('recipe-eat-title').textContent = recipe.name;
   document.getElementById('recipe-eat-portions').value = '1';
+  document.getElementById('recipe-eat-grams').value = '100';
   document.getElementById('recipe-eat-time').value = getCurrentTime();
+  document.getElementById('recipe-total-weight').textContent = formatNum(recipe.totalWeight) + 'g';
+  
+  // Reset tabs
+  document.getElementById('recipe-eat-tab-portions').classList.add('active');
+  document.getElementById('recipe-eat-tab-grams').classList.remove('active');
+  document.getElementById('recipe-eat-portions-mode').style.display = 'block';
+  document.getElementById('recipe-eat-grams-mode').style.display = 'none';
   
   updateRecipeEatPreview();
   
@@ -1794,16 +1833,42 @@ window.closeRecipeEatModal = function() {
   document.getElementById('recipe-eat-modal').classList.remove('open');
 };
 
+window.switchRecipeEatMode = function(mode) {
+  recipeEatMode = mode;
+  
+  if (mode === 'portions') {
+    document.getElementById('recipe-eat-tab-portions').classList.add('active');
+    document.getElementById('recipe-eat-tab-grams').classList.remove('active');
+    document.getElementById('recipe-eat-portions-mode').style.display = 'block';
+    document.getElementById('recipe-eat-grams-mode').style.display = 'none';
+  } else {
+    document.getElementById('recipe-eat-tab-portions').classList.remove('active');
+    document.getElementById('recipe-eat-tab-grams').classList.add('active');
+    document.getElementById('recipe-eat-portions-mode').style.display = 'none';
+    document.getElementById('recipe-eat-grams-mode').style.display = 'block';
+  }
+  
+  updateRecipeEatPreview();
+};
+
 window.updateRecipeEatPreview = function() {
   const recipe = recipes.find(r => r.id === currentRecipeEatId);
   if (!recipe) return;
   
-  const portions = parseFloat(document.getElementById('recipe-eat-portions').value) || 1;
+  let factor = 1;
   
-  const kcal = Math.round(recipe.kcal * portions / recipe.portions);
-  const protein = Math.round(recipe.protein * portions / recipe.portions);
-  const carbs = Math.round(recipe.carbs * portions / recipe.portions);
-  const fat = Math.round(recipe.fat * portions / recipe.portions);
+  if (recipeEatMode === 'portions') {
+    const portions = parseFloat(document.getElementById('recipe-eat-portions').value) || 1;
+    factor = portions / recipe.portions;
+  } else {
+    const grams = parseFloat(document.getElementById('recipe-eat-grams').value) || 100;
+    factor = grams / recipe.totalWeight;
+  }
+  
+  const kcal = Math.round(recipe.kcal * factor);
+  const protein = Math.round(recipe.protein * factor);
+  const carbs = Math.round(recipe.carbs * factor);
+  const fat = Math.round(recipe.fat * factor);
   
   document.getElementById('eat-preview-kcal').textContent = formatNum(kcal);
   document.getElementById('eat-preview-protein').textContent = protein + 'g';
@@ -1815,11 +1880,21 @@ window.confirmRecipeEat = async function() {
   const recipe = recipes.find(r => r.id === currentRecipeEatId);
   if (!recipe) return;
   
-  const portions = parseFloat(document.getElementById('recipe-eat-portions').value) || 1;
   const time = document.getElementById('recipe-eat-time').value || getCurrentTime();
   const meal = getMealFromTime(time);
   
-  const factor = portions / recipe.portions;
+  let factor = 1;
+  let displayName = '';
+  
+  if (recipeEatMode === 'portions') {
+    const portions = parseFloat(document.getElementById('recipe-eat-portions').value) || 1;
+    factor = portions / recipe.portions;
+    displayName = `${recipe.name} (${portions}×)`;
+  } else {
+    const grams = parseFloat(document.getElementById('recipe-eat-grams').value) || 100;
+    factor = grams / recipe.totalWeight;
+    displayName = `${grams}g ${recipe.name}`;
+  }
   
   const entry = {
     id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1828,7 +1903,7 @@ window.confirmRecipeEat = async function() {
     time,
     foodId: null,
     amount: 0,
-    name: `${recipe.name} (${portions}x)`,
+    name: displayName,
     kcal: Math.round(recipe.kcal * factor),
     protein: Math.round(recipe.protein * factor),
     carbs: Math.round(recipe.carbs * factor),
@@ -2893,6 +2968,28 @@ window.exportJSON = function() {
   a.click();
   
   showToast('✓ Export fertig');
+};
+
+window.clearOldData = function() {
+  if (!confirm('⚠️ Alle alten Tracker-Daten (tracker_*) löschen?')) return;
+  
+  // Lösche alte Keys
+  const oldKeys = [
+    'tracker_recipes',
+    'tracker_foodLog', 
+    'tracker_training',
+    'tracker_dayLogs',
+    'tracker_settings',
+    'tracker_foodDB'
+  ];
+  
+  oldKeys.forEach(key => localStorage.removeItem(key));
+  
+  showToast('✓ Alte Daten gelöscht - Seite wird neu geladen...');
+  
+  setTimeout(() => {
+    location.reload();
+  }, 1500);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

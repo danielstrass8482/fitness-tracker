@@ -1245,11 +1245,11 @@ window.settings = settings;
 // STORAGE
 // ═══════════════════════════════════════════════════════════════════════════
 function saveLS(key, value) {
-  localStorage.setItem('tracker_' + key, JSON.stringify(value));
+  localStorage.setItem('tracker_v2_' + key, JSON.stringify(value));
 }
 
 function loadLS(key) {
-  const item = localStorage.getItem('tracker_' + key);
+  const item = localStorage.getItem('tracker_v2_' + key);
   return item ? JSON.parse(item) : null;
 }
 

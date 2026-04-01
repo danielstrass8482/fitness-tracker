@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Training & Ernährung</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface2: #1a1a1a;
+  --border: #2a2a2a;
+  --text: #e8e8e8;
+  --muted: #888;
+  --primary: #4a9eff;
+  --success: #44ff88;
+  --danger: #ff4466;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Header */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.auth-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.tab {
+  padding: 12px 24px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Panels */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+input, select, textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Buttons */
+.btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn:hover { opacity: 0.9; }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* Grid */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Date Bar */
+.date-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.date-bar button {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.date-bar button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.date-label {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.date-sub {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Meals */
+.meal-category {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.meal-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.meal-header:hover {
+  background: var(--surface2);
+}
+
+.meal-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.meal-kcal {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.meal-entries {
+  padding: 0 16px 12px;
+}
+
+.meal-entry {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.meal-entry:last-child {
+  border-bottom: none;
+}
+
+.meal-entry-name {
+  font-size: 14px;
+}
+
+.meal-entry-kcal {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Progress bars */
+.progress-bar {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.progress-protein { background: #4a9eff; }
+.progress-carbs { background: #ffd93d; }
+.progress-fat { background: #ff6b9d; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 10000;
+  animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Search */
+.search-box {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  margin-top: 4px;
+}
+
+.search-result {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-result:hover {
+  background: var(--surface2);
+}
+
+.search-result:last-child {
+  border-bottom: none;
+}
+
+.search-result-name {
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.search-result-info {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  body { padding: 12px; }
+  h1 { font-size: 20px; }
+  .tabs { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Training & Ernährung</h1>
+  <div class="auth-info">
+    <button class="btn-ghost btn-sm" id="auth-btn" onclick="handleAuth()">Anmelden</button>
+    <span id="auth-status">Offline</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('training')">Training</button>
+  <button class="tab" onclick="switchTab('food')">Ernährung</button>
+  <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab" onclick="switchTab('data')">Daten</button>
+</div>
+
+<!-- TRAINING TAB -->
+<div id="panel-training" class="panel active">
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-title">Training Loggen</div>
+        <div class="form-group">
+          <label>Datum</label>
+          <input type="date" id="training-date">
+        </div>
+        <div class="form-group">
+          <label>Typ</label>
+          <select id="training-type">
+            <option value="pull">Pull-ups</option>
+            <option value="push">Push-ups</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Variante</label>
+          <select id="training-variante">
+            <optgroup label="Pull-ups">
+              <option>Regulär</option>
+              <option>Reverse Grip</option>
+              <option>Hammer Grip</option>
+            </optgroup>
+            <optgroup label="Push-ups">
+              <option>Weit</option>
+              <option>Eng</option>
+              <option>Diamond</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sets (z.B. 11-10-7)</label>
+          <input type="text" id="training-sets" placeholder="11-10-7">
+        </div>
+        <div class="form-group">
+          <label>PR?</label>
+          <select id="training-pr">
+            <option value="nein">Nein</option>
+            <option value="ja">Ja - PR! 🏆</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notizen</label>
+          <textarea id="training-notiz"></textarea>
+        </div>
+        <button class="btn" onclick="saveTrainingEntry()">Training speichern</button>
+      </div>
+    </div>
+    
+    <div>
+      <div class="card">
+        <div class="card-title">Tageslog</div>
+        <div class="form-group">
+          <label>Datum</label>
+          <input type="date" id="log-date">
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Gewicht (kg)</label>
+            <input type="number" id="log-weight" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Schritte</label>
+            <input type="number" id="log-steps">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Kalorien</label>
+            <input type="number" id="log-kcal">
+          </div>
+          <div class="form-group">
+            <label>Protein (g)</label>
+            <input type="number" id="log-protein">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Kohlenhydrate (g)</label>
+            <input type="number" id="log-carbs">
+          </div>
+          <div class="form-group">
+            <label>Ruheherzfrequenz (bpm)</label>
+            <input type="number" id="log-rhf">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Schlafqualität (1-5)</label>
+          <input type="number" id="log-sleep" min="1" max="5" step="1">
+        </div>
+        <div class="form-group">
+          <label>Energie (1-5)</label>
+          <input type="number" id="log-energy" min="1" max="5" step="1">
+        </div>
+        <button class="btn" onclick="saveDayLog()">Tageslog speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOD TAB -->
+<div id="panel-food" class="panel">
+  <div class="date-bar">
+    <button id="date-prev" onclick="changeDate(-1)">‹</button>
+    <div>
+      <div class="date-label" id="date-label">Heute</div>
+      <div class="date-sub" id="date-sub"></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()">📥 Import</button>
+        <button class="btn-sm btn-ghost" onclick="resetFoodData()">🗑️ Reset</button>
+      </div>
+      <input type="file" id="fddb-import" accept=".csv" style="display:none;" onchange="handleFDDBImport(event)">
+    </div>
+    <button id="date-next" onclick="changeDate(1)">›</button>
+  </div>
+
+  <!-- Daily Summary -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value" id="daily-kcal">0</div>
+      <div class="stat-label">kcal gegessen</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="daily-protein">0g</div>
+      <div class="stat-label">Protein</div>
+      <div class="progress-bar">
+        <div class="progress-fill progress-protein" id="protein-bar" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="daily-carbs">0g</div>
+      <div class="stat-label">Kohlenhydrate</div>
+      <div class="progress-bar">
+        <div class="progress-fill progress-carbs" id="carbs-bar" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="daily-fat">0g</div>
+      <div class="stat-label">Fett</div>
+      <div class="progress-bar">
+        <div class="progress-fill progress-fat" id="fat-bar" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Food -->
+  <div class="card">
+    <div class="card-title">Lebensmittel hinzufügen</div>
+    <div class="search-box">
+      <input type="text" id="food-search" placeholder="Suche..." oninput="searchFood()">
+      <div id="search-results" class="search-results" style="display:none;"></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Menge (g)</label>
+        <input type="number" id="food-amount" value="100">
+      </div>
+      <div class="form-group">
+        <label>Uhrzeit</label>
+        <input type="time" id="food-time">
+      </div>
+    </div>
+    <button class="btn" onclick="addFoodEntry()">Hinzufügen</button>
+  </div>
+
+  <!-- Meals -->
+  <div id="meals-container"></div>
+</div>
+
+<!-- DASHBOARD TAB -->
+<div id="panel-dashboard" class="panel">
+  <h2 style="margin-bottom:20px;">Dashboard</h2>
+  
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value" id="dash-weight">—</div>
+      <div class="stat-label">Gewicht (kg)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="dash-avg-kcal">—</div>
+      <div class="stat-label">Ø Kalorien (7 Tage)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="dash-avg-protein">—</div>
+      <div class="stat-label">Ø Protein (7 Tage)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="dash-total-training">—</div>
+      <div class="stat-label">Trainings (7 Tage)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Letzte 7 Tage</div>
+    <div id="dashboard-content">Lade Daten...</div>
+  </div>
+</div>
+
+<!-- DATA TAB -->
+<div id="panel-data" class="panel">
+  <h2 style="margin-bottom:20px;">Daten</h2>
+  
+  <div class="card">
+    <div class="card-title">Import</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <label class="btn-secondary btn">
+        Garmin CSV
+        <input type="file" accept=".csv" onchange="handleGarminImport(event)" style="display:none;">
+      </label>
+      <label class="btn-secondary btn">
+        FDDB CSV (Ernährung)
+        <input type="file" accept=".csv" onchange="handleFDDBImport(event)" style="display:none;">
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Export</div>
+    <button class="btn" onclick="exportJSON()">JSON Export</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Statistik</div>
+    <div id="data-stats">
+      <p>Training Einträge: <span id="stat-training">0</span></p>
+      <p>Tageslogs: <span id="stat-logs">0</span></p>
+      <p>Ernährungs-Einträge: <span id="stat-food">0</span></p>
+      <p>Rezepte: <span id="stat-recipes">0</span></p>
+      <p>Lebensmittel-DB: <span id="stat-foods">0</span></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ═══════════════════════════════════════════════════════════════════════════
+// FIREBASE SETUP
+// ═══════════════════════════════════════════════════════════════════════════
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, writeBatch, query, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBvTU5OhJnvJW-hYJYYVTro2rNcNr60aCk",
+  authDomain: "fitness-tracker-c6f97.firebaseapp.com",
+  projectId: "fitness-tracker-c6f97",
+  storageBucket: "fitness-tracker-c6f97.firebasestorage.app",
+  messagingSenderId: "187864668697",
+  appId: "1:187864668697:web:e2437802dbb11a23482888"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let userId = null;
+
+window.db = db;
+window.auth = auth;
+
+// Collections
+const userTrainingCol = () => collection(db, 'users', userId, 'entries');
+const userLogCol = () => collection(db, 'users', userId, 'logEntries');
+const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
+const userFoodCol = () => collection(db, 'users', userId, 'foods');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════════════════
+let trainingEntries = [];
+let dayLogs = [];
+let foodLog = {};
+let recipes = [];
+let foodDB = [];
+let currentDate = new Date().toISOString().split('T')[0];
+
+window.trainingEntries = trainingEntries;
+window.dayLogs = dayLogs;
+window.foodLog = foodLog;
+window.recipes = recipes;
+window.foodDB = foodDB;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════════════════════════
+function saveLS(key, value) {
+  localStorage.setItem('tracker_' + key, JSON.stringify(value));
+}
+
+function loadLS(key) {
+  const item = localStorage.getItem('tracker_' + key);
+  return item ? JSON.parse(item) : null;
+}
+
+function loadLocalStorage() {
+  trainingEntries = loadLS('training') || [];
+  dayLogs = loadLS('dayLogs') || [];
+  foodLog = loadLS('foodLog') || {};
+  recipes = loadLS('recipes') || [];
+  foodDB = loadLS('foodDB') || [];
+  
+  window.trainingEntries = trainingEntries;
+  window.dayLogs = dayLogs;
+  window.foodLog = foodLog;
+  window.recipes = recipes;
+  window.foodDB = foodDB;
+}
+
+async function loadAll() {
+  loadLocalStorage();
+  if (!userId) return;
+  
+  try {
+    // Training
+    const trainSnap = await getDocs(userTrainingCol());
+    if (trainSnap.size > 0) {
+      trainingEntries = [];
+      trainSnap.forEach(d => trainingEntries.push(d.data()));
+      saveLS('training', trainingEntries);
+    }
+    
+    // Day logs (filter tageslog from entries)
+    dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+    saveLS('dayLogs', dayLogs);
+    
+    // Food log
+    const foodSnap = await getDocs(userLogCol());
+    if (foodSnap.size > 0) {
+      foodLog = {};
+      foodSnap.forEach(d => {
+        const entry = d.data();
+        if (!foodLog[entry.date]) foodLog[entry.date] = [];
+        foodLog[entry.date].push(entry);
+      });
+      saveLS('foodLog', foodLog);
+    }
+    
+    // Recipes
+    const recipeSnap = await getDocs(userRecipeCol());
+    if (recipeSnap.size > 0) {
+      recipes = [];
+      recipeSnap.forEach(d => recipes.push(d.data()));
+      saveLS('recipes', recipes);
+    }
+    
+    // Food DB
+    const dbSnap = await getDocs(userFoodCol());
+    if (dbSnap.size > 0) {
+      foodDB = [];
+      dbSnap.forEach(d => foodDB.push(d.data()));
+      saveLS('foodDB', foodDB);
+    }
+    
+    renderAll();
+  } catch(e) {
+    console.error('Load error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════════════════════
+window.handleAuth = async function() {
+  if (userId) {
+    if (confirm('Abmelden?')) {
+      await signOut(auth);
+      showToast('✓ Abgemeldet');
+    }
+  } else {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      showToast('✓ Eingeloggt');
+    } catch(e) {
+      console.error('Login failed:', e);
+      showToast('❌ Login fehlgeschlagen');
+    }
+  }
+};
+
+onAuthStateChanged(auth, async (user) => {
+  userId = user ? user.uid : null;
+  window.userId = userId;
+  
+  const btn = document.getElementById('auth-btn');
+  const status = document.getElementById('auth-status');
+  
+  if (user) {
+    btn.textContent = 'Abmelden';
+    status.textContent = user.email || 'Eingeloggt';
+    status.style.color = 'var(--success)';
+    await loadAll();
+  } else {
+    btn.textContent = 'Anmelden';
+    status.textContent = 'Offline';
+    status.style.color = 'var(--muted)';
+    loadLocalStorage();
+  }
+  
+  renderAll();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════════════════
+window.switchTab = function(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  
+  if (tab === 'food') renderFoodLog();
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'data') renderDataStats();
+};
+
+window.showToast = function(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.remove(), 3000);
+};
+
+function formatNum(n) {
+  return n.toLocaleString('de-DE');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRAINING
+// ═══════════════════════════════════════════════════════════════════════════
+window.saveTrainingEntry = async function() {
+  const datum = document.getElementById('training-date').value;
+  const typ = document.getElementById('training-type').value;
+  const variante = document.getElementById('training-variante').value;
+  const sets = document.getElementById('training-sets').value;
+  const pr = document.getElementById('training-pr').value;
+  const notiz = document.getElementById('training-notiz').value;
+  
+  if (!datum || !sets) {
+    showToast('❌ Bitte Datum und Sets ausfüllen');
+    return;
+  }
+  
+  const entry = {
+    id: Date.now(),
+    datum,
+    typ,
+    variante,
+    sets,
+    pr,
+    notiz
+  };
+  
+  trainingEntries.push(entry);
+  saveLS('training', trainingEntries);
+  
+  if (userId) {
+    await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+  }
+  
+  showToast('✓ Training gespeichert');
+  
+  // Reset form
+  document.getElementById('training-sets').value = '';
+  document.getElementById('training-notiz').value = '';
+};
+
+window.saveDayLog = async function() {
+  const datum = document.getElementById('log-date').value;
+  const weight = parseFloat(document.getElementById('log-weight').value) || null;
+  const steps = parseInt(document.getElementById('log-steps').value) || null;
+  const kcal = parseInt(document.getElementById('log-kcal').value) || null;
+  const protein = parseInt(document.getElementById('log-protein').value) || null;
+  const carbs = parseInt(document.getElementById('log-carbs').value) || null;
+  const rhf = parseInt(document.getElementById('log-rhf').value) || null;
+  const sleep = parseInt(document.getElementById('log-sleep').value) || null;
+  const energy = parseInt(document.getElementById('log-energy').value) || null;
+  
+  if (!datum) {
+    showToast('❌ Bitte Datum ausfüllen');
+    return;
+  }
+  
+  // Check if log for this date exists
+  const existing = dayLogs.findIndex(e => e.datum === datum);
+  
+  const entry = {
+    id: existing >= 0 ? dayLogs[existing].id : Date.now(),
+    datum,
+    typ: 'tageslog',
+    weight,
+    steps,
+    kcal,
+    protein,
+    carbs,
+    rhf,
+    sleep,
+    energy
+  };
+  
+  if (existing >= 0) {
+    dayLogs[existing] = entry;
+  } else {
+    dayLogs.push(entry);
+  }
+  
+  // Also update trainingEntries (same collection in Firebase)
+  if (existing >= 0) {
+    const trainIdx = trainingEntries.findIndex(e => e.id === entry.id);
+    if (trainIdx >= 0) trainingEntries[trainIdx] = entry;
+  } else {
+    trainingEntries.push(entry);
+  }
+  
+  saveLS('dayLogs', dayLogs);
+  saveLS('training', trainingEntries);
+  
+  if (userId) {
+    await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+  }
+  
+  showToast('✓ Tageslog gespeichert');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FOOD
+// ═══════════════════════════════════════════════════════════════════════════
+window.changeDate = function(delta) {
+  const d = new Date(currentDate + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  const newDate = d.toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  
+  if (newDate > today) return;
+  
+  currentDate = newDate;
+  updateDateBar();
+  renderFoodLog();
+};
+
+function updateDateBar() {
+  const today = new Date().toISOString().split('T')[0];
+  const d = new Date(currentDate + 'T12:00:00');
+  
+  const label = currentDate === today ? 'Heute' :
+    currentDate === new Date(Date.now() - 86400000).toISOString().split('T')[0] ? 'Gestern' :
+    d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+  
+  const sub = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  
+  document.getElementById('date-label').textContent = label;
+  document.getElementById('date-sub').textContent = sub;
+  
+  const nextBtn = document.getElementById('date-next');
+  nextBtn.disabled = currentDate === today;
+}
+
+window.searchFood = function() {
+  const query = document.getElementById('food-search').value.toLowerCase();
+  const results = document.getElementById('search-results');
+  
+  if (!query || query.length < 2) {
+    results.style.display = 'none';
+    return;
+  }
+  
+  const matches = foodDB.filter(f => 
+    f.name.toLowerCase().includes(query)
+  ).slice(0, 10);
+  
+  if (matches.length === 0) {
+    results.style.display = 'none';
+    return;
+  }
+  
+  results.innerHTML = matches.map(f => `
+    <div class="search-result" onclick="selectFood('${f.name}')">
+      <div class="search-result-name">${f.name}</div>
+      <div class="search-result-info">${f.kcal} kcal · ${f.protein}g P · ${f.carbs}g C · ${f.fat}g F</div>
+    </div>
+  `).join('');
+  
+  results.style.display = 'block';
+};
+
+window.selectFood = function(name) {
+  document.getElementById('food-search').value = name;
+  document.getElementById('search-results').style.display = 'none';
+};
+
+window.addFoodEntry = async function() {
+  const name = document.getElementById('food-search').value;
+  const amount = parseFloat(document.getElementById('food-amount').value) || 100;
+  const time = document.getElementById('food-time').value || getCurrentTime();
+  
+  if (!name) {
+    showToast('❌ Bitte Lebensmittel auswählen');
+    return;
+  }
+  
+  const food = foodDB.find(f => f.name === name);
+  if (!food) {
+    showToast('❌ Lebensmittel nicht gefunden');
+    return;
+  }
+  
+  const factor = amount / 100;
+  const meal = getMealFromTime(time);
+  
+  const entry = {
+    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+    date: currentDate,
+    meal,
+    time,
+    foodId: food.name,
+    amount,
+    name: `${amount}g ${food.name}`,
+    kcal: Math.round(food.kcal * factor),
+    protein: Math.round(food.protein * factor),
+    carbs: Math.round(food.carbs * factor),
+    fat: Math.round(food.fat * factor)
+  };
+  
+  if (!foodLog[currentDate]) foodLog[currentDate] = [];
+  foodLog[currentDate].push(entry);
+  
+  saveLS('foodLog', foodLog);
+  
+  if (userId) {
+    await setDoc(doc(userLogCol(), String(entry.id)), entry);
+  }
+  
+  showToast('✓ Hinzugefügt');
+  
+  // Reset
+  document.getElementById('food-search').value = '';
+  document.getElementById('food-amount').value = '100';
+  
+  renderFoodLog();
+};
+
+function getCurrentTime() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function getMealFromTime(time) {
+  const hour = parseInt(time.split(':')[0]);
+  if (hour >= 6 && hour < 12) return 'Morgens';
+  if (hour >= 12 && hour <= 14) return 'Mittags';
+  if (hour > 14 && hour < 17) return 'Nachmittags';
+  if (hour >= 17 && hour <= 21) return 'Abends';
+  return 'Nachts';
+}
+
+function renderFoodLog() {
+  const entries = foodLog[currentDate] || [];
+  
+  // Calculate totals
+  let totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+  entries.forEach(e => {
+    totalKcal += e.kcal;
+    totalProtein += e.protein;
+    totalCarbs += e.carbs;
+    totalFat += e.fat;
+  });
+  
+  document.getElementById('daily-kcal').textContent = formatNum(totalKcal);
+  document.getElementById('daily-protein').textContent = totalProtein + 'g';
+  document.getElementById('daily-carbs').textContent = totalCarbs + 'g';
+  document.getElementById('daily-fat').textContent = totalFat + 'g';
+  
+  // Progress bars (example: 150g protein goal, 325g carbs, 95g fat)
+  document.getElementById('protein-bar').style.width = Math.min(100, (totalProtein / 150) * 100) + '%';
+  document.getElementById('carbs-bar').style.width = Math.min(100, (totalCarbs / 325) * 100) + '%';
+  document.getElementById('fat-bar').style.width = Math.min(100, (totalFat / 95) * 100) + '%';
+  
+  // Group by meal
+  const meals = {
+    'Morgens': [],
+    'Mittags': [],
+    'Nachmittags': [],
+    'Abends': [],
+    'Nachts': []
+  };
+  
+  entries.forEach(e => {
+    if (meals[e.meal]) meals[e.meal].push(e);
+  });
+  
+  // Render meals
+  const container = document.getElementById('meals-container');
+  container.innerHTML = '';
+  
+  Object.keys(meals).forEach(mealName => {
+    const mealEntries = meals[mealName];
+    if (mealEntries.length === 0) return;
+    
+    const mealKcal = mealEntries.reduce((sum, e) => sum + e.kcal, 0);
+    
+    const mealDiv = document.createElement('div');
+    mealDiv.className = 'meal-category';
+    mealDiv.innerHTML = `
+      <div class="meal-header" onclick="toggleMeal(this)">
+        <div class="meal-title">▼ ${mealName}</div>
+        <div class="meal-kcal">${formatNum(mealKcal)} kcal</div>
+      </div>
+      <div class="meal-entries">
+        ${mealEntries.map(e => `
+          <div class="meal-entry">
+            <div class="meal-entry-name">
+              <span style="color:var(--muted);font-size:11px;margin-right:6px;">${e.time}</span>
+              ${e.name}
+            </div>
+            <div class="meal-entry-kcal">${formatNum(e.kcal)} kcal</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    container.appendChild(mealDiv);
+  });
+}
+
+window.toggleMeal = function(header) {
+  const entries = header.nextElementSibling;
+  const arrow = header.querySelector('.meal-title');
+  
+  if (entries.style.display === 'none') {
+    entries.style.display = 'block';
+    arrow.textContent = '▼' + arrow.textContent.substring(1);
+  } else {
+    entries.style.display = 'none';
+    arrow.textContent = '▶' + arrow.textContent.substring(1);
+  }
+};
+
+window.resetFoodData = async function() {
+  if (!confirm('⚠️ Alle Ernährungsdaten löschen?')) return;
+  if (!confirm('⚠️ WIRKLICH löschen? Nicht rückgängig machbar!')) return;
+  
+  foodLog = {};
+  saveLS('foodLog', foodLog);
+  
+  if (userId) {
+    showToast('⏳ Lösche Firebase-Daten...');
+    
+    const batchSize = 500;
+    let totalDeleted = 0;
+    
+    while (true) {
+      const snapshot = await getDocs(query(userLogCol(), limit(batchSize)));
+      if (snapshot.size === 0) break;
+      
+      const batch = writeBatch(db);
+      snapshot.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      
+      totalDeleted += snapshot.size;
+      showToast(`⏳ ${totalDeleted} gelöscht...`);
+    }
+    
+    showToast(`✓ ${totalDeleted} Einträge gelöscht`);
+  } else {
+    showToast('✓ Daten gelöscht');
+  }
+  
+  renderFoodLog();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+function renderDashboard() {
+  // Get last 7 days
+  const today = new Date();
+  const last7Days = [];
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    last7Days.push(dateStr);
+  }
+  
+  // Calculate averages
+  let totalKcal = 0, totalProtein = 0, daysWithData = 0;
+  let latestWeight = null;
+  let trainingCount = 0;
+  
+  last7Days.forEach(date => {
+    const entries = foodLog[date] || [];
+    if (entries.length > 0) {
+      daysWithData++;
+      entries.forEach(e => {
+        totalKcal += e.kcal;
+        totalProtein += e.protein;
+      });
+    }
+    
+    const dayLog = dayLogs.find(l => l.datum === date);
+    if (dayLog && dayLog.weight && !latestWeight) {
+      latestWeight = dayLog.weight;
+    }
+    
+    const training = trainingEntries.filter(e => e.datum === date && e.typ !== 'tageslog');
+    trainingCount += training.length;
+  });
+  
+  const avgKcal = daysWithData > 0 ? Math.round(totalKcal / daysWithData) : 0;
+  const avgProtein = daysWithData > 0 ? Math.round(totalProtein / daysWithData) : 0;
+  
+  document.getElementById('dash-weight').textContent = latestWeight ? latestWeight + ' kg' : '—';
+  document.getElementById('dash-avg-kcal').textContent = avgKcal > 0 ? formatNum(avgKcal) : '—';
+  document.getElementById('dash-avg-protein').textContent = avgProtein > 0 ? avgProtein + 'g' : '—';
+  document.getElementById('dash-total-training').textContent = trainingCount || '—';
+  
+  // Simple list view
+  const content = document.getElementById('dashboard-content');
+  content.innerHTML = last7Days.map(date => {
+    const entries = foodLog[date] || [];
+    const kcal = entries.reduce((sum, e) => sum + e.kcal, 0);
+    const dayLog = dayLogs.find(l => l.datum === date);
+    const training = trainingEntries.filter(e => e.datum === date && e.typ !== 'tageslog');
+    
+    const d = new Date(date + 'T12:00:00');
+    const dateLabel = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+    
+    return `
+      <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+        <div style="font-weight:600;margin-bottom:4px;">${dateLabel}</div>
+        <div style="font-size:12px;color:var(--muted);">
+          ${kcal > 0 ? formatNum(kcal) + ' kcal' : 'Keine Daten'}
+          ${dayLog && dayLog.weight ? ' · ' + dayLog.weight + 'kg' : ''}
+          ${training.length > 0 ? ' · ' + training.length + ' Training' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA / IMPORT
+// ═══════════════════════════════════════════════════════════════════════════
+function renderDataStats() {
+  document.getElementById('stat-training').textContent = trainingEntries.filter(e => e.typ !== 'tageslog').length;
+  document.getElementById('stat-logs').textContent = dayLogs.length;
+  
+  let foodCount = 0;
+  Object.values(foodLog).forEach(entries => foodCount += entries.length);
+  document.getElementById('stat-food').textContent = foodCount;
+  
+  document.getElementById('stat-recipes').textContent = recipes.length;
+  document.getElementById('stat-foods').textContent = foodDB.length;
+}
+
+window.handleFDDBImport = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => parseFDDBCSV(e.target.result);
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = '';
+};
+
+function parseFDDBCSV(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) {
+    showToast('❌ Keine Daten gefunden');
+    return;
+  }
+  
+  const dataLines = lines.slice(1);
+  const entries = [];
+  
+  dataLines.forEach(line => {
+    const parts = line.split(';');
+    if (parts.length < 8) return;
+    
+    const datumStr = parts[0].replace(/"/g, '').trim();
+    const bezeichnung = parts[1].replace(/"/g, '').trim();
+    const kj = parseFloat(parts[3].replace(/"/g, '').replace(',', '.')) || 0;
+    const fat = parseFloat(parts[5].replace(/"/g, '').replace(',', '.')) || 0;
+    const carbs = parseFloat(parts[6].replace(/"/g, '').replace(',', '.')) || 0;
+    const protein = parseFloat(parts[7].replace(/"/g, '').replace(',', '.')) || 0;
+    
+    const dateMatch = datumStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!dateMatch) return;
+    
+    const date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+    const kcal = Math.round(kj / 4.184);
+    
+    const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
+    let hour = timeMatch ? parseInt(timeMatch[1]) : 12;
+    const minute = timeMatch ? parseInt(timeMatch[2]) : 0;
+    
+    // DST correction for entries before 2026-03-30
+    const dstDate = new Date('2026-03-30T02:00:00');
+    const entryDate = new Date(date + 'T00:00:00');
+    
+    if (entryDate < dstDate && timeMatch) {
+      hour = hour - 1;
+      if (hour < 0) hour = 23;
+    }
+    
+    const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    const meal = getMealFromTime(time);
+    
+    entries.push({
+      date,
+      meal,
+      time,
+      name: bezeichnung,
+      kcal: Math.round(kcal),
+      protein: Math.round(protein),
+      carbs: Math.round(carbs),
+      fat: Math.round(fat)
+    });
+  });
+  
+  if (entries.length === 0) {
+    showToast('❌ Keine gültigen Einträge');
+    return;
+  }
+  
+  const byDate = {};
+  entries.forEach(e => {
+    if (!byDate[e.date]) byDate[e.date] = [];
+    byDate[e.date].push(e);
+  });
+  
+  const confirmMsg = `${entries.length} Einträge über ${Object.keys(byDate).length} Tage gefunden.\n\nImportieren?`;
+  if (!confirm(confirmMsg)) return;
+  
+  let imported = 0;
+  let skipped = 0;
+  
+  entries.forEach(entry => {
+    if (!foodLog[entry.date]) foodLog[entry.date] = [];
+    
+    const isDuplicate = foodLog[entry.date].some(e => {
+      const sameBasics = e.meal === entry.meal && 
+                        e.name === entry.name && 
+                        Math.abs(e.kcal - entry.kcal) < 2;
+      
+      if (e.time && entry.time) {
+        return sameBasics && e.time === entry.time;
+      }
+      
+      return sameBasics;
+    });
+    
+    if (isDuplicate) {
+      skipped++;
+      return;
+    }
+    
+    const logEntry = {
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      date: entry.date,
+      meal: entry.meal,
+      time: entry.time,
+      foodId: null,
+      amount: 0,
+      name: entry.name,
+      kcal: entry.kcal,
+      protein: entry.protein,
+      carbs: entry.carbs,
+      fat: entry.fat
+    };
+    
+    foodLog[entry.date].push(logEntry);
+    imported++;
+  });
+  
+  saveLS('foodLog', foodLog);
+  
+  if (userId) {
+    const newEntries = [];
+    entries.forEach(entry => {
+      const dateEntries = foodLog[entry.date] || [];
+      const found = dateEntries.find(e => 
+        e.meal === entry.meal && 
+        e.name === entry.name && 
+        Math.abs(e.kcal - entry.kcal) < 2 &&
+        e.time === entry.time
+      );
+      if (found) newEntries.push(found);
+    });
+    
+    let synced = 0;
+    const batchSize = 50;
+    const syncBatch = async (startIdx) => {
+      const batch = newEntries.slice(startIdx, startIdx + batchSize);
+      const promises = batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry));
+      await Promise.all(promises);
+      synced += batch.length;
+      
+      if (synced < newEntries.length) {
+        showToast(`⏳ Synchronisiere... ${synced}/${newEntries.length}`);
+        setTimeout(() => syncBatch(startIdx + batchSize), 100);
+      } else {
+        const msg = skipped > 0 
+          ? `✓ ${imported} neu importiert, ${skipped} Duplikate übersprungen`
+          : `✓ ${imported} Einträge importiert`;
+        showToast(msg);
+        renderFoodLog();
+      }
+    };
+    
+    syncBatch(0);
+  } else {
+    const msg = skipped > 0 
+      ? `✓ ${imported} neu, ${skipped} übersprungen`
+      : `✓ ${imported} Einträge importiert`;
+    showToast(msg);
+    renderFoodLog();
+  }
+}
+
+window.handleGarminImport = function(event) {
+  showToast('ℹ️ Garmin Import wird noch implementiert');
+  event.target.value = '';
+};
+
+window.exportJSON = function() {
+  const data = {
+    trainingEntries,
+    dayLogs,
+    foodLog,
+    recipes,
+    foodDB,
+    exported: new Date().toISOString()
+  };
+  
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tracker-export-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  
+  showToast('✓ Export fertig');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+function renderAll() {
+  updateDateBar();
+  renderFoodLog();
+  renderDashboard();
+  renderDataStats();
+}
+
+// Set default dates
+document.getElementById('training-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('food-time').value = getCurrentTime();
+
+// Load initial data
+loadLocalStorage();
+renderAll();
+
+// Load food DB from embedded data
+foodDB = [
+  // Top 50 most common foods for quick start
+  {name:"Hähnchenbrust", kcal:165, protein:31, carbs:0, fat:3.6},
+  {name:"Reis gekocht", kcal:130, protein:2.7, carbs:28, fat:0.3},
+  {name:"Vollkornbrot", kcal:217, protein:7.3, carbs:40, fat:2.8},
+  {name:"Haferflocken", kcal:368, protein:13, carbs:58, fat:7},
+  {name:"Ei gekocht", kcal:155, protein:13, carbs:1.1, fat:11},
+  {name:"Banane", kcal:89, protein:1.1, carbs:23, fat:0.3},
+  {name:"Apfel", kcal:52, protein:0.3, carbs:14, fat:0.2},
+  {name:"Brokkoli", kcal:34, protein:2.8, carbs:7, fat:0.4},
+  {name:"Kartoffel gekocht", kcal:77, protein:2, carbs:17, fat:0.1},
+  {name:"Lachs", kcal:208, protein:20, carbs:0, fat:13},
+  {name:"Thunfisch Dose", kcal:116, protein:26, carbs:0, fat:0.8},
+  {name:"Pute", kcal:111, protein:24, carbs:0, fat:1.2},
+  {name:"Rind Steak", kcal:250, protein:26, carbs:0, fat:15},
+  {name:"Tofu", kcal:76, protein:8, carbs:1.9, fat:4.8},
+  {name:"Linsen gekocht", kcal:116, protein:9, carbs:20, fat:0.4},
+  {name:"Kichererbsen", kcal:164, protein:8.9, carbs:27, fat:2.6},
+  {name:"Quinoa gekocht", kcal:120, protein:4.4, carbs:21, fat:1.9},
+  {name:"Nudeln gekocht", kcal:131, protein:5, carbs:25, fat:1.1},
+  {name:"Süßkartoffel", kcal:86, protein:1.6, carbs:20, fat:0.1},
+  {name:"Avocado", kcal:160, protein:2, carbs:9, fat:15},
+  {name:"Mandeln", kcal:579, protein:21, carbs:22, fat:50},
+  {name:"Erdnussbutter", kcal:588, protein:25, carbs:20, fat:50},
+  {name:"Joghurt Natur", kcal:59, protein:3.5, carbs:4.7, fat:3.3},
+  {name:"Magerquark", kcal:67, protein:13, carbs:4, fat:0.2},
+  {name:"Körniger Frischkäse", kcal:98, protein:11, carbs:3.3, fat:4.3},
+  {name:"Milch 1.5%", kcal:47, protein:3.4, carbs:4.9, fat:1.5},
+  {name:"Käse Gouda", kcal:356, protein:25, carbs:0, fat:28},
+  {name:"Tomate", kcal:18, protein:0.9, carbs:3.9, fat:0.2},
+  {name:"Gurke", kcal:15, protein:0.7, carbs:3.6, fat:0.1},
+  {name:"Paprika", kcal:31, protein:1, carbs:6, fat:0.3},
+  {name:"Spinat", kcal:23, protein:2.9, carbs:3.6, fat:0.4},
+  {name:"Salat", kcal:14, protein:1.4, carbs:2.2, fat:0.2},
+  {name:"Karotte", kcal:41, protein:0.9, carbs:10, fat:0.2},
+  {name:"Zwiebel", kcal:40, protein:1.1, carbs:9, fat:0.1},
+  {name:"Knoblauch", kcal:149, protein:6.4, carbs:33, fat:0.5},
+  {name:"Olivenöl", kcal:884, protein:0, carbs:0, fat:100},
+  {name:"Butter", kcal:717, protein:0.9, carbs:0.7, fat:81},
+  {name:"Honig", kcal:304, protein:0.3, carbs:82, fat:0},
+  {name:"Zucker", kcal:387, protein:0, carbs:100, fat:0},
+  {name:"Mehl", kcal:364, protein:10, carbs:76, fat:1},
+  {name:"Proteinpulver", kcal:370, protein:80, carbs:7, fat:3},
+  {name:"Whey Protein", kcal:370, protein:80, carbs:5, fat:3.5},
+  {name:"Kaffee schwarz", kcal:2, protein:0.1, carbs:0, fat:0},
+  {name:"Tee ohne Zucker", kcal:1, protein:0, carbs:0.3, fat:0},
+  {name:"Cola", kcal:42, protein:0, carbs:10.6, fat:0},
+  {name:"Cola Zero", kcal:0.2, protein:0, carbs:0, fat:0},
+  {name:"Bier", kcal:43, protein:0.5, carbs:3.6, fat:0},
+  {name:"Wein rot", kcal:85, protein:0.1, carbs:2.6, fat:0},
+  {name:"Schokolade", kcal:546, protein:5.2, carbs:59, fat:31},
+  {name:"Chips", kcal:536, protein:6.6, carbs:52, fat:35}
+];
+
+saveLS('foodDB', foodDB);
+
+</script>
+
+</body>
+</html>

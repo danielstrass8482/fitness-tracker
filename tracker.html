@@ -604,8 +604,8 @@ textarea {
             <input type="number" id="log-weight" step="0.1">
           </div>
           <div class="form-group">
-            <label>Schritte</label>
-            <input type="number" id="log-steps">
+            <label>Schritte (Default: 10.000)</label>
+            <input type="number" id="log-steps" placeholder="10000">
           </div>
         </div>
         <div class="grid-2">
@@ -613,6 +613,12 @@ textarea {
             <label>Kalorien</label>
             <input type="number" id="log-kcal">
           </div>
+          <div class="form-group">
+            <label>Aktivitätskalorien</label>
+            <input type="number" id="log-activity-kcal" placeholder="z.B. 300">
+          </div>
+        </div>
+        <div class="grid-2">
           <div class="form-group">
             <label>Protein (g)</label>
             <input type="number" id="log-protein">
@@ -649,6 +655,7 @@ textarea {
   <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--border);">
     <button class="tab active" id="food-subtab-diary" onclick="switchFoodTab('diary')">Tagebuch</button>
     <button class="tab" id="food-subtab-recipes" onclick="switchFoodTab('recipes')">Rezepte</button>
+    <button class="tab" id="food-subtab-db" onclick="switchFoodTab('db')">Lebensmittel-DB</button>
   </div>
 
   <!-- DIARY SUBTAB -->
@@ -671,25 +678,25 @@ textarea {
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-value" id="daily-kcal">0</div>
-      <div class="stat-label">kcal gegessen</div>
+      <div class="stat-label" id="daily-kcal-goal">/ 0 kcal (0%)</div>
     </div>
     <div class="stat-card">
       <div class="stat-value" id="daily-protein">0g</div>
-      <div class="stat-label">Protein</div>
+      <div class="stat-label" id="daily-protein-goal">/ 0g (0%)</div>
       <div class="progress-bar">
         <div class="progress-fill progress-protein" id="protein-bar" style="width: 0%"></div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-value" id="daily-carbs">0g</div>
-      <div class="stat-label">Kohlenhydrate</div>
+      <div class="stat-label" id="daily-carbs-goal">/ 0g (0%)</div>
       <div class="progress-bar">
         <div class="progress-fill progress-carbs" id="carbs-bar" style="width: 0%"></div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-value" id="daily-fat">0g</div>
-      <div class="stat-label">Fett</div>
+      <div class="stat-label" id="daily-fat-goal">/ 0g (0%)</div>
       <div class="progress-bar">
         <div class="progress-fill progress-fat" id="fat-bar" style="width: 0%"></div>
       </div>
@@ -830,6 +837,83 @@ textarea {
 
     <!-- Rezepte Liste -->
     <div id="recipes-list"></div>
+  </div>
+
+  <!-- FOOD-DB SUBTAB -->
+  <div id="food-db" class="food-subtab" style="display:none;">
+    
+    <!-- Food-DB Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:600;">Lebensmittel-DB</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-food-import').click()">📄 CSV Import</button>
+        <button class="btn-secondary btn-sm" onclick="syncFoodDB()">🔄 Sync</button>
+        <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
+      </div>
+    </div>
+    <input type="file" id="fddb-food-import" accept=".csv" style="display:none;" onchange="handleFoodDBImport(event)">
+
+    <!-- 0 kcal Filter -->
+    <div style="margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="zero-kcal-filter" onchange="renderFoodDB()">
+        <span style="font-size:13px;">⚠️ Nur 0 kcal anzeigen</span>
+      </label>
+    </div>
+
+    <!-- Food Search -->
+    <div style="margin-bottom:20px;">
+      <input type="text" id="food-db-search" placeholder="🔍 Suchen..." 
+             oninput="renderFoodDB()" 
+             style="width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+    </div>
+
+    <!-- Food Liste -->
+    <div id="food-db-list"></div>
+  </div>
+
+  <!-- Food Modal -->
+  <div id="food-modal" class="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="food-modal-title">Neues Lebensmittel</div>
+        <button class="modal-close" onclick="closeFoodModal()">✕</button>
+      </div>
+      
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="food-modal-name" placeholder="z.B. Hähnchenbrust">
+      </div>
+      
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Alle Angaben pro 100g:</div>
+      
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Kalorien</label>
+          <input type="number" id="food-modal-kcal" placeholder="165">
+        </div>
+        <div class="form-group">
+          <label>Protein (g)</label>
+          <input type="number" id="food-modal-protein" placeholder="31">
+        </div>
+      </div>
+      
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Kohlenhydrate (g)</label>
+          <input type="number" id="food-modal-carbs" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Fett (g)</label>
+          <input type="number" id="food-modal-fat" placeholder="3.6">
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary" onclick="closeFoodModal()">Abbrechen</button>
+        <button class="btn" onclick="saveFoodModal()" style="flex:1;">Speichern</button>
+      </div>
+    </div>
   </div>
 
   <!-- Rezept Modal -->
@@ -1010,16 +1094,43 @@ textarea {
 
   <!-- Grundumsatz -->
   <div class="card">
-    <div class="card-title">Grundumsatz (BMR)</div>
+    <div class="card-title">Grundumsatz & Tagesbedarf</div>
+    
     <div style="background:var(--surface2);border-radius:8px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Berechneter Grundumsatz:</div>
-      <div style="font-size:28px;font-weight:600;" id="calculated-bmr">—</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">kcal/Tag (Mifflin-St Jeor Formel)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Grundumsatz (BMR):</div>
+          <div style="font-size:24px;font-weight:600;" id="calculated-bmr">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">kcal/Tag</div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Tagesbedarf (TDEE):</div>
+          <div style="font-size:24px;font-weight:600;" id="calculated-tdee">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">kcal/Tag</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        Mifflin-St Jeor Formel × Aktivitätsfaktor
+      </div>
     </div>
     
     <div class="form-group">
-      <label>Grundumsatz manuell überschreiben</label>
-      <input type="number" id="settings-bmr-manual" placeholder="Leer lassen für automatische Berechnung">
+      <label>Aktivitätsfaktor</label>
+      <select id="settings-activity-factor">
+        <option value="1.2">1.2 - Sitzend (Bürojob, wenig Bewegung)</option>
+        <option value="1.375">1.375 - Leicht aktiv (1-3 Tage Sport/Woche)</option>
+        <option value="1.55">1.55 - Aktiv (3-5 Tage Sport/Woche)</option>
+        <option value="1.725">1.725 - Sehr aktiv (6-7 Tage Sport/Woche)</option>
+        <option value="1.9">1.9 - Extrem aktiv (2x täglich Training)</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>Tagesbedarf manuell überschreiben</label>
+      <input type="number" id="settings-tdee-manual" placeholder="Leer lassen für automatische Berechnung">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+        Tipp: Vergleiche mit deinem Garmin "Tagesbedarf" und überschreibe wenn nötig
+      </div>
     </div>
     
     <div style="display:flex;gap:8px;">
@@ -1094,7 +1205,8 @@ let settings = {
   age: null,
   height: null,
   weight: null,
-  bmrManual: null,
+  activityFactor: 1.2,
+  tdeeManual: null,
   proteinGoal: 150,
   carbsGoal: 325,
   fatGoal: 95
@@ -1130,7 +1242,8 @@ function loadLocalStorage() {
     age: null,
     height: null,
     weight: null,
-    bmrManual: null,
+    activityFactor: 1.2,
+    tdeeManual: null,
     proteinGoal: 150,
     carbsGoal: 325,
     fatGoal: 95
@@ -1265,7 +1378,8 @@ function renderSettings() {
   document.getElementById('settings-age').value = settings.age || '';
   document.getElementById('settings-height').value = settings.height || '';
   document.getElementById('settings-weight').value = settings.weight || '';
-  document.getElementById('settings-bmr-manual').value = settings.bmrManual || '';
+  document.getElementById('settings-activity-factor').value = settings.activityFactor || 1.2;
+  document.getElementById('settings-tdee-manual').value = settings.tdeeManual || '';
   document.getElementById('settings-protein-goal').value = settings.proteinGoal || 150;
   document.getElementById('settings-carbs-goal').value = settings.carbsGoal || 325;
   document.getElementById('settings-fat-goal').value = settings.fatGoal || 95;
@@ -1278,10 +1392,11 @@ window.calculateBMR = function() {
   const age = parseInt(document.getElementById('settings-age').value);
   const height = parseInt(document.getElementById('settings-height').value);
   const weight = parseFloat(document.getElementById('settings-weight').value);
+  const activityFactor = parseFloat(document.getElementById('settings-activity-factor').value) || 1.2;
   
   if (!age || !height || !weight) {
     document.getElementById('calculated-bmr').textContent = '—';
-    document.getElementById('calculated-bmr').nextElementSibling.textContent = 'Bitte alle Felder ausfüllen';
+    document.getElementById('calculated-tdee').textContent = '—';
     return;
   }
   
@@ -1294,9 +1409,10 @@ window.calculateBMR = function() {
   }
   
   bmr = Math.round(bmr);
+  const tdee = Math.round(bmr * activityFactor);
   
   document.getElementById('calculated-bmr').textContent = formatNum(bmr);
-  document.getElementById('calculated-bmr').nextElementSibling.textContent = 'kcal/Tag (Mifflin-St Jeor Formel)';
+  document.getElementById('calculated-tdee').textContent = formatNum(tdee);
 };
 
 window.saveSettings = function() {
@@ -1304,7 +1420,8 @@ window.saveSettings = function() {
   settings.age = parseInt(document.getElementById('settings-age').value) || null;
   settings.height = parseInt(document.getElementById('settings-height').value) || null;
   settings.weight = parseFloat(document.getElementById('settings-weight').value) || null;
-  settings.bmrManual = parseInt(document.getElementById('settings-bmr-manual').value) || null;
+  settings.activityFactor = parseFloat(document.getElementById('settings-activity-factor').value) || 1.2;
+  settings.tdeeManual = parseInt(document.getElementById('settings-tdee-manual').value) || null;
   settings.proteinGoal = parseInt(document.getElementById('settings-protein-goal').value) || 150;
   settings.carbsGoal = parseInt(document.getElementById('settings-carbs-goal').value) || 325;
   settings.fatGoal = parseInt(document.getElementById('settings-fat-goal').value) || 95;
@@ -1322,13 +1439,157 @@ window.switchFoodTab = function(subtab) {
   // Update subtab buttons
   document.getElementById('food-subtab-diary').classList.remove('active');
   document.getElementById('food-subtab-recipes').classList.remove('active');
+  document.getElementById('food-subtab-db').classList.remove('active');
   document.getElementById('food-subtab-' + subtab).classList.add('active');
   
   // Show/hide subtabs
   document.getElementById('food-diary').style.display = subtab === 'diary' ? 'block' : 'none';
   document.getElementById('food-recipes').style.display = subtab === 'recipes' ? 'block' : 'none';
+  document.getElementById('food-db').style.display = subtab === 'db' ? 'block' : 'none';
   
   if (subtab === 'recipes') renderRecipes();
+  if (subtab === 'db') renderFoodDB();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FOOD DB
+// ═══════════════════════════════════════════════════════════════════════════
+let currentFoodId = null;
+
+window.openNewFood = function() {
+  currentFoodId = null;
+  document.getElementById('food-modal-title').textContent = 'Neues Lebensmittel';
+  document.getElementById('food-modal-name').value = '';
+  document.getElementById('food-modal-kcal').value = '';
+  document.getElementById('food-modal-protein').value = '';
+  document.getElementById('food-modal-carbs').value = '';
+  document.getElementById('food-modal-fat').value = '';
+  document.getElementById('food-modal').classList.add('open');
+};
+
+window.closeFoodModal = function() {
+  document.getElementById('food-modal').classList.remove('open');
+};
+
+window.saveFoodModal = async function() {
+  const name = document.getElementById('food-modal-name').value.trim();
+  const kcal = parseFloat(document.getElementById('food-modal-kcal').value) || 0;
+  const protein = parseFloat(document.getElementById('food-modal-protein').value) || 0;
+  const carbs = parseFloat(document.getElementById('food-modal-carbs').value) || 0;
+  const fat = parseFloat(document.getElementById('food-modal-fat').value) || 0;
+  
+  if (!name) {
+    showToast('❌ Bitte Namen eingeben');
+    return;
+  }
+  
+  const food = { name, kcal, protein, carbs, fat };
+  
+  if (currentFoodId !== null) {
+    // Edit existing
+    foodDB[currentFoodId] = food;
+  } else {
+    // Add new
+    foodDB.push(food);
+  }
+  
+  saveLS('foodDB', foodDB);
+  
+  if (userId) {
+    const id = currentFoodId !== null ? currentFoodId : Date.now();
+    await setDoc(doc(userFoodCol(), String(id)), food);
+  }
+  
+  showToast('✓ Lebensmittel gespeichert');
+  closeFoodModal();
+  renderFoodDB();
+};
+
+window.editFood = function(index) {
+  const food = foodDB[index];
+  if (!food) return;
+  
+  currentFoodId = index;
+  document.getElementById('food-modal-title').textContent = 'Lebensmittel bearbeiten';
+  document.getElementById('food-modal-name').value = food.name;
+  document.getElementById('food-modal-kcal').value = food.kcal;
+  document.getElementById('food-modal-protein').value = food.protein;
+  document.getElementById('food-modal-carbs').value = food.carbs;
+  document.getElementById('food-modal-fat').value = food.fat;
+  document.getElementById('food-modal').classList.add('open');
+};
+
+window.deleteFood = async function(index) {
+  if (!confirm('Lebensmittel wirklich löschen?')) return;
+  
+  foodDB.splice(index, 1);
+  saveLS('foodDB', foodDB);
+  
+  if (userId) {
+    await deleteDoc(doc(userFoodCol(), String(index)));
+  }
+  
+  showToast('✓ Lebensmittel gelöscht');
+  renderFoodDB();
+};
+
+function renderFoodDB() {
+  const container = document.getElementById('food-db-list');
+  const searchQuery = document.getElementById('food-db-search')?.value.toLowerCase() || '';
+  const zeroFilter = document.getElementById('zero-kcal-filter')?.checked || false;
+  
+  let filtered = foodDB;
+  
+  if (searchQuery) {
+    filtered = filtered.filter(f => f.name.toLowerCase().includes(searchQuery));
+  }
+  
+  if (zeroFilter) {
+    filtered = filtered.filter(f => f.kcal === 0);
+  }
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Keine Lebensmittel gefunden</div>';
+    return;
+  }
+  
+  container.innerHTML = filtered.map(f => {
+    const actualIndex = foodDB.indexOf(f);
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="editFood(${actualIndex})">
+        <div style="flex:1;">
+          <div style="font-weight:600;margin-bottom:4px;">${f.name}</div>
+          <div style="font-size:12px;color:var(--muted);">
+            ${formatNum(f.kcal)} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g / 100g
+          </div>
+        </div>
+        <div class="recipe-card-arrow" onclick="event.stopPropagation(); deleteFood(${actualIndex})" style="background:var(--danger);border-color:var(--danger);color:white;">✕</div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.syncFoodDB = async function() {
+  if (!userId) {
+    showToast('❌ Bitte einloggen');
+    return;
+  }
+  
+  showToast('⏳ Synchronisiere...');
+  
+  // Upload all foods
+  const promises = foodDB.map((food, index) => 
+    setDoc(doc(userFoodCol(), String(index)), food)
+  );
+  
+  await Promise.all(promises);
+  
+  showToast('✓ Synchronisiert');
+};
+
+window.handleFoodDBImport = function(event) {
+  showToast('ℹ️ Food-DB Import wird noch implementiert');
+  event.target.value = '';
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1612,7 +1873,7 @@ function renderRecipes() {
             <span style="color:#ff6b9d;">F ${per100g.fat}g</span>
           </div>
         </div>
-        <div class="recipe-card-arrow" onclick="openRecipeEat(${r.id})">→</div>
+        <div class="recipe-card-arrow" onclick="event.stopPropagation(); openRecipeEat(${r.id})">→</div>
       </div>
     `;
   }).join('');
@@ -1679,6 +1940,7 @@ window.saveDayLog = async function() {
   const weight = parseFloat(document.getElementById('log-weight').value) || null;
   const steps = parseInt(document.getElementById('log-steps').value) || null;
   const kcal = parseInt(document.getElementById('log-kcal').value) || null;
+  const activityKcal = parseInt(document.getElementById('log-activity-kcal').value) || null;
   const protein = parseInt(document.getElementById('log-protein').value) || null;
   const carbs = parseInt(document.getElementById('log-carbs').value) || null;
   const rhf = parseInt(document.getElementById('log-rhf').value) || null;
@@ -1700,6 +1962,7 @@ window.saveDayLog = async function() {
     weight,
     steps,
     kcal,
+    activityKcal,
     protein,
     carbs,
     rhf,
@@ -1729,6 +1992,9 @@ window.saveDayLog = async function() {
   }
   
   showToast('✓ Tageslog gespeichert');
+  
+  // Update food log if we're on that tab
+  renderFoodLog();
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2084,19 +2350,54 @@ function renderFoodLog() {
     totalFat += e.fat;
   });
   
-  document.getElementById('daily-kcal').textContent = formatNum(totalKcal);
-  document.getElementById('daily-protein').textContent = totalProtein + 'g';
-  document.getElementById('daily-carbs').textContent = totalCarbs + 'g';
-  document.getElementById('daily-fat').textContent = totalFat + 'g';
+  // Get goals for today
+  const todayLog = dayLogs.find(l => l.datum === currentDate);
+  const steps = todayLog?.steps || 10000; // Default 10.000 Schritte
+  const activityKcal = todayLog?.activityKcal || 0;
   
-  // Progress bars mit Settings-Zielen
+  // TDEE: manual override OR calculated (BMR × ActivityFactor)
+  let tdee = 0;
+  if (settings.tdeeManual) {
+    tdee = settings.tdeeManual;
+  } else if (settings.age && settings.height && settings.weight) {
+    let bmr;
+    if (settings.gender === 'male') {
+      bmr = (10 * settings.weight) + (6.25 * settings.height) - (5 * settings.age) + 5;
+    } else {
+      bmr = (10 * settings.weight) + (6.25 * settings.height) - (5 * settings.age) - 161;
+    }
+    const activityFactor = settings.activityFactor || 1.2;
+    tdee = Math.round(bmr * activityFactor);
+  }
+  
+  // Kalorienziel = Tagesbedarf (TDEE) + Aktivitätskalorien
+  const kcalGoal = tdee + activityKcal;
   const proteinGoal = settings.proteinGoal || 150;
   const carbsGoal = settings.carbsGoal || 325;
   const fatGoal = settings.fatGoal || 95;
   
-  document.getElementById('protein-bar').style.width = Math.min(100, (totalProtein / proteinGoal) * 100) + '%';
-  document.getElementById('carbs-bar').style.width = Math.min(100, (totalCarbs / carbsGoal) * 100) + '%';
-  document.getElementById('fat-bar').style.width = Math.min(100, (totalFat / fatGoal) * 100) + '%';
+  // Calculate percentages
+  const kcalPct = kcalGoal > 0 ? Math.round((totalKcal / kcalGoal) * 100) : 0;
+  const proteinPct = proteinGoal > 0 ? Math.round((totalProtein / proteinGoal) * 100) : 0;
+  const carbsPct = carbsGoal > 0 ? Math.round((totalCarbs / carbsGoal) * 100) : 0;
+  const fatPct = fatGoal > 0 ? Math.round((totalFat / fatGoal) * 100) : 0;
+  
+  document.getElementById('daily-kcal').textContent = formatNum(totalKcal);
+  document.getElementById('daily-kcal-goal').textContent = `/ ${formatNum(kcalGoal)} kcal (${kcalPct}%)`;
+  
+  document.getElementById('daily-protein').textContent = totalProtein + 'g';
+  document.getElementById('daily-protein-goal').textContent = `/ ${proteinGoal}g (${proteinPct}%)`;
+  
+  document.getElementById('daily-carbs').textContent = totalCarbs + 'g';
+  document.getElementById('daily-carbs-goal').textContent = `/ ${carbsGoal}g (${carbsPct}%)`;
+  
+  document.getElementById('daily-fat').textContent = totalFat + 'g';
+  document.getElementById('daily-fat-goal').textContent = `/ ${fatGoal}g (${fatPct}%)`;
+  
+  // Progress bars mit Settings-Zielen
+  document.getElementById('protein-bar').style.width = Math.min(100, proteinPct) + '%';
+  document.getElementById('carbs-bar').style.width = Math.min(100, carbsPct) + '%';
+  document.getElementById('fat-bar').style.width = Math.min(100, fatPct) + '%';
   
   // Group by meal
   const mealOrder = ['Morgens (6-12h)', 'Mittags (12-14h)', 'Nachmittags (14-17h)', 'Abends (17-21h)', 'Nachts (21-6h)'];
@@ -2518,9 +2819,21 @@ function renderAll() {
 }
 
 // Set default dates
-document.getElementById('training-date').value = new Date().toISOString().split('T')[0];
-document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('training-date').value = today;
+document.getElementById('log-date').value = today;
 document.getElementById('food-time').value = getCurrentTime();
+
+// Add click handlers for date inputs to show picker
+document.querySelectorAll('input[type="date"]').forEach(input => {
+  input.addEventListener('click', function() {
+    if (this.showPicker) this.showPicker();
+  });
+  // Also on focus
+  input.addEventListener('focus', function() {
+    if (this.showPicker) this.showPicker();
+  });
+});
 
 // Load initial data
 loadLocalStorage();

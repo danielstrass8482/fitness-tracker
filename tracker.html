@@ -665,9 +665,9 @@ textarea {
     <div>
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
         <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()">📥 Import</button>
-        <button class="btn-sm btn-ghost" onclick="resetFoodData()">🗑️ Reset</button>
+        <button class="btn-sm btn-ghost" onclick="confirmReset()">🗑️ Reset</button>
       </div>
       <input type="file" id="fddb-import" accept=".csv" style="display:none;" onchange="handleFDDBImport(event)">
     </div>
@@ -813,6 +813,23 @@ textarea {
       </div>
       
       <button class="btn" onclick="confirmAmount()">Hinzufügen</button>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-box" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title">Bestätigung</div>
+        <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+      </div>
+      
+      <p id="confirm-message" style="margin-bottom:20px;"></p>
+      
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary" onclick="closeConfirmModal()" style="flex:1;">Abbrechen</button>
+        <button class="btn" id="confirm-yes-btn" style="flex:1;background:var(--danger);">Löschen</button>
+      </div>
     </div>
   </div>
 
@@ -2428,6 +2445,14 @@ function renderFoodLog() {
   
   mealOrder.forEach(mealName => {
     const { entries: mealEntries, key } = meals[mealName];
+    
+    // Sortiere Einträge nach Zeit (älteste oben)
+    mealEntries.sort((a, b) => {
+      const timeA = a.time || '00:00';
+      const timeB = b.time || '00:00';
+      return timeA.localeCompare(timeB);
+    });
+    
     const mealKcal = mealEntries.reduce((sum, e) => sum + e.kcal, 0);
     const mealProtein = mealEntries.reduce((sum, e) => sum + e.protein, 0);
     const mealCarbs = mealEntries.reduce((sum, e) => sum + e.carbs, 0);
@@ -2435,6 +2460,7 @@ function renderFoodLog() {
     
     const mealDiv = document.createElement('div');
     mealDiv.className = 'meal-category';
+    mealDiv.setAttribute('data-meal', key); // Für später wiederfinden
     mealDiv.innerHTML = `
       <div class="meal-header" onclick="toggleMeal(this)">
         <div class="meal-title">▶ ${mealName}</div>
@@ -2454,7 +2480,7 @@ function renderFoodLog() {
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="meal-entry-kcal">${formatNum(e.kcal)} kcal</div>
-              <button onclick="deleteLogEntry('${e.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+              <button onclick="deleteLogEntry('${e.id}', '${key}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;">✕</button>
             </div>
           </div>
         `).join('') : ''}
@@ -2479,28 +2505,79 @@ window.toggleMeal = function(header) {
   }
 };
 
-window.deleteLogEntry = async function(id) {
-  if (!confirm('Eintrag wirklich löschen?')) return;
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIRM MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+let confirmCallback = null;
+
+function showConfirm(message, callback) {
+  document.getElementById('confirm-message').textContent = message;
+  confirmCallback = callback;
   
-  // Remove from foodLog
-  Object.keys(foodLog).forEach(date => {
-    foodLog[date] = foodLog[date].filter(e => e.id !== id);
-    if (foodLog[date].length === 0) delete foodLog[date];
+  document.getElementById('confirm-yes-btn').onclick = function() {
+    if (confirmCallback) confirmCallback();
+    closeConfirmModal();
+  };
+  
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+window.closeConfirmModal = function() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  confirmCallback = null;
+};
+
+window.deleteLogEntry = function(id, mealKey) {
+  // Merke welche Kategorie offen war
+  const openMeals = [];
+  document.querySelectorAll('.meal-category').forEach(cat => {
+    const entries = cat.querySelector('.meal-entries');
+    if (entries && entries.style.display !== 'none') {
+      openMeals.push(cat.getAttribute('data-meal'));
+    }
   });
   
-  saveLS('foodLog', foodLog);
-  
-  if (userId) {
-    await deleteDoc(doc(userLogCol(), String(id)));
-  }
-  
-  showToast('✓ Eintrag gelöscht');
-  renderFoodLog();
+  showConfirm('Eintrag wirklich löschen?', async () => {
+    // Remove from foodLog
+    Object.keys(foodLog).forEach(date => {
+      foodLog[date] = foodLog[date].filter(e => e.id !== id);
+      if (foodLog[date].length === 0) delete foodLog[date];
+    });
+    
+    saveLS('foodLog', foodLog);
+    
+    if (userId) {
+      await deleteDoc(doc(userLogCol(), String(id)));
+    }
+    
+    showToast('✓ Eintrag gelöscht');
+    
+    // Render
+    renderFoodLog();
+    
+    // Stelle offene Kategorien wieder her
+    requestAnimationFrame(() => {
+      openMeals.forEach(meal => {
+        const cat = document.querySelector(`.meal-category[data-meal="${meal}"]`);
+        if (cat) {
+          const entries = cat.querySelector('.meal-entries');
+          const header = cat.querySelector('.meal-header');
+          if (entries && entries.style.display === 'none') {
+            const arrow = header.querySelector('.meal-title');
+            entries.style.display = 'block';
+            arrow.textContent = '▼' + arrow.textContent.substring(1);
+          }
+        }
+      });
+    });
+  });
+};
+
+window.confirmReset = function() {
+  showConfirm('⚠️ Alle Ernährungsdaten löschen? Nicht rückgängig machbar!', resetFoodData);
 };
 
 window.resetFoodData = async function() {
-  if (!confirm('⚠️ Alle Ernährungsdaten löschen?')) return;
-  if (!confirm('⚠️ WIRKLICH löschen? Nicht rückgängig machbar!')) return;
   
   foodLog = {};
   saveLS('foodLog', foodLog);

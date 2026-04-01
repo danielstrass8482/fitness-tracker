@@ -666,8 +666,8 @@ textarea {
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
-        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()">📥 Import</button>
-        <button class="btn-sm btn-ghost" onclick="confirmReset()">🗑️ Reset</button>
+        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()" style="min-width:90px;white-space:nowrap;">📥 Import</button>
+        <button class="btn-sm btn-ghost" onclick="confirmReset()" style="min-width:80px;white-space:nowrap;">🗑️ Reset</button>
       </div>
       <input type="file" id="fddb-import" accept=".csv" style="display:none;" onchange="handleFDDBImport(event)">
     </div>
@@ -701,6 +701,11 @@ textarea {
         <div class="progress-fill progress-fat" id="fat-bar" style="width: 0%"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Zentraler Hinzufügen Button -->
+  <div style="margin-bottom:20px;">
+    <button class="btn" onclick="openAddFood(null)" style="width:100%;">+ Essen hinzufügen</button>
   </div>
 
   <!-- Meals -->
@@ -2020,11 +2025,11 @@ window.saveDayLog = async function() {
 // ═══════════════════════════════════════════════════════════════════════════
 // ADD FOOD MODAL
 // ═══════════════════════════════════════════════════════════════════════════
-let currentAddMeal = null;
+let currentAddMeal = null; // Wird nicht mehr gebraucht, bleibt für Kompatibilität
 let currentAmountFood = null;
 
 window.openAddFood = function(meal) {
-  currentAddMeal = meal;
+  // Meal wird ignoriert, Kategorie wird aus Uhrzeit berechnet
   document.getElementById('add-food-modal').classList.add('open');
   switchAddTab('search');
 };
@@ -2119,10 +2124,13 @@ window.confirmAmount = async function() {
   const time = document.getElementById('amount-time').value || getCurrentTime();
   const factor = amount / 100;
   
+  // WICHTIG: Meal aus der tatsächlichen Uhrzeit berechnen!
+  const meal = getMealFromTime(time);
+  
   const entry = {
     id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
     date: currentDate,
-    meal: currentAddMeal,
+    meal: meal, // Aus Uhrzeit berechnet!
     time,
     foodId: currentAmountFood.name,
     amount,
@@ -2192,10 +2200,13 @@ window.addManualEntry = async function() {
     return;
   }
   
+  // WICHTIG: Meal aus der tatsächlichen Uhrzeit berechnen!
+  const meal = getMealFromTime(time);
+  
   const entry = {
     id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
     date: currentDate,
-    meal: currentAddMeal,
+    meal: meal, // Aus Uhrzeit berechnet!
     time,
     foodId: null,
     amount: 0,
@@ -2483,8 +2494,7 @@ function renderFoodLog() {
               <button onclick="deleteLogEntry('${e.id}', '${key}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;">✕</button>
             </div>
           </div>
-        `).join('') : ''}
-        <button onclick="openAddFood('${key}')" style="background:none;border:none;color:var(--primary);cursor:pointer;padding:12px;width:100%;text-align:left;font-size:13px;font-weight:500;">+ Hinzufügen</button>
+        `).join('') : '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
       </div>
     `;
     

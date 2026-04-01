@@ -524,6 +524,15 @@ textarea {
 
 <!-- FOOD TAB -->
 <div id="panel-food" class="panel">
+  
+  <!-- Food Sub-Tabs -->
+  <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--border);">
+    <button class="tab active" id="food-subtab-diary" onclick="switchFoodTab('diary')">Tagebuch</button>
+    <button class="tab" id="food-subtab-recipes" onclick="switchFoodTab('recipes')">Rezepte</button>
+  </div>
+
+  <!-- DIARY SUBTAB -->
+  <div id="food-diary" class="food-subtab">
   <div class="date-bar">
     <button id="date-prev" onclick="changeDate(-1)">‹</button>
     <div>
@@ -589,6 +598,31 @@ textarea {
 
   <!-- Meals -->
   <div id="meals-container"></div>
+  </div>
+
+  <!-- RECIPES SUBTAB -->
+  <div id="food-recipes" class="food-subtab" style="display:none;">
+    <div class="card">
+      <div class="card-title">Neues Rezept erstellen</div>
+      <div class="form-group">
+        <label>Rezept-Name</label>
+        <input type="text" id="recipe-name" placeholder="z.B. Protein Pancakes">
+      </div>
+      <div class="form-group">
+        <label>Portionen</label>
+        <input type="number" id="recipe-portions" value="1" min="1">
+      </div>
+      <div id="recipe-ingredients"></div>
+      <button class="btn-secondary btn-sm" onclick="addRecipeIngredient()" style="width:100%;margin:12px 0;">+ Zutat hinzufügen</button>
+      <button class="btn" onclick="saveRecipe()">Rezept speichern</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Meine Rezepte</div>
+      <div id="recipes-list"></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- DASHBOARD TAB -->
@@ -832,10 +866,136 @@ window.switchTab = function(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + tab).classList.add('active');
   
-  if (tab === 'food') renderFoodLog();
+  if (tab === 'food') {
+    switchFoodTab('diary');
+    renderFoodLog();
+  }
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'data') renderDataStats();
 };
+
+window.switchFoodTab = function(subtab) {
+  // Update subtab buttons
+  document.getElementById('food-subtab-diary').classList.remove('active');
+  document.getElementById('food-subtab-recipes').classList.remove('active');
+  document.getElementById('food-subtab-' + subtab).classList.add('active');
+  
+  // Show/hide subtabs
+  document.getElementById('food-diary').style.display = subtab === 'diary' ? 'block' : 'none';
+  document.getElementById('food-recipes').style.display = subtab === 'recipes' ? 'block' : 'none';
+  
+  if (subtab === 'recipes') renderRecipes();
+};
+
+window.addRecipeIngredient = function() {
+  const container = document.getElementById('recipe-ingredients');
+  const id = Date.now();
+  
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 100px 40px;gap:8px;margin-bottom:8px;';
+  div.innerHTML = `
+    <input type="text" placeholder="Zutat suchen..." class="recipe-ing-search" data-id="${id}">
+    <input type="number" placeholder="Menge (g)" class="recipe-ing-amount" data-id="${id}" value="100">
+    <button onclick="this.parentElement.remove()" style="background:var(--danger);color:white;border:none;border-radius:6px;cursor:pointer;">✕</button>
+  `;
+  
+  container.appendChild(div);
+};
+
+window.saveRecipe = async function() {
+  const name = document.getElementById('recipe-name').value.trim();
+  const portions = parseInt(document.getElementById('recipe-portions').value) || 1;
+  
+  if (!name) {
+    showToast('❌ Bitte Rezept-Namen eingeben');
+    return;
+  }
+  
+  const ingredients = [];
+  document.querySelectorAll('.recipe-ing-search').forEach(input => {
+    const id = input.dataset.id;
+    const foodName = input.value.trim();
+    const amount = parseFloat(document.querySelector(`.recipe-ing-amount[data-id="${id}"]`).value) || 0;
+    
+    if (foodName && amount > 0) {
+      const food = foodDB.find(f => f.name === foodName);
+      if (food) {
+        ingredients.push({
+          name: foodName,
+          amount,
+          kcal: food.kcal,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat
+        });
+      }
+    }
+  });
+  
+  if (ingredients.length === 0) {
+    showToast('❌ Bitte mindestens eine Zutat hinzufügen');
+    return;
+  }
+  
+  // Calculate totals
+  let totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+  ingredients.forEach(ing => {
+    const factor = ing.amount / 100;
+    totalKcal += ing.kcal * factor;
+    totalProtein += ing.protein * factor;
+    totalCarbs += ing.carbs * factor;
+    totalFat += ing.fat * factor;
+  });
+  
+  const recipe = {
+    id: Date.now(),
+    name,
+    portions,
+    ingredients,
+    kcal: Math.round(totalKcal),
+    protein: Math.round(totalProtein),
+    carbs: Math.round(totalCarbs),
+    fat: Math.round(totalFat)
+  };
+  
+  recipes.push(recipe);
+  saveLS('recipes', recipes);
+  
+  if (userId) {
+    await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+  }
+  
+  showToast('✓ Rezept gespeichert');
+  
+  // Reset form
+  document.getElementById('recipe-name').value = '';
+  document.getElementById('recipe-portions').value = '1';
+  document.getElementById('recipe-ingredients').innerHTML = '';
+  
+  renderRecipes();
+};
+
+function renderRecipes() {
+  const container = document.getElementById('recipes-list');
+  
+  if (recipes.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Noch keine Rezepte erstellt</div>';
+    return;
+  }
+  
+  container.innerHTML = recipes.map(r => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">
+      <div style="font-weight:600;margin-bottom:4px;">${r.name}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${r.portions} Portion(en)</div>
+      <div style="font-size:11px;color:var(--muted);display:flex;gap:12px;">
+        <span>${r.kcal} kcal</span>
+        <span>${r.protein}g P</span>
+        <span>${r.carbs}g C</span>
+        <span>${r.fat}g F</span>
+      </div>
+    </div>
+  `).join('');
+}
 
 window.showToast = function(msg) {
   const existing = document.querySelector('.toast');
@@ -1105,15 +1265,19 @@ function renderFoodLog() {
   
   // Group by meal
   const meals = {
-    'Morgens': [],
-    'Mittags': [],
-    'Nachmittags': [],
-    'Abends': [],
-    'Nachts': []
+    'Morgens (6-12h)': { entries: [], key: 'Morgens' },
+    'Mittags (12-14h)': { entries: [], key: 'Mittags' },
+    'Nachmittags (14-17h)': { entries: [], key: 'Nachmittags' },
+    'Abends (17-21h)': { entries: [], key: 'Abends' },
+    'Nachts (21-6h)': { entries: [], key: 'Nachts' }
   };
   
   entries.forEach(e => {
-    if (meals[e.meal]) meals[e.meal].push(e);
+    Object.keys(meals).forEach(mealName => {
+      if (meals[mealName].key === e.meal) {
+        meals[mealName].entries.push(e);
+      }
+    });
   });
   
   // Render meals
@@ -1121,7 +1285,7 @@ function renderFoodLog() {
   container.innerHTML = '';
   
   Object.keys(meals).forEach(mealName => {
-    const mealEntries = meals[mealName];
+    const { entries: mealEntries } = meals[mealName];
     if (mealEntries.length === 0) return;
     
     const mealKcal = mealEntries.reduce((sum, e) => sum + e.kcal, 0);
@@ -1130,10 +1294,10 @@ function renderFoodLog() {
     mealDiv.className = 'meal-category';
     mealDiv.innerHTML = `
       <div class="meal-header" onclick="toggleMeal(this)">
-        <div class="meal-title">▼ ${mealName}</div>
+        <div class="meal-title">▶ ${mealName}</div>
         <div class="meal-kcal">${formatNum(mealKcal)} kcal</div>
       </div>
-      <div class="meal-entries">
+      <div class="meal-entries" style="display:none;">
         ${mealEntries.map(e => `
           <div class="meal-entry">
             <div class="meal-entry-name">

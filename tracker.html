@@ -1856,7 +1856,7 @@ window.confirmRecipeEat = async function() {
 
 function renderRecipes() {
   const container = document.getElementById('recipes-list');
-  const searchQuery = document.getElementById('recipe-search').value.toLowerCase();
+  const searchQuery = document.getElementById('recipe-search')?.value.toLowerCase() || '';
   
   const filtered = searchQuery 
     ? recipes.filter(r => r.name.toLowerCase().includes(searchQuery))
@@ -1867,7 +1867,7 @@ function renderRecipes() {
     return;
   }
   
-  container.innerHTML = filtered.map((r, index) => {
+  container.innerHTML = filtered.map(r => {
     const per100g = r.totalWeight > 0 ? {
       kcal: Math.round((r.kcal / r.totalWeight) * 100),
       protein: Math.round((r.protein / r.totalWeight) * 100),
@@ -1876,8 +1876,8 @@ function renderRecipes() {
     } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
     
     return `
-      <div class="recipe-card" data-recipe-id="${r.id}">
-        <div class="recipe-card-content" data-action="edit">
+      <div class="recipe-card" style="cursor:pointer;" onclick="editRecipe(${r.id})">
+        <div class="recipe-card-content">
           <div class="recipe-card-name">${r.name}</div>
           <div class="recipe-card-meta">${r.ingredients.length} Zutaten · ${formatNum(r.totalWeight)}g gesamt</div>
           <div class="recipe-card-macros">
@@ -1895,24 +1895,10 @@ function renderRecipes() {
             <span style="color:#ff6b9d;">F ${per100g.fat}g</span>
           </div>
         </div>
-        <div class="recipe-card-arrow" data-action="eat">→</div>
+        <div class="recipe-card-arrow" onclick="event.stopPropagation(); event.preventDefault(); openRecipeEat(${r.id}); return false;">→</div>
       </div>
     `;
   }).join('');
-  
-  // Add event listeners after rendering
-  container.querySelectorAll('.recipe-card').forEach(card => {
-    const recipeId = parseInt(card.getAttribute('data-recipe-id'));
-    
-    card.querySelector('[data-action="edit"]').addEventListener('click', () => {
-      editRecipe(recipeId);
-    });
-    
-    card.querySelector('[data-action="eat"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openRecipeEat(recipeId);
-    });
-  });
 }
 
 window.showToast = function(msg) {

@@ -3451,11 +3451,19 @@ window.importRecipesStep1 = function() {
     const file = e.target.files[0];
     if (!file) return;
     
-    window.pendingRecipeText = await file.text();
-    
-    document.getElementById('step1-status').innerHTML = `✓ Geladen: ${file.name}`;
-    document.getElementById('import-step-2').style.opacity = '1';
-    document.getElementById('import-step-2').style.pointerEvents = 'auto';
+    try {
+      const text = await file.text();
+      window.pendingRecipeText = text;
+      
+      console.log('Recipe loaded, length:', text.length);
+      
+      document.getElementById('step1-status').innerHTML = `✓ Geladen: ${file.name} (${Math.round(text.length/1024)}kb)`;
+      document.getElementById('import-step-2').style.opacity = '1';
+      document.getElementById('import-step-2').style.pointerEvents = 'auto';
+    } catch (err) {
+      console.error('Error loading recipe file:', err);
+      showToast('❌ Fehler beim Laden der Rezepte-Datei');
+    }
   };
   input.click();
 };
@@ -3468,11 +3476,19 @@ window.importDiaryStep2 = function() {
     const file = e.target.files[0];
     if (!file) return;
     
-    window.pendingDiaryText = await file.text();
-    
-    document.getElementById('step2-status').innerHTML = `✓ Geladen: ${file.name}`;
-    document.getElementById('import-step-3').style.opacity = '1';
-    document.getElementById('import-step-3').style.pointerEvents = 'auto';
+    try {
+      const text = await file.text();
+      window.pendingDiaryText = text;
+      
+      console.log('Diary loaded, length:', text.length);
+      
+      document.getElementById('step2-status').innerHTML = `✓ Geladen: ${file.name} (${Math.round(text.length/1024)}kb)`;
+      document.getElementById('import-step-3').style.opacity = '1';
+      document.getElementById('import-step-3').style.pointerEvents = 'auto';
+    } catch (err) {
+      console.error('Error loading diary file:', err);
+      showToast('❌ Fehler beim Laden der Tagebuch-Datei');
+    }
   };
   input.click();
 };

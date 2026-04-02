@@ -646,8 +646,8 @@ textarea {
       <div class="date-label" id="date-label">Heute</div>
       <div class="date-sub" id="date-sub"></div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
-        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()" style="padding:8px 16px;white-space:nowrap;">📥 Import</button>
-        <button class="btn-sm btn-ghost" onclick="confirmReset()" style="padding:8px 16px;white-space:nowrap;">🗑️ Reset</button>
+        <button class="btn-sm btn-secondary" onclick="document.getElementById('fddb-import').click()">📥 Import</button>
+        <button class="btn-sm btn-ghost" onclick="confirmReset()">🗑️ Reset</button>
       </div>
       <input type="file" id="fddb-import" accept=".csv" style="display:none;" onchange="handleFDDBImport(event)">
     </div>
@@ -825,6 +825,7 @@ textarea {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:600;">Rezepte</h2>
       <div style="display:flex;gap:8px;">
+        <button class="btn-secondary btn-sm" onclick="importOldRecipes()">📥 Alte importieren</button>
         <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-import').click()">📄 FDDB Import</button>
         <button class="btn btn-sm" onclick="openNewRecipe()">+ Neu</button>
       </div>
@@ -944,6 +945,7 @@ textarea {
       
       <div style="display:flex;gap:8px;">
         <button class="btn-secondary" onclick="closeRecipeModal()">Abbrechen</button>
+        <button class="btn" id="recipe-delete-btn" onclick="deleteRecipe()" style="background:var(--danger);display:none;">Löschen</button>
         <button class="btn" onclick="saveRecipeFromModal()" style="flex:1;">Speichern</button>
       </div>
     </div>
@@ -1633,6 +1635,10 @@ window.openNewRecipe = function() {
   document.getElementById('recipe-name').value = '';
   document.getElementById('recipe-portions').value = '1';
   document.getElementById('recipe-ingredients-list').innerHTML = '';
+  
+  // Verstecke Löschen-Button
+  document.getElementById('recipe-delete-btn').style.display = 'none';
+  
   document.getElementById('recipe-modal').classList.add('open');
 };
 
@@ -1748,6 +1754,9 @@ window.editRecipe = function(id) {
   document.getElementById('recipe-name').value = recipe.name;
   document.getElementById('recipe-portions').value = recipe.portions;
   
+  // Zeige Löschen-Button
+  document.getElementById('recipe-delete-btn').style.display = 'block';
+  
   const container = document.getElementById('recipe-ingredients-list');
   container.innerHTML = '';
   
@@ -1768,18 +1777,80 @@ window.editRecipe = function(id) {
   document.getElementById('recipe-modal').classList.add('open');
 };
 
-window.deleteRecipe = async function(id) {
-  if (!confirm('Rezept wirklich löschen?')) return;
+window.deleteRecipe = async function() {
+  if (!currentRecipeId) return;
   
-  recipes = recipes.filter(r => r.id !== id);
-  saveLS('recipes', recipes);
+  showConfirm('Rezept wirklich löschen?', async () => {
+    recipes = recipes.filter(r => r.id !== currentRecipeId);
+    saveLS('recipes', recipes);
+    
+    if (userId) {
+      await deleteDoc(doc(userRecipeCol(), String(currentRecipeId)));
+    }
+    
+    showToast('✓ Rezept gelöscht');
+    closeRecipeModal();
+    renderRecipes();
+  });
+};
+
+window.importOldRecipes = function() {
+  // Lade alte Rezepte aus tracker_recipes (localStorage)
+  const oldRecipesRaw = localStorage.getItem('tracker_recipes');
   
-  if (userId) {
-    await deleteDoc(doc(userRecipeCol(), String(id)));
+  if (!oldRecipesRaw) {
+    showToast('❌ Keine alten Rezepte gefunden');
+    return;
   }
   
-  showToast('✓ Rezept gelöscht');
-  renderRecipes();
+  try {
+    const oldRecipes = JSON.parse(oldRecipesRaw);
+    
+    if (!Array.isArray(oldRecipes) || oldRecipes.length === 0) {
+      showToast('❌ Keine Rezepte zum Importieren');
+      return;
+    }
+    
+    showConfirm(`${oldRecipes.length} alte Rezepte importieren?`, () => {
+      let imported = 0;
+      let skipped = 0;
+      
+      oldRecipes.forEach(oldRecipe => {
+        // Prüfe ob Rezept mit gleichem Namen schon existiert
+        const exists = recipes.find(r => r.name === oldRecipe.name);
+        if (exists) {
+          skipped++;
+          return;
+        }
+        
+        // Konvertiere ins neue Format
+        const newRecipe = {
+          id: oldRecipe.id || Date.now() + Math.random(),
+          name: oldRecipe.name || 'Unbenannt',
+          portions: oldRecipe.portions || 1,
+          ingredients: oldRecipe.ingredients || [],
+          totalWeight: oldRecipe.totalWeight || 0,
+          kcal: oldRecipe.kcal || 0,
+          protein: oldRecipe.protein || 0,
+          carbs: oldRecipe.carbs || 0,
+          fat: oldRecipe.fat || 0
+        };
+        
+        recipes.push(newRecipe);
+        imported++;
+      });
+      
+      // Speichern
+      saveLS('recipes', recipes);
+      renderRecipes();
+      
+      showToast(`✓ ${imported} Rezepte importiert, ${skipped} übersprungen`);
+    });
+    
+  } catch (err) {
+    console.error('Import error:', err);
+    showToast('❌ Fehler beim Importieren');
+  }
 };
 
 let currentRecipeEatId = null;

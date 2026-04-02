@@ -1322,7 +1322,30 @@ async function loadAll() {
     const recipeSnap = await getDocs(userRecipeCol());
     if (recipeSnap.size > 0) {
       recipes = [];
-      recipeSnap.forEach(d => recipes.push(d.data()));
+      recipeSnap.forEach(d => {
+        const data = d.data();
+        
+        // Auto-Konvertierung alter Rezepte
+        if (!data.isV2) {
+          // Altes Rezept - konvertieren
+          const converted = {
+            id: data.id || Date.now() + Math.random(),
+            name: data.name || 'Unbenannt',
+            portions: data.portions || 1,
+            ingredients: data.ingredients || [],
+            totalWeight: data.totalWeight || 0,
+            kcal: data.kcal || 0,
+            protein: data.protein || 0,
+            carbs: data.carbs || 0,
+            fat: data.fat || 0,
+            isV2: true // Markierung
+          };
+          recipes.push(converted);
+        } else {
+          // Bereits konvertiert
+          recipes.push(data);
+        }
+      });
       saveLS('recipes', recipes);
     }
     
@@ -1595,7 +1618,6 @@ function renderFoodDB() {
             ${formatNum(f.kcal)} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g / 100g
           </div>
         </div>
-        <div class="recipe-card-arrow" onclick="event.stopPropagation(); deleteFood(${actualIndex})" style="background:var(--danger);border-color:var(--danger);color:white;">✕</div>
       </div>
     `;
   }).join('');

@@ -3439,79 +3439,80 @@ window.startCompleteReset = async function() {
     const recipeFile = e1.target.files[0];
     if (!recipeFile) return;
     
-    // Schritt 2: Tagebuch CSV wählen (sofort danach)
-    setTimeout(() => {
-      const diaryInput = document.createElement('input');
-      diaryInput.type = 'file';
-      diaryInput.accept = '.csv';
-      diaryInput.onchange = async (e2) => {
-        const diaryFile = e2.target.files[0];
-        if (!diaryFile) return;
+    // Zeige Bestätigung + fordere zweite Datei an
+    if (!confirm(`✓ Rezepte-Datei gewählt: ${recipeFile.name}\n\nJetzt FDDB Tagebuch CSV wählen (fddb_complete_all.csv)`)) return;
+    
+    // Schritt 2: Tagebuch CSV wählen
+    const diaryInput = document.createElement('input');
+    diaryInput.type = 'file';
+    diaryInput.accept = '.csv';
+    diaryInput.onchange = async (e2) => {
+      const diaryFile = e2.target.files[0];
+      if (!diaryFile) return;
+      
+      showToast('🔄 Import läuft...');
+      
+      try {
+        // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
+        const diaryText = await diaryFile.text();
+        const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(diaryText);
         
-        showToast('🔄 Import läuft...');
+        // Parse Rezepte CSV
+        const recipeText = await recipeFile.text();
+        const importedRecipes = parseRecipesCSV(recipeText, extractedFoodDB);
         
-        try {
-          // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
-          const diaryText = await diaryFile.text();
-          const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(diaryText);
+        // ALLES LÖSCHEN
+        foodDB = [];
+        recipes = [];
+        foodLog = {};
+        trainingEntries = [];
+        dayLogs = [];
+        
+        // NEU SETZEN
+        foodDB = extractedFoodDB;
+        recipes = importedRecipes;
+        foodLog = importedDiary;
+        
+        // SPEICHERN
+        saveLS('foodDB', foodDB);
+        saveLS('recipes', recipes);
+        saveLS('foodLog', foodLog);
+        saveLS('training', trainingEntries);
+        saveLS('dayLogs', dayLogs);
+        
+        // Firebase sync wenn eingeloggt
+        if (userId) {
+          showToast('⏳ Sync zu Firebase...');
           
-          // Parse Rezepte CSV
-          const recipeText = await recipeFile.text();
-          const importedRecipes = parseRecipesCSV(recipeText, extractedFoodDB);
-          
-          // ALLES LÖSCHEN
-          foodDB = [];
-          recipes = [];
-          foodLog = {};
-          trainingEntries = [];
-          dayLogs = [];
-          
-          // NEU SETZEN
-          foodDB = extractedFoodDB;
-          recipes = importedRecipes;
-          foodLog = importedDiary;
-          
-          // SPEICHERN
-          saveLS('foodDB', foodDB);
-          saveLS('recipes', recipes);
-          saveLS('foodLog', foodLog);
-          saveLS('training', trainingEntries);
-          saveLS('dayLogs', dayLogs);
-          
-          // Firebase sync wenn eingeloggt
-          if (userId) {
-            showToast('⏳ Sync zu Firebase...');
-            
-            // Upload FoodDB
-            for (const food of foodDB) {
-              await setDoc(doc(userFoodCol(), String(food.id)), food);
-            }
-            
-            // Upload Recipes
-            for (const recipe of recipes) {
-              await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
-            }
-            
-            // Upload Diary
-            for (const date in foodLog) {
-              for (const entry of foodLog[date]) {
-                await setDoc(doc(userLogCol(), String(entry.id)), entry);
-              }
-            }
+          // Upload FoodDB
+          for (const food of foodDB) {
+            await setDoc(doc(userFoodCol(), String(food.id)), food);
           }
           
-          showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
+          // Upload Recipes
+          for (const recipe of recipes) {
+            await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+          }
           
-          setTimeout(() => location.reload(), 2000);
-          
-        } catch (err) {
-          console.error('Import error:', err);
-          showToast('❌ Import fehlgeschlagen: ' + err.message);
+          // Upload Diary
+          for (const date in foodLog) {
+            for (const entry of foodLog[date]) {
+              await setDoc(doc(userLogCol(), String(entry.id)), entry);
+            }
+          }
         }
-      };
-      
-      diaryInput.click();
-    }, 100);
+        
+        showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
+        
+        setTimeout(() => location.reload(), 2000);
+        
+      } catch (err) {
+        console.error('Import error:', err);
+        showToast('❌ Import fehlgeschlagen: ' + err.message);
+      }
+    };
+    
+    diaryInput.click();
   };
   
   recipeInput.click();

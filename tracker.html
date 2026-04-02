@@ -1095,18 +1095,23 @@ textarea {
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
       Löscht ALLE Daten und importiert <strong>100% sauber aus FDDB CSVs</strong>:
     </p>
-    <ol style="font-size:13px;color:var(--muted);margin-bottom:12px;padding-left:20px;">
-      <li>Klicke auf "Neustart starten"</li>
-      <li>Wähle <strong>BEIDE CSV-Dateien auf einmal</strong>:
-        <ul style="margin-top:4px;padding-left:20px;">
-          <li>lists_*.csv (Rezepte)</li>
-          <li>fddb_complete_all.csv (Tagebuch)</li>
-        </ul>
-        <em style="color:var(--primary);">→ Strg/Cmd gedrückt halten zum Mehrfachauswahl!</em>
-      </li>
-      <li>FoodDB wird automatisch aus dem Tagebuch extrahiert!</li>
-    </ol>
-    <button class="btn" style="background:var(--danger);" onclick="startCompleteReset()">🔄 Neustart starten</button>
+    
+    <div id="import-step-1" style="margin-bottom:16px;">
+      <p style="font-size:13px;margin-bottom:8px;"><strong>Schritt 1:</strong> FDDB Rezepte CSV importieren</p>
+      <button class="btn" onclick="importRecipesStep1()">📄 Rezepte CSV wählen (lists_*.csv)</button>
+      <div id="step1-status" style="margin-top:8px;font-size:13px;color:var(--muted);"></div>
+    </div>
+    
+    <div id="import-step-2" style="margin-bottom:16px;opacity:0.5;pointer-events:none;">
+      <p style="font-size:13px;margin-bottom:8px;"><strong>Schritt 2:</strong> FDDB Tagebuch CSV importieren</p>
+      <button class="btn" onclick="importDiaryStep2()">📄 Tagebuch CSV wählen (fddb_complete_all.csv)</button>
+      <div id="step2-status" style="margin-top:8px;font-size:13px;color:var(--muted);"></div>
+    </div>
+    
+    <div id="import-step-3" style="opacity:0.5;pointer-events:none;">
+      <p style="font-size:13px;margin-bottom:8px;"><strong>Schritt 3:</strong> Import abschließen</p>
+      <button class="btn" style="background:var(--danger);" onclick="executeCompleteReset()">🔄 Jetzt alles löschen und importieren!</button>
+    </div>
   </div>
 
   <div class="card">
@@ -3432,110 +3437,127 @@ window.clearOldData = function() {
   }, 1500);
 };
 
-window.startCompleteReset = async function() {
+// ═══════════════════════════════════════════════════════════════════════════
+// KOMPLETTER NEUSTART - 3 SCHRITTE
+// ═══════════════════════════════════════════════════════════════════════════
+let pendingRecipeText = null;
+let pendingDiaryText = null;
+
+window.importRecipesStep1 = function() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    pendingRecipeText = await file.text();
+    
+    document.getElementById('step1-status').innerHTML = `✓ Geladen: ${file.name}`;
+    document.getElementById('import-step-2').style.opacity = '1';
+    document.getElementById('import-step-2').style.pointerEvents = 'auto';
+  };
+  input.click();
+};
+
+window.importDiaryStep2 = function() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    pendingDiaryText = await file.text();
+    
+    document.getElementById('step2-status').innerHTML = `✓ Geladen: ${file.name}`;
+    document.getElementById('import-step-3').style.opacity = '1';
+    document.getElementById('import-step-3').style.pointerEvents = 'auto';
+  };
+  input.click();
+};
+
+window.executeCompleteReset = async function() {
+  if (!pendingRecipeText || !pendingDiaryText) {
+    showToast('❌ Bitte beide Dateien laden!');
+    return;
+  }
+  
   if (!confirm('⚠️ WIRKLICH alles löschen und neu importieren?')) return;
   if (!confirm('⚠️⚠️ LETZTE WARNUNG! Alle Daten werden gelöscht!')) return;
-  if (!confirm('📂 Gleich beide CSV-Dateien auswählen:\n\n1. FDDB Rezepte CSV (lists_*.csv)\n2. FDDB Tagebuch CSV (fddb_complete_all.csv)\n\nBEIDE markieren (Strg/Cmd gedrückt halten)!')) return;
   
-  // File Picker mit MULTIPLE
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = '.csv';
-  fileInput.multiple = true;
-  fileInput.onchange = async (e) => {
-    const files = Array.from(e.target.files);
-    
-    if (files.length !== 2) {
-      showToast('❌ Bitte genau 2 Dateien auswählen!');
-      return;
-    }
-    
-    // Identifiziere welche Datei welche ist
-    let recipeFile = null;
-    let diaryFile = null;
-    
-    for (const file of files) {
-      if (file.name.toLowerCase().includes('lists') || file.name.toLowerCase().includes('recipe')) {
-        recipeFile = file;
-      } else if (file.name.toLowerCase().includes('fddb') || file.name.toLowerCase().includes('complete') || file.name.toLowerCase().includes('diary')) {
-        diaryFile = file;
-      }
-    }
-    
-    // Fallback: Größere Datei = Tagebuch
-    if (!recipeFile || !diaryFile) {
-      if (files[0].size > files[1].size) {
-        diaryFile = files[0];
-        recipeFile = files[1];
-      } else {
-        diaryFile = files[1];
-        recipeFile = files[0];
-      }
-    }
-    
-    showToast('🔄 Import läuft...');
-    
-    try {
-      // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
-      const diaryText = await diaryFile.text();
-      const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(diaryText);
-      
-      // Parse Rezepte CSV
-      const recipeText = await recipeFile.text();
-      const importedRecipes = parseRecipesCSV(recipeText, extractedFoodDB);
-      
-      // ALLES LÖSCHEN
-      foodDB = [];
-      recipes = [];
-      foodLog = {};
-      trainingEntries = [];
-      dayLogs = [];
-      
-      // NEU SETZEN
-      foodDB = extractedFoodDB;
-      recipes = importedRecipes;
-      foodLog = importedDiary;
-      
-      // SPEICHERN
-      saveLS('foodDB', foodDB);
-      saveLS('recipes', recipes);
-      saveLS('foodLog', foodLog);
-      saveLS('training', trainingEntries);
-      saveLS('dayLogs', dayLogs);
-      
-      // Firebase sync wenn eingeloggt
-      if (userId) {
-        showToast('⏳ Sync zu Firebase...');
-        
-        // Upload FoodDB
-        for (const food of foodDB) {
-          await setDoc(doc(userFoodCol(), String(food.id)), food);
-        }
-        
-        // Upload Recipes
-        for (const recipe of recipes) {
-          await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
-        }
-        
-        // Upload Diary
-        for (const date in foodLog) {
-          for (const entry of foodLog[date]) {
-            await setDoc(doc(userLogCol(), String(entry.id)), entry);
-          }
-        }
-      }
-      
-      showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
-      
-      setTimeout(() => location.reload(), 2000);
-      
-    } catch (err) {
-      console.error('Import error:', err);
-      showToast('❌ Import fehlgeschlagen: ' + err.message);
-    }
-  };
+  showToast('🔄 Import läuft...');
   
-  fileInput.click();
+  try {
+    console.log('Starting import...');
+    
+    // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
+    const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(pendingDiaryText);
+    console.log('Extracted FoodDB:', extractedFoodDB.length, 'foods');
+    console.log('Imported Diary:', Object.keys(importedDiary).length, 'days');
+    
+    // Parse Rezepte CSV
+    const importedRecipes = parseRecipesCSV(pendingRecipeText, extractedFoodDB);
+    console.log('Imported Recipes:', importedRecipes.length, 'recipes');
+    
+    // ALLES LÖSCHEN
+    foodDB = [];
+    recipes = [];
+    foodLog = {};
+    trainingEntries = [];
+    dayLogs = [];
+    
+    // NEU SETZEN
+    foodDB = extractedFoodDB;
+    recipes = importedRecipes;
+    foodLog = importedDiary;
+    
+    // SPEICHERN
+    saveLS('foodDB', foodDB);
+    saveLS('recipes', recipes);
+    saveLS('foodLog', foodLog);
+    saveLS('training', trainingEntries);
+    saveLS('dayLogs', dayLogs);
+    
+    // Firebase sync wenn eingeloggt
+    if (userId) {
+      showToast('⏳ Sync zu Firebase...');
+      
+      // Upload FoodDB
+      for (const food of foodDB) {
+        await setDoc(doc(userFoodCol(), String(food.id)), food);
+      }
+      
+      // Upload Recipes
+      for (const recipe of recipes) {
+        await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+      }
+      
+      // Upload Diary
+      for (const date in foodLog) {
+        for (const entry of foodLog[date]) {
+          await setDoc(doc(userLogCol(), String(entry.id)), entry);
+        }
+      }
+    }
+    
+    showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
+    
+    // Reset UI
+    pendingRecipeText = null;
+    pendingDiaryText = null;
+    
+    setTimeout(() => location.reload(), 2000);
+    
+  } catch (err) {
+    console.error('Import error:', err);
+    showToast('❌ Import fehlgeschlagen: ' + err.message);
+  }
+};
+
+window.startCompleteReset = function() {
+  // Deprecated - use 3-step flow above
+  showToast('ℹ️ Bitte nutze die 3-Schritte-Anleitung oben!');
 };
 
 function parseRecipesCSV(text, foodDB) {

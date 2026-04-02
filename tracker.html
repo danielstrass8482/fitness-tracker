@@ -1294,6 +1294,14 @@ async function loadAll() {
   if (!userId) return;
   
   try {
+    // Food DB ZUERST laden (wird für Rezept-Konvertierung gebraucht!)
+    const dbSnap = await getDocs(userFoodCol());
+    if (dbSnap.size > 0) {
+      foodDB = [];
+      dbSnap.forEach(d => foodDB.push(d.data()));
+      saveLS('foodDB', foodDB);
+    }
+    
     // Training
     const trainSnap = await getDocs(userTrainingCol());
     if (trainSnap.size > 0) {
@@ -1325,11 +1333,29 @@ async function loadAll() {
       recipeSnap.forEach(d => {
         const data = d.data();
         
+        // Fix ingredients: konvertiere foodId zu name
+        if (data.ingredients && Array.isArray(data.ingredients)) {
+          data.ingredients = data.ingredients.map(ing => {
+            if (!ing.name && ing.foodId) {
+              // Finde Food in DB
+              const food = foodDB.find(f => String(f.id) === String(ing.foodId));
+              return {
+                name: food ? food.name : ing.foodId,
+                amount: ing.amount || 0,
+                kcal: ing.kcal || (food ? food.kcal : 0),
+                protein: ing.protein || (food ? food.protein : 0),
+                carbs: ing.carbs || (food ? food.carbs : 0),
+                fat: ing.fat || (food ? food.fat : 0)
+              };
+            }
+            return ing; // Schon OK
+          });
+        }
+        
         // Auto-Konvertierung alter Rezepte
         if (!data.isV2) {
-          // Altes Rezept - konvertieren
           const converted = {
-            id: data.id || Date.now() + Math.random(),
+            id: String(data.id),
             name: data.name || 'Unbenannt',
             portions: data.portions || 1,
             ingredients: data.ingredients || [],
@@ -1338,23 +1364,16 @@ async function loadAll() {
             protein: data.protein || 0,
             carbs: data.carbs || 0,
             fat: data.fat || 0,
-            isV2: true // Markierung
+            isV2: true
           };
           recipes.push(converted);
         } else {
-          // Bereits konvertiert
+          // ID als String
+          data.id = String(data.id);
           recipes.push(data);
         }
       });
       saveLS('recipes', recipes);
-    }
-    
-    // Food DB
-    const dbSnap = await getDocs(userFoodCol());
-    if (dbSnap.size > 0) {
-      foodDB = [];
-      dbSnap.forEach(d => foodDB.push(d.data()));
-      saveLS('foodDB', foodDB);
     }
     
     renderAll();

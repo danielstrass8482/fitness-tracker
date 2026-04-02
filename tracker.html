@@ -1091,6 +1091,20 @@ textarea {
   </div>
 
   <div class="card">
+    <div class="card-title">🔄 KOMPLETTER NEUSTART</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+      Löscht ALLE Daten und importiert <strong>100% sauber aus FDDB CSVs</strong>:
+    </p>
+    <ol style="font-size:13px;color:var(--muted);margin-bottom:12px;padding-left:20px;">
+      <li>Klicke auf "Neustart starten"</li>
+      <li>Wähle <strong>FDDB Rezepte CSV</strong> (lists_*.csv)</li>
+      <li>Wähle <strong>FDDB Tagebuch CSV</strong> (fddb_complete_all.csv)</li>
+      <li>FoodDB wird automatisch aus dem Tagebuch extrahiert!</li>
+    </ol>
+    <button class="btn" style="background:var(--danger);" onclick="startCompleteReset()">🔄 Neustart starten</button>
+  </div>
+
+  <div class="card">
     <div class="card-title">⚠️ Alte Daten bereinigen</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
       Falls du alte Daten vom vorherigen Tracker siehst, kannst du sie hier löschen.
@@ -3412,6 +3426,271 @@ window.clearOldData = function() {
     location.reload();
   }, 1500);
 };
+
+window.startCompleteReset = async function() {
+  if (!confirm('⚠️ WIRKLICH alles löschen und neu importieren?')) return;
+  if (!confirm('⚠️⚠️ LETZTE WARNUNG! Alle Daten werden gelöscht!')) return;
+  
+  // Schritt 1: Rezepte CSV wählen
+  const recipeInput = document.createElement('input');
+  recipeInput.type = 'file';
+  recipeInput.accept = '.csv';
+  recipeInput.onchange = async (e1) => {
+    const recipeFile = e1.target.files[0];
+    if (!recipeFile) return;
+    
+    // Schritt 2: Tagebuch CSV wählen
+    const diaryInput = document.createElement('input');
+    diaryInput.type = 'file';
+    diaryInput.accept = '.csv';
+    diaryInput.onchange = async (e2) => {
+      const diaryFile = e2.target.files[0];
+      if (!diaryFile) return;
+      
+      showToast('🔄 Import läuft...');
+      
+      try {
+        // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
+        const diaryText = await diaryFile.text();
+        const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(diaryText);
+        
+        // Parse Rezepte CSV
+        const recipeText = await recipeFile.text();
+        const importedRecipes = parseRecipesCSV(recipeText, extractedFoodDB);
+        
+        // ALLES LÖSCHEN
+        foodDB = [];
+        recipes = [];
+        foodLog = {};
+        trainingEntries = [];
+        dayLogs = [];
+        
+        // NEU SETZEN
+        foodDB = extractedFoodDB;
+        recipes = importedRecipes;
+        foodLog = importedDiary;
+        
+        // SPEICHERN
+        saveLS('foodDB', foodDB);
+        saveLS('recipes', recipes);
+        saveLS('foodLog', foodLog);
+        saveLS('training', trainingEntries);
+        saveLS('dayLogs', dayLogs);
+        
+        // Firebase sync wenn eingeloggt
+        if (userId) {
+          showToast('⏳ Sync zu Firebase...');
+          
+          // Upload FoodDB
+          for (const food of foodDB) {
+            await setDoc(doc(userFoodCol(), String(food.id)), food);
+          }
+          
+          // Upload Recipes
+          for (const recipe of recipes) {
+            await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+          }
+          
+          // Upload Diary
+          for (const date in foodLog) {
+            for (const entry of foodLog[date]) {
+              await setDoc(doc(userLogCol(), String(entry.id)), entry);
+            }
+          }
+        }
+        
+        showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
+        
+        setTimeout(() => location.reload(), 2000);
+        
+      } catch (err) {
+        console.error('Import error:', err);
+        showToast('❌ Import fehlgeschlagen: ' + err.message);
+      }
+    };
+    
+    showToast('📂 Wähle FDDB Tagebuch CSV (fddb_complete_all.csv)...');
+    diaryInput.click();
+  };
+  
+  showToast('📂 Wähle FDDB Rezepte CSV (lists_*.csv)...');
+  recipeInput.click();
+};
+
+function parseRecipesCSV(text, foodDB) {
+  const lines = text.split('\n').filter(l => l.trim());
+  const recipes = [];
+  
+  for (let i = 1; i < lines.length; i++) { // Skip header
+    try {
+      const match = lines[i].match(/^"([^"]+)";"[^"]*";"[^"]*";"(\d+)";"[^"]*";"[^"]*";"([^"]+)";$/);
+      if (!match) continue;
+      
+      const name = match[1];
+      const portions = parseInt(match[2]) || 1;
+      const productsStr = match[3];
+      
+      // Parse ingredients: "250 g Dinkelmehl Type 630, 100 g Butter, ..."
+      const ingredientStrs = productsStr.split(',').map(s => s.trim());
+      const ingredients = [];
+      
+      let totalWeight = 0, totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+      
+      for (const ingStr of ingredientStrs) {
+        const amountMatch = ingStr.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+        if (!amountMatch) continue;
+        
+        const amount = parseFloat(amountMatch[1]);
+        const foodName = amountMatch[3].trim();
+        
+        // Finde Food in DB
+        const food = foodDB.find(f => f.name === foodName);
+        if (!food) continue;
+        
+        const factor = amount / 100;
+        ingredients.push({
+          name: foodName,
+          amount,
+          kcal: food.kcal,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat
+        });
+        
+        totalWeight += amount;
+        totalKcal += food.kcal * factor;
+        totalProtein += food.protein * factor;
+        totalCarbs += food.carbs * factor;
+        totalFat += food.fat * factor;
+      }
+      
+      if (ingredients.length === 0) continue;
+      
+      recipes.push({
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        name,
+        portions,
+        ingredients,
+        totalWeight,
+        kcal: Math.round(totalKcal),
+        protein: Math.round(totalProtein),
+        carbs: Math.round(totalCarbs),
+        fat: Math.round(totalFat),
+        isV2: true
+      });
+      
+    } catch (e) {
+      console.warn('Failed to parse recipe line:', lines[i], e);
+    }
+  }
+  
+  return recipes;
+}
+
+function parseDiaryWithFoodDB(text) {
+  const lines = text.split('\n');
+  const foodLog = {};
+  const foodMap = new Map(); // name → {kcal, protein, carbs, fat} per 100g
+  
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(';');
+    if (parts.length < 8) continue;
+    
+    let date = parts[0]?.trim();
+    const meal = parts[1]?.trim();
+    let time = parts[2]?.trim();
+    const name = parts[3]?.trim();
+    const kcal = parseInt(parts[4]) || 0;
+    const protein = parseInt(parts[5]) || 0;
+    const carbs = parseInt(parts[6]) || 0;
+    const fat = parseInt(parts[7]) || 0;
+    
+    if (!date || !name) continue;
+    
+    // Extrahiere Menge und Food-Name aus "250 g Dinkelmehl Type 630"
+    const amountMatch = name.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+    let foodName = name;
+    let amount = 100;
+    
+    if (amountMatch) {
+      amount = parseFloat(amountMatch[1]);
+      foodName = amountMatch[3].trim();
+    }
+    
+    // Berechne Makros per 100g zurück
+    const factor = 100 / amount;
+    const kcalPer100 = Math.round(kcal * factor);
+    const proteinPer100 = Math.round(protein * factor * 10) / 10; // 1 Dezimalstelle
+    const carbsPer100 = Math.round(carbs * factor * 10) / 10;
+    const fatPer100 = Math.round(fat * factor * 10) / 10;
+    
+    // Füge zu FoodMap hinzu (oder update wenn schon vorhanden)
+    if (!foodMap.has(foodName)) {
+      foodMap.set(foodName, {
+        kcal: kcalPer100,
+        protein: proteinPer100,
+        carbs: carbsPer100,
+        fat: fatPer100,
+        count: 1
+      });
+    } else {
+      // Durchschnitt bilden wenn mehrfach vorkommt
+      const existing = foodMap.get(foodName);
+      existing.kcal = Math.round((existing.kcal * existing.count + kcalPer100) / (existing.count + 1));
+      existing.protein = Math.round(((existing.protein * existing.count + proteinPer100) / (existing.count + 1)) * 10) / 10;
+      existing.carbs = Math.round(((existing.carbs * existing.count + carbsPer100) / (existing.count + 1)) * 10) / 10;
+      existing.fat = Math.round(((existing.fat * existing.count + fatPer100) / (existing.count + 1)) * 10) / 10;
+      existing.count++;
+    }
+    
+    // Tagebuch-Eintrag erstellen
+    const [day, month, year] = date.split('.');
+    date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    
+    // DST fix
+    const dateObj = new Date(date + 'T' + time);
+    if (dateObj < new Date('2026-03-30')) {
+      dateObj.setHours(dateObj.getHours() - 1);
+      time = dateObj.toTimeString().substr(0, 5);
+    }
+    
+    const entry = {
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      date,
+      meal,
+      time,
+      name: foodName, // Nur der Food-Name ohne Menge
+      kcal,
+      protein,
+      carbs,
+      fat,
+      amount: amount,
+      foodId: null
+    };
+    
+    if (!foodLog[date]) foodLog[date] = [];
+    foodLog[date].push(entry);
+  }
+  
+  // Konvertiere FoodMap zu Array
+  const foodDB = Array.from(foodMap.entries()).map(([name, data]) => ({
+    id: name.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now(),
+    name,
+    kcal: data.kcal,
+    protein: data.protein,
+    carbs: data.carbs,
+    fat: data.fat
+  }));
+  
+  console.log(`Extracted ${foodDB.length} unique foods from diary`);
+  
+  return { foodDB, foodLog };
+}
+
+function parseDiaryCSV(text) {
+  // Old function - not used anymore, keeping for compatibility
+  return parseDiaryWithFoodDB(text).foodLog;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INIT

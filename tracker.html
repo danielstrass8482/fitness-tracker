@@ -1215,8 +1215,14 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 let userId = null;
 
+// Make Firebase functions globally available
 window.db = db;
 window.auth = auth;
+window.collection = collection;
+window.getDocs = getDocs;
+window.doc = doc;
+window.setDoc = setDoc;
+window.deleteDoc = deleteDoc;
 
 // Collections
 const userTrainingCol = () => collection(db, 'users', userId, 'entries');

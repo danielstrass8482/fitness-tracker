@@ -3440,8 +3440,8 @@ window.clearOldData = function() {
 // ═══════════════════════════════════════════════════════════════════════════
 // KOMPLETTER NEUSTART - 3 SCHRITTE
 // ═══════════════════════════════════════════════════════════════════════════
-let pendingRecipeText = null;
-let pendingDiaryText = null;
+window.pendingRecipeText = null;
+window.pendingDiaryText = null;
 
 window.importRecipesStep1 = function() {
   const input = document.createElement('input');
@@ -3451,7 +3451,7 @@ window.importRecipesStep1 = function() {
     const file = e.target.files[0];
     if (!file) return;
     
-    pendingRecipeText = await file.text();
+    window.pendingRecipeText = await file.text();
     
     document.getElementById('step1-status').innerHTML = `✓ Geladen: ${file.name}`;
     document.getElementById('import-step-2').style.opacity = '1';
@@ -3468,7 +3468,7 @@ window.importDiaryStep2 = function() {
     const file = e.target.files[0];
     if (!file) return;
     
-    pendingDiaryText = await file.text();
+    window.pendingDiaryText = await file.text();
     
     document.getElementById('step2-status').innerHTML = `✓ Geladen: ${file.name}`;
     document.getElementById('import-step-3').style.opacity = '1';
@@ -3478,7 +3478,7 @@ window.importDiaryStep2 = function() {
 };
 
 window.executeCompleteReset = async function() {
-  if (!pendingRecipeText || !pendingDiaryText) {
+  if (!window.pendingRecipeText || !window.pendingDiaryText) {
     showToast('❌ Bitte beide Dateien laden!');
     return;
   }
@@ -3492,12 +3492,12 @@ window.executeCompleteReset = async function() {
     console.log('Starting import...');
     
     // Parse Tagebuch CSV ZUERST (um FoodDB zu extrahieren)
-    const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(pendingDiaryText);
+    const { foodDB: extractedFoodDB, foodLog: importedDiary } = parseDiaryWithFoodDB(window.pendingDiaryText);
     console.log('Extracted FoodDB:', extractedFoodDB.length, 'foods');
     console.log('Imported Diary:', Object.keys(importedDiary).length, 'days');
     
     // Parse Rezepte CSV
-    const importedRecipes = parseRecipesCSV(pendingRecipeText, extractedFoodDB);
+    const importedRecipes = parseRecipesCSV(window.pendingRecipeText, extractedFoodDB);
     console.log('Imported Recipes:', importedRecipes.length, 'recipes');
     
     // ALLES LÖSCHEN
@@ -3544,8 +3544,8 @@ window.executeCompleteReset = async function() {
     showToast(`✓ Import fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(foodLog).length} Tage`);
     
     // Reset UI
-    pendingRecipeText = null;
-    pendingDiaryText = null;
+    window.pendingRecipeText = null;
+    window.pendingDiaryText = null;
     
     setTimeout(() => location.reload(), 2000);
     

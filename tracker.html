@@ -818,6 +818,23 @@ textarea {
     </div>
   </div>
 
+  <!-- Repair Wizard Modal -->
+  <div id="repair-modal" class="modal">
+    <div class="modal-box" style="max-width:700px;max-height:80vh;overflow-y:auto;">
+      <div class="modal-header">
+        <div class="modal-title">🔧 Rezepte reparieren</div>
+        <button class="modal-close" onclick="closeRepairModal()">✕</button>
+      </div>
+      
+      <div id="repair-content"></div>
+      
+      <div style="display:flex;gap:8px;margin-top:20px;position:sticky;bottom:0;background:var(--surface);padding-top:16px;">
+        <button class="btn-secondary" onclick="closeRepairModal()">Abbrechen</button>
+        <button class="btn" onclick="saveRepairedRecipes()" style="flex:1;">Alle speichern</button>
+      </div>
+    </div>
+  </div>
+
   <!-- RECIPES SUBTAB -->
   <div id="food-recipes" class="food-subtab" style="display:none;">
     
@@ -825,6 +842,7 @@ textarea {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:600;">Rezepte</h2>
       <div style="display:flex;gap:8px;">
+        <button class="btn-secondary btn-sm" onclick="openRepairWizard()">🔧 Reparieren</button>
         <button class="btn-secondary btn-sm" onclick="importOldRecipes()">📥 Alte importieren</button>
         <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-import').click()">📄 FDDB Import</button>
         <button class="btn btn-sm" onclick="openNewRecipe()">+ Neu</button>
@@ -1677,17 +1695,30 @@ window.syncFoodDB = async function() {
 window.importOldFoodDB = async function() {
   let oldFoods = [];
   
-  // Versuch 1: Aus localStorage
-  const oldFoodsRaw = localStorage.getItem('tracker_foodDB');
-  if (oldFoodsRaw) {
+  // Versuch 1: Aus altem localStorage Key (ern_foodDB)
+  const ernFoodDB = localStorage.getItem('ern_foodDB');
+  if (ernFoodDB) {
     try {
-      oldFoods = JSON.parse(oldFoodsRaw);
+      oldFoods = JSON.parse(ernFoodDB);
+      console.log('Found ern_foodDB with', oldFoods.length, 'foods');
     } catch (err) {
-      console.error('localStorage parse error:', err);
+      console.error('ern_foodDB parse error:', err);
     }
   }
   
-  // Versuch 2: Aus Firebase (falls eingeloggt)
+  // Versuch 2: Aus tracker_foodDB
+  if (oldFoods.length === 0) {
+    const oldFoodsRaw = localStorage.getItem('tracker_foodDB');
+    if (oldFoodsRaw) {
+      try {
+        oldFoods = JSON.parse(oldFoodsRaw);
+      } catch (err) {
+        console.error('localStorage parse error:', err);
+      }
+    }
+  }
+  
+  // Versuch 3: Aus Firebase (falls eingeloggt)
   if (oldFoods.length === 0 && userId) {
     showToast('🔍 Suche in Firebase...');
     
@@ -1697,10 +1728,7 @@ window.importOldFoodDB = async function() {
       
       snapshot.forEach(doc => {
         const data = doc.data();
-        // Nur alte Foods ohne isV2 Markierung
-        if (!data.isV2) {
-          oldFoods.push({ id: doc.id, ...data });
-        }
+        oldFoods.push({ id: doc.id, ...data });
       });
     } catch (err) {
       console.error('Firebase load error:', err);
@@ -1714,44 +1742,21 @@ window.importOldFoodDB = async function() {
     return;
   }
   
-  showConfirm(`${oldFoods.length} alte Lebensmittel importieren?`, async () => {
-    let imported = 0;
-    let skipped = 0;
+  showConfirm(`${oldFoods.length} alte Lebensmittel importieren? (Überschreibt aktuelle FoodDB!)`, async () => {
+    // KOMPLETT ersetzen statt merge
+    foodDB = oldFoods.map(f => ({
+      id: String(f.id),
+      name: f.name || 'Unbekannt',
+      kcal: f.kcal || 0,
+      protein: f.protein || 0,
+      carbs: f.carbs || 0,
+      fat: f.fat || 0
+    }));
     
-    for (const oldFood of oldFoods) {
-      // Prüfe ob Food mit gleichem Namen schon existiert
-      const exists = foodDB.find(f => f.name === oldFood.name);
-      if (exists) {
-        skipped++;
-        continue;
-      }
-      
-      // Konvertiere ins neue Format
-      const newFood = {
-        id: oldFood.id || oldFood.name.replace(/\s+/g, '_').toLowerCase(),
-        name: oldFood.name || 'Unbekannt',
-        kcal: oldFood.kcal || 0,
-        protein: oldFood.protein || 0,
-        carbs: oldFood.carbs || 0,
-        fat: oldFood.fat || 0,
-        isV2: true
-      };
-      
-      foodDB.push(newFood);
-      
-      // Auch in Firebase speichern wenn eingeloggt
-      if (userId) {
-        await setDoc(doc(userFoodCol(), String(newFood.id)), newFood);
-      }
-      
-      imported++;
-    }
-    
-    // localStorage speichern
     saveLS('foodDB', foodDB);
     renderFoodDB();
     
-    showToast(`✓ ${imported} Lebensmittel importiert, ${skipped} übersprungen`);
+    showToast(`✓ ${foodDB.length} Lebensmittel importiert - BITTE NEU EINLOGGEN!`);
   });
 };
 
@@ -2089,6 +2094,128 @@ window.importOldRecipes = async function() {
     
     showToast(`✓ ${imported} Rezepte importiert, ${skipped} übersprungen`);
   });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REPAIR WIZARD
+// ═══════════════════════════════════════════════════════════════════════════
+let repairRecipes = [];
+
+window.openRepairWizard = function() {
+  // Finde alle Rezepte mit kaputten Ingredients
+  const broken = recipes.filter(r => {
+    if (!r.ingredients || r.ingredients.length === 0) return false;
+    return r.ingredients.some(ing => {
+      // Ingredient ist kaputt wenn name fehlt oder eine ID ist
+      return !ing.name || ing.name.match(/^[0-9a-z_]+$/);
+    });
+  });
+  
+  if (broken.length === 0) {
+    showToast('✓ Keine kaputten Rezepte gefunden!');
+    return;
+  }
+  
+  repairRecipes = JSON.parse(JSON.stringify(broken)); // Deep copy
+  
+  const content = document.getElementById('repair-content');
+  content.innerHTML = `
+    <p style="margin-bottom:20px;color:var(--muted);">
+      ${broken.length} Rezept(e) mit kaputten Zutaten gefunden. Wähle für jede Zutat das richtige Lebensmittel aus:
+    </p>
+    ${repairRecipes.map((r, rIdx) => `
+      <div style="background:var(--surface2);border-radius:8px;padding:16px;margin-bottom:16px;">
+        <h3 style="margin-bottom:12px;font-size:16px;">${r.name}</h3>
+        ${r.ingredients.map((ing, iIdx) => {
+          const isBroken = !ing.name || ing.name.match(/^[0-9a-z_]+$/);
+          if (!isBroken) return '';
+          
+          return `
+            <div style="margin-bottom:12px;">
+              <label style="display:block;margin-bottom:4px;font-size:13px;color:var(--muted);">
+                ${ing.amount}g - <span style="color:var(--danger);">${ing.name || 'unbekannt'}</span>
+              </label>
+              <select class="repair-select" data-recipe="${rIdx}" data-ingredient="${iIdx}" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;">
+                <option value="">-- Lebensmittel wählen --</option>
+                ${foodDB.map(f => `<option value="${f.name}">${f.name}</option>`).join('')}
+              </select>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `).join('')}
+  `;
+  
+  document.getElementById('repair-modal').classList.add('open');
+};
+
+window.closeRepairModal = function() {
+  document.getElementById('repair-modal').classList.remove('open');
+};
+
+window.saveRepairedRecipes = async function() {
+  // Sammle alle Änderungen
+  const selects = document.querySelectorAll('.repair-select');
+  
+  selects.forEach(select => {
+    const rIdx = parseInt(select.getAttribute('data-recipe'));
+    const iIdx = parseInt(select.getAttribute('data-ingredient'));
+    const newName = select.value;
+    
+    if (newName && repairRecipes[rIdx]) {
+      const food = foodDB.find(f => f.name === newName);
+      if (food) {
+        repairRecipes[rIdx].ingredients[iIdx] = {
+          name: newName,
+          amount: repairRecipes[rIdx].ingredients[iIdx].amount,
+          kcal: food.kcal,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat
+        };
+      }
+    }
+  });
+  
+  // Neuberechne Totals für jedes reparierte Rezept
+  repairRecipes.forEach(r => {
+    let totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalWeight = 0;
+    r.ingredients.forEach(ing => {
+      const factor = ing.amount / 100;
+      totalKcal += (ing.kcal || 0) * factor;
+      totalProtein += (ing.protein || 0) * factor;
+      totalCarbs += (ing.carbs || 0) * factor;
+      totalFat += (ing.fat || 0) * factor;
+      totalWeight += ing.amount;
+    });
+    
+    r.kcal = Math.round(totalKcal);
+    r.protein = Math.round(totalProtein);
+    r.carbs = Math.round(totalCarbs);
+    r.fat = Math.round(totalFat);
+    r.totalWeight = totalWeight;
+  });
+  
+  // Update recipes array
+  repairRecipes.forEach(repairedRecipe => {
+    const index = recipes.findIndex(r => String(r.id) === String(repairedRecipe.id));
+    if (index >= 0) {
+      recipes[index] = repairedRecipe;
+    }
+  });
+  
+  // Save
+  saveLS('recipes', recipes);
+  
+  if (userId) {
+    for (const r of repairRecipes) {
+      await setDoc(doc(userRecipeCol(), String(r.id)), r);
+    }
+  }
+  
+  showToast(`✓ ${repairRecipes.length} Rezept(e) repariert`);
+  closeRepairModal();
+  renderRecipes();
 };
 
 let currentRecipeEatId = null;

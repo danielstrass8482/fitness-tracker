@@ -1299,8 +1299,15 @@ async function loadAll() {
     const dbSnap = await getDocs(userFoodCol());
     if (dbSnap.size > 0) {
       foodDB = [];
-      dbSnap.forEach(d => foodDB.push(d.data()));
+      dbSnap.forEach(d => {
+        const data = d.data();
+        // Stelle sicher dass ID ein String ist
+        if (!data.id) data.id = d.id; // Nutze Doc-ID als fallback
+        data.id = String(data.id);
+        foodDB.push(data);
+      });
       saveLS('foodDB', foodDB);
+      console.log(`Loaded ${foodDB.length} foods from Firebase`);
     }
     
     // Training

@@ -610,33 +610,13 @@ textarea {
         </div>
         <div class="grid-2">
           <div class="form-group">
-            <label>Kalorien</label>
-            <input type="number" id="log-kcal">
-          </div>
-          <div class="form-group">
-            <label>Aktivitätskalorien</label>
-            <input type="number" id="log-activity-kcal" placeholder="z.B. 300">
-          </div>
-        </div>
-        <div class="grid-2">
-          <div class="form-group">
-            <label>Protein (g)</label>
-            <input type="number" id="log-protein">
-          </div>
-        </div>
-        <div class="grid-2">
-          <div class="form-group">
-            <label>Kohlenhydrate (g)</label>
-            <input type="number" id="log-carbs">
-          </div>
-          <div class="form-group">
             <label>Ruheherzfrequenz (bpm)</label>
             <input type="number" id="log-rhf">
           </div>
-        </div>
-        <div class="form-group">
-          <label>Schlafqualität (1-5)</label>
-          <input type="number" id="log-sleep" min="1" max="5" step="1">
+          <div class="form-group">
+            <label>Schlafqualität (1-5)</label>
+            <input type="number" id="log-sleep" min="1" max="5" step="1">
+          </div>
         </div>
         <div class="form-group">
           <label>Energie (1-5)</label>
@@ -2036,10 +2016,6 @@ window.saveDayLog = async function() {
   const datum = document.getElementById('log-date').value;
   const weight = parseFloat(document.getElementById('log-weight').value) || null;
   const steps = parseInt(document.getElementById('log-steps').value) || null;
-  const kcal = parseInt(document.getElementById('log-kcal').value) || null;
-  const activityKcal = parseInt(document.getElementById('log-activity-kcal').value) || null;
-  const protein = parseInt(document.getElementById('log-protein').value) || null;
-  const carbs = parseInt(document.getElementById('log-carbs').value) || null;
   const rhf = parseInt(document.getElementById('log-rhf').value) || null;
   const sleep = parseInt(document.getElementById('log-sleep').value) || null;
   const energy = parseInt(document.getElementById('log-energy').value) || null;
@@ -2058,10 +2034,6 @@ window.saveDayLog = async function() {
     typ: 'tageslog',
     weight,
     steps,
-    kcal,
-    activityKcal,
-    protein,
-    carbs,
     rhf,
     sleep,
     energy

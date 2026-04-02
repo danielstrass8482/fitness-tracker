@@ -1971,12 +1971,22 @@ window.editRecipe = function(id) {
   container.innerHTML = '';
   
   recipe.ingredients.forEach((ing, i) => {
-    // Hole Name aus foodDB wenn nur foodId vorhanden
+    // Hole Name aus foodDB 
     let displayName = ing.name;
+    
+    // Prüfe ob name eine ID ist (Format: zahlen_buchstaben)
+    if (displayName && displayName.match(/^\d+_[a-z0-9]+$/i)) {
+      // Das ist eine ID, nicht ein Name! Suche in foodDB
+      const food = foodDB.find(f => String(f.id) === String(displayName));
+      displayName = food ? food.name : displayName;
+    }
+    
+    // Fallback: wenn kein name, versuche foodId
     if (!displayName && ing.foodId) {
-      const food = foodDB.find(f => String(f.id) === String(ing.foodId) || f.name === ing.foodId);
+      const food = foodDB.find(f => String(f.id) === String(ing.foodId));
       displayName = food ? food.name : ing.foodId;
     }
+    
     if (!displayName) displayName = 'Unbekannt';
     
     const row = document.createElement('div');

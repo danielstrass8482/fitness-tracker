@@ -1736,7 +1736,7 @@ window.saveRecipeFromModal = async function() {
   });
   
   const recipe = {
-    id: currentRecipeId || Date.now(),
+    id: currentRecipeId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9)),
     name,
     portions,
     ingredients,
@@ -1744,12 +1744,13 @@ window.saveRecipeFromModal = async function() {
     kcal: Math.round(totalKcal),
     protein: Math.round(totalProtein),
     carbs: Math.round(totalCarbs),
-    fat: Math.round(totalFat)
+    fat: Math.round(totalFat),
+    isV2: true
   };
   
   if (currentRecipeId) {
     // Edit existing
-    const index = recipes.findIndex(r => r.id === currentRecipeId);
+    const index = recipes.findIndex(r => String(r.id) === String(currentRecipeId));
     if (index >= 0) recipes[index] = recipe;
   } else {
     // Add new
@@ -1786,10 +1787,18 @@ window.editRecipe = function(id) {
   container.innerHTML = '';
   
   recipe.ingredients.forEach((ing, i) => {
+    // Hole Name aus foodDB wenn nur foodId vorhanden
+    let displayName = ing.name;
+    if (!displayName && ing.foodId) {
+      const food = foodDB.find(f => String(f.id) === String(ing.foodId) || f.name === ing.foodId);
+      displayName = food ? food.name : ing.foodId;
+    }
+    if (!displayName) displayName = 'Unbekannt';
+    
     const row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 100px 40px;gap:8px;margin-bottom:8px;';
     row.innerHTML = `
-      <input type="text" value="${ing.name}" list="food-datalist-${i}" class="ing-name" data-index="${i}">
+      <input type="text" value="${displayName}" list="food-datalist-${i}" class="ing-name" data-index="${i}">
       <datalist id="food-datalist-${i}">
         ${foodDB.map(f => `<option value="${f.name}">`).join('')}
       </datalist>

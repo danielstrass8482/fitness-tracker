@@ -1743,8 +1743,73 @@ window.importOldFoodDB = async function() {
 };
 
 window.handleFoodDBImport = function(event) {
-  showToast('ℹ️ Food-DB Import wird noch implementiert');
-  event.target.value = '';
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      
+      if (lines.length === 0) {
+        showToast('❌ Leere Datei');
+        return;
+      }
+      
+      // Parse CSV (Name;Kcal;Protein;Carbs;Fat)
+      let imported = 0;
+      let skipped = 0;
+      
+      for (let i = 1; i < lines.length; i++) { // Skip header
+        const parts = lines[i].split(';').map(p => p.trim());
+        
+        if (parts.length < 5) continue;
+        
+        const name = parts[0];
+        const kcal = parseFloat(parts[1]) || 0;
+        const protein = parseFloat(parts[2]) || 0;
+        const carbs = parseFloat(parts[3]) || 0;
+        const fat = parseFloat(parts[4]) || 0;
+        
+        if (!name) continue;
+        
+        // Prüfe Duplikat
+        const exists = foodDB.find(f => f.name === name);
+        if (exists) {
+          skipped++;
+          continue;
+        }
+        
+        const food = {
+          id: name.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now(),
+          name,
+          kcal,
+          protein,
+          carbs,
+          fat,
+          isV2: true
+        };
+        
+        foodDB.push(food);
+        imported++;
+      }
+      
+      saveLS('foodDB', foodDB);
+      renderFoodDB();
+      
+      showToast(`✓ ${imported} Lebensmittel importiert, ${skipped} übersprungen`);
+      
+      // Reset file input
+      event.target.value = '';
+      
+    } catch (err) {
+      console.error('Import error:', err);
+      showToast('❌ Fehler beim Importieren');
+    }
+  };
+  
+  reader.readAsText(file);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

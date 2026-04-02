@@ -849,6 +849,7 @@ textarea {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:600;">Lebensmittel-DB</h2>
       <div style="display:flex;gap:8px;">
+        <button class="btn-secondary btn-sm" onclick="importOldFoodDB()">📥 Alte importieren</button>
         <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-food-import').click()">📄 CSV Import</button>
         <button class="btn-secondary btn-sm" onclick="syncFoodDB()">🔄 Sync</button>
         <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
@@ -1658,6 +1659,87 @@ window.syncFoodDB = async function() {
   await Promise.all(promises);
   
   showToast('✓ Synchronisiert');
+};
+
+window.importOldFoodDB = async function() {
+  let oldFoods = [];
+  
+  // Versuch 1: Aus localStorage
+  const oldFoodsRaw = localStorage.getItem('tracker_foodDB');
+  if (oldFoodsRaw) {
+    try {
+      oldFoods = JSON.parse(oldFoodsRaw);
+    } catch (err) {
+      console.error('localStorage parse error:', err);
+    }
+  }
+  
+  // Versuch 2: Aus Firebase (falls eingeloggt)
+  if (oldFoods.length === 0 && userId) {
+    showToast('🔍 Suche in Firebase...');
+    
+    try {
+      const foodsCol = collection(db, 'users', userId, 'foods');
+      const snapshot = await getDocs(foodsCol);
+      
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        // Nur alte Foods ohne isV2 Markierung
+        if (!data.isV2) {
+          oldFoods.push({ id: doc.id, ...data });
+        }
+      });
+    } catch (err) {
+      console.error('Firebase load error:', err);
+      showToast('❌ Firebase-Fehler');
+      return;
+    }
+  }
+  
+  if (oldFoods.length === 0) {
+    showToast('❌ Keine alten Lebensmittel gefunden');
+    return;
+  }
+  
+  showConfirm(`${oldFoods.length} alte Lebensmittel importieren?`, async () => {
+    let imported = 0;
+    let skipped = 0;
+    
+    for (const oldFood of oldFoods) {
+      // Prüfe ob Food mit gleichem Namen schon existiert
+      const exists = foodDB.find(f => f.name === oldFood.name);
+      if (exists) {
+        skipped++;
+        continue;
+      }
+      
+      // Konvertiere ins neue Format
+      const newFood = {
+        id: oldFood.id || oldFood.name.replace(/\s+/g, '_').toLowerCase(),
+        name: oldFood.name || 'Unbekannt',
+        kcal: oldFood.kcal || 0,
+        protein: oldFood.protein || 0,
+        carbs: oldFood.carbs || 0,
+        fat: oldFood.fat || 0,
+        isV2: true
+      };
+      
+      foodDB.push(newFood);
+      
+      // Auch in Firebase speichern wenn eingeloggt
+      if (userId) {
+        await setDoc(doc(userFoodCol(), String(newFood.id)), newFood);
+      }
+      
+      imported++;
+    }
+    
+    // localStorage speichern
+    saveLS('foodDB', foodDB);
+    renderFoodDB();
+    
+    showToast(`✓ ${imported} Lebensmittel importiert, ${skipped} übersprungen`);
+  });
 };
 
 window.handleFoodDBImport = function(event) {

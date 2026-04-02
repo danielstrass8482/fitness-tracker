@@ -1768,8 +1768,11 @@ window.saveRecipeFromModal = async function() {
 };
 
 window.editRecipe = function(id) {
-  const recipe = recipes.find(r => r.id === id);
-  if (!recipe) return;
+  const recipe = recipes.find(r => String(r.id) === String(id));
+  if (!recipe) {
+    console.error('Recipe not found:', id);
+    return;
+  }
   
   currentRecipeId = id;
   document.getElementById('recipe-modal-title').textContent = 'Rezept bearbeiten';
@@ -1803,7 +1806,7 @@ window.deleteRecipe = async function() {
   if (!currentRecipeId) return;
   
   showConfirm('Rezept wirklich löschen?', async () => {
-    recipes = recipes.filter(r => r.id !== currentRecipeId);
+    recipes = recipes.filter(r => String(r.id) !== String(currentRecipeId));
     saveLS('recipes', recipes);
     
     if (userId) {
@@ -1904,8 +1907,11 @@ let currentRecipeEatId = null;
 let recipeEatMode = 'portions'; // 'portions' or 'grams'
 
 window.openRecipeEat = function(id) {
-  const recipe = recipes.find(r => r.id === id);
-  if (!recipe) return;
+  const recipe = recipes.find(r => String(r.id) === String(id));
+  if (!recipe) {
+    console.error('Recipe not found:', id);
+    return;
+  }
   
   currentRecipeEatId = id;
   recipeEatMode = 'portions';
@@ -1950,7 +1956,7 @@ window.switchRecipeEatMode = function(mode) {
 };
 
 window.updateRecipeEatPreview = function() {
-  const recipe = recipes.find(r => r.id === currentRecipeEatId);
+  const recipe = recipes.find(r => String(r.id) === String(currentRecipeEatId));
   if (!recipe) return;
   
   let factor = 1;
@@ -1975,7 +1981,7 @@ window.updateRecipeEatPreview = function() {
 };
 
 window.confirmRecipeEat = async function() {
-  const recipe = recipes.find(r => r.id === currentRecipeEatId);
+  const recipe = recipes.find(r => String(r.id) === String(currentRecipeEatId));
   if (!recipe) return;
   
   const time = document.getElementById('recipe-eat-time').value || getCurrentTime();
@@ -2049,7 +2055,7 @@ function renderRecipes() {
     } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
     
     return `
-      <div class="recipe-card" style="cursor:pointer;" onclick="editRecipe(${r.id})">
+      <div class="recipe-card" style="cursor:pointer;" onclick="editRecipe('${r.id}')">
         <div class="recipe-card-content">
           <div class="recipe-card-name">${r.name}</div>
           <div class="recipe-card-meta">${r.ingredients.length} Zutaten · ${formatNum(r.totalWeight)}g gesamt</div>
@@ -2068,7 +2074,7 @@ function renderRecipes() {
             <span style="color:#ff6b9d;">F ${per100g.fat}g</span>
           </div>
         </div>
-        <div class="recipe-card-arrow" onclick="event.stopPropagation(); event.preventDefault(); openRecipeEat(${r.id}); return false;">→</div>
+        <div class="recipe-card-arrow" onclick="event.stopPropagation(); event.preventDefault(); openRecipeEat('${r.id}'); return false;">→</div>
       </div>
     `;
   }).join('');

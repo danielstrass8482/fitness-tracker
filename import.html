@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FDDB Daten importieren</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .drop-zone {
+      border: 3px dashed #667eea;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #f8f9ff;
+    }
+    
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #764ba2;
+      background: #f0f2ff;
+      transform: scale(1.02);
+    }
+    
+    .drop-zone.has-file {
+      border-color: #10b981;
+      background: #ecfdf5;
+    }
+    
+    .drop-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    
+    .drop-text {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    
+    .drop-hint {
+      font-size: 12px;
+      color: #999;
+    }
+    
+    .file-name {
+      font-size: 14px;
+      color: #10b981;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .progress {
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    .progress-text {
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
+    
+    .error {
+      background: #fee;
+      border: 1px solid #fcc;
+      padding: 12px;
+      border-radius: 8px;
+      color: #c33;
+      font-size: 14px;
+      margin-top: 15px;
+      display: none;
+    }
+    
+    .step {
+      margin-bottom: 25px;
+    }
+    
+    .step-number {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      background: #667eea;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 28px;
+      font-weight: 600;
+      margin-right: 10px;
+      font-size: 14px;
+    }
+    
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Fitness & Nutrition Tracker</h1>
+    <p class="subtitle">Importiere deine FDDB Daten in 2 einfachen Schritten</p>
+    
+    <!-- Schritt 1: Rezepte -->
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">1</span>
+        FDDB Rezepte CSV
+      </div>
+      <div class="drop-zone" id="recipe-drop" data-type="recipe">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">lists_*.csv</div>
+        <div class="file-name" id="recipe-name"></div>
+      </div>
+      <input type="file" id="recipe-input" accept=".csv" style="display:none">
+    </div>
+    
+    <!-- Schritt 2: Tagebuch -->
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">2</span>
+        FDDB Tagebuch CSV
+      </div>
+      <div class="drop-zone" id="diary-drop" data-type="diary">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">fddb_complete_all.csv</div>
+        <div class="file-name" id="diary-name"></div>
+      </div>
+      <input type="file" id="diary-input" accept=".csv" style="display:none">
+    </div>
+    
+    <button id="import-btn" disabled onclick="startImport()">
+      🚀 Jetzt importieren
+    </button>
+    
+    <div class="progress" id="progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
+    
+    <div class="error" id="error"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBvTU5OhJnvJW-hYJYYVTro2rNcNr60aCk",
+      authDomain: "fitness-tracker-c6f97.firebaseapp.com",
+      projectId: "fitness-tracker-c6f97",
+      storageBucket: "fitness-tracker-c6f97.firebasestorage.app",
+      messagingSenderId: "187864668697",
+      appId: "1:187864668697:web:e2437802dbb11a23482888"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    
+    let recipeFile = null;
+    let diaryFile = null;
+    let userId = null;
+    
+    // Anonymous login beim Start
+    signInAnonymously(auth).then(result => {
+      userId = result.user.uid;
+      console.log('Logged in as:', userId);
+    });
+    
+    // Drag & Drop Setup
+    ['recipe', 'diary'].forEach(type => {
+      const dropZone = document.getElementById(`${type}-drop`);
+      const input = document.getElementById(`${type}-input`);
+      const nameEl = document.getElementById(`${type}-name`);
+      
+      dropZone.addEventListener('click', () => input.click());
+      
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+      
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+      
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleFile(e.dataTransfer.files[0], type);
+      });
+      
+      input.addEventListener('change', (e) => {
+        handleFile(e.target.files[0], type);
+      });
+      
+      function handleFile(file, type) {
+        if (!file || !file.name.endsWith('.csv')) {
+          showError('Bitte nur CSV-Dateien verwenden!');
+          return;
+        }
+        
+        if (type === 'recipe') {
+          recipeFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        } else {
+          diaryFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        }
+        
+        // Enable button wenn beide Dateien da sind
+        document.getElementById('import-btn').disabled = !(recipeFile && diaryFile);
+      }
+    });
+    
+    window.startImport = async function() {
+      if (!userId) {
+        showError('Warte auf Firebase Login...');
+        return;
+      }
+      
+      document.getElementById('import-btn').disabled = true;
+      document.getElementById('progress').style.display = 'block';
+      
+      try {
+        updateProgress(10, 'Lade Tagebuch...');
+        const diaryText = await diaryFile.text();
+        
+        updateProgress(20, 'Extrahiere FoodDB...');
+        const { foodDB, foodLog } = parseDiary(diaryText);
+        
+        updateProgress(40, 'Lade Rezepte...');
+        const recipeText = await recipeFile.text();
+        const recipes = parseRecipes(recipeText, foodDB);
+        
+        updateProgress(60, 'Upload FoodDB zu Firebase...');
+        for (let i = 0; i < foodDB.length; i++) {
+          await setDoc(doc(db, 'users', userId, 'foods', String(foodDB[i].id)), foodDB[i]);
+          if (i % 50 === 0) updateProgress(60 + (i / foodDB.length) * 10, `FoodDB: ${i}/${foodDB.length}`);
+        }
+        
+        updateProgress(70, 'Upload Rezepte...');
+        for (let i = 0; i < recipes.length; i++) {
+          await setDoc(doc(db, 'users', userId, 'recipes', String(recipes[i].id)), recipes[i]);
+          if (i % 20 === 0) updateProgress(70 + (i / recipes.length) * 15, `Rezepte: ${i}/${recipes.length}`);
+        }
+        
+        updateProgress(85, 'Upload Tagebuch...');
+        let count = 0;
+        const totalEntries = Object.values(foodLog).flat().length;
+        for (const date in foodLog) {
+          for (const entry of foodLog[date]) {
+            await setDoc(doc(db, 'users', userId, 'diary', String(entry.id)), entry);
+            count++;
+            if (count % 100 === 0) updateProgress(85 + (count / totalEntries) * 10, `Tagebuch: ${count}/${totalEntries}`);
+          }
+        }
+        
+        updateProgress(100, '✓ Import abgeschlossen!');
+        
+        // Save to localStorage
+        localStorage.setItem('tracker_foodDB', JSON.stringify(foodDB));
+        localStorage.setItem('tracker_recipes', JSON.stringify(recipes));
+        localStorage.setItem('tracker_foodLog', JSON.stringify(foodLog));
+        localStorage.setItem('tracker_userId', userId);
+        
+        setTimeout(() => {
+          window.location.href = 'index.html';
+        }, 1500);
+        
+      } catch (err) {
+        console.error('Import error:', err);
+        showError('Import fehlgeschlagen: ' + err.message);
+        document.getElementById('import-btn').disabled = false;
+      }
+    };
+    
+    function parseDiary(text) {
+      const lines = text.split('\n');
+      const foodLog = {};
+      const foodMap = new Map();
+      
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(';').map(p => p.replace(/^"|"$/g, '').trim());
+        if (parts.length < 8) continue;
+        
+        const dateTime = parts[0];
+        const nameWithAmount = parts[1];
+        const kj = parseFloat(parts[3]) || 0;
+        const fat = parseFloat(parts[5].replace(',', '.')) || 0;
+        const carbs = parseFloat(parts[6].replace(',', '.')) || 0;
+        const protein = parseFloat(parts[7].replace(',', '.')) || 0;
+        
+        if (!dateTime || !nameWithAmount) continue;
+        
+        const [datePart, timePart] = dateTime.split(' ');
+        const [day, month, year] = datePart.split('.');
+        const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const time = timePart || '00:00';
+        
+        const amountMatch = nameWithAmount.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+        let foodName = nameWithAmount;
+        let amount = 100;
+        
+        if (amountMatch) {
+          amount = parseFloat(amountMatch[1]);
+          foodName = amountMatch[3].trim();
+        }
+        
+        const kcal = Math.round(kj / 4.184);
+        const factor = 100 / amount;
+        const kcalPer100 = Math.round(kcal * factor);
+        const proteinPer100 = Math.round(protein * factor * 10) / 10;
+        const carbsPer100 = Math.round(carbs * factor * 10) / 10;
+        const fatPer100 = Math.round(fat * factor * 10) / 10;
+        
+        if (!foodMap.has(foodName)) {
+          foodMap.set(foodName, {
+            kcal: kcalPer100,
+            protein: proteinPer100,
+            carbs: carbsPer100,
+            fat: fatPer100,
+            count: 1
+          });
+        } else {
+          const existing = foodMap.get(foodName);
+          existing.kcal = Math.round((existing.kcal * existing.count + kcalPer100) / (existing.count + 1));
+          existing.protein = Math.round(((existing.protein * existing.count + proteinPer100) / (existing.count + 1)) * 10) / 10;
+          existing.carbs = Math.round(((existing.carbs * existing.count + carbsPer100) / (existing.count + 1)) * 10) / 10;
+          existing.fat = Math.round(((existing.fat * existing.count + fatPer100) / (existing.count + 1)) * 10) / 10;
+          existing.count++;
+        }
+        
+        const hour = parseInt(time.split(':')[0]);
+        let meal = 'Nachts';
+        if (hour >= 6 && hour < 11) meal = 'Morgens';
+        else if (hour >= 11 && hour < 15) meal = 'Mittags';
+        else if (hour >= 15 && hour < 19) meal = 'Nachmittags';
+        else if (hour >= 19 && hour < 23) meal = 'Abends';
+        
+        const entry = {
+          id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          date,
+          meal,
+          time,
+          name: foodName,
+          kcal,
+          protein,
+          carbs,
+          fat,
+          amount
+        };
+        
+        if (!foodLog[date]) foodLog[date] = [];
+        foodLog[date].push(entry);
+      }
+      
+      const foodDB = Array.from(foodMap.entries()).map(([name, data], idx) => ({
+        id: 'food_' + Date.now() + '_' + idx,
+        name,
+        kcal: data.kcal,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat
+      }));
+      
+      console.log(`Extracted ${foodDB.length} foods, ${Object.keys(foodLog).length} days`);
+      
+      return { foodDB, foodLog };
+    }
+    
+    function parseRecipes(text, foodDB) {
+      const lines = text.split('\n').filter(l => l.trim());
+      const recipes = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const match = lines[i].match(/^"([^"]+)";"[^"]*";"[^"]*";"(\d+)";"[^"]*";"[^"]*";"([^"]+)";$/);
+          if (!match) continue;
+          
+          const name = match[1];
+          const portions = parseInt(match[2]) || 1;
+          const productsStr = match[3];
+          
+          const ingredientStrs = productsStr.split(',').map(s => s.trim());
+          const ingredients = [];
+          
+          let totalWeight = 0, totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+          
+          for (const ingStr of ingredientStrs) {
+            const amountMatch = ingStr.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+            if (!amountMatch) continue;
+            
+            const amount = parseFloat(amountMatch[1]);
+            const foodName = amountMatch[3].trim();
+            
+            const food = foodDB.find(f => f.name === foodName);
+            if (!food) continue;
+            
+            const factor = amount / 100;
+            ingredients.push({
+              name: foodName,
+              amount,
+              kcal: food.kcal,
+              protein: food.protein,
+              carbs: food.carbs,
+              fat: food.fat
+            });
+            
+            totalWeight += amount;
+            totalKcal += food.kcal * factor;
+            totalProtein += food.protein * factor;
+            totalCarbs += food.carbs * factor;
+            totalFat += food.fat * factor;
+          }
+          
+          if (ingredients.length === 0) continue;
+          
+          recipes.push({
+            id: 'recipe_' + Date.now() + '_' + i,
+            name,
+            portions,
+            ingredients,
+            totalWeight,
+            kcal: Math.round(totalKcal),
+            protein: Math.round(totalProtein),
+            carbs: Math.round(totalCarbs),
+            fat: Math.round(totalFat)
+          });
+          
+        } catch (e) {
+          console.warn('Failed to parse recipe:', lines[i]);
+        }
+      }
+      
+      console.log(`Parsed ${recipes.length} recipes`);
+      return recipes;
+    }
+    
+    function updateProgress(percent, text) {
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('progress-text').textContent = text;
+    }
+    
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 5000);
+    }
+  </script>
+</body>
+</html>

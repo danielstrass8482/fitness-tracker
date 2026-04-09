@@ -282,16 +282,31 @@
         const recipes = parseRecipes(recipeText, foodDB);
         
         updateProgress(80, 'Speichere...');
+        
+        // Filter foodLog: nur letzte 90 Tage
+        const today = new Date();
+        const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const filteredLog = {};
+        
+        for (const date in foodLog) {
+          const dateObj = new Date(date);
+          if (dateObj >= ninetyDaysAgo) {
+            filteredLog[date] = foodLog[date];
+          }
+        }
+        
+        console.log(`Filtered diary: ${Object.keys(foodLog).length} days -> ${Object.keys(filteredLog).length} days (last 90)`);
+        
         localStorage.setItem('tracker_foodDB', JSON.stringify(foodDB));
         localStorage.setItem('tracker_recipes', JSON.stringify(recipes));
-        localStorage.setItem('tracker_foodLog', JSON.stringify(foodLog));
+        localStorage.setItem('tracker_foodLog', JSON.stringify(filteredLog));
         localStorage.setItem('tracker_training', JSON.stringify([]));
         localStorage.setItem('tracker_dayLogs', JSON.stringify([]));
         
-        updateProgress(100, `✓ Fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte`);
+        updateProgress(100, `✓ Fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(filteredLog).length} Tage`);
         
         setTimeout(() => {
-          alert(`✓ Import erfolgreich!\n\n${foodDB.length} Lebensmittel\n${recipes.length} Rezepte\n${Object.keys(foodLog).length} Tage`);
+          alert(`✓ Import erfolgreich!\n\n${foodDB.length} Lebensmittel\n${recipes.length} Rezepte\n${Object.keys(filteredLog).length} Tage (letzte 90 Tage)\n\nÄltere Daten wurden weggelassen wegen localStorage Limit.`);
         }, 500);
         
       } catch (err) {

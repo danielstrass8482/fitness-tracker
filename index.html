@@ -2397,23 +2397,31 @@ function renderRecipes() {
   
   container.innerHTML = filtered.map(r => {
     const per100g = r.totalWeight > 0 ? {
-      kcal: Math.round((r.kcal / r.totalWeight) * 100),
-      protein: Math.round((r.protein / r.totalWeight) * 100),
-      carbs: Math.round((r.carbs / r.totalWeight) * 100),
-      fat: Math.round((r.fat / r.totalWeight) * 100)
+      kcal: Math.round((r.kcal / r.totalWeight) * 100) || 0,
+      protein: Math.round((r.protein / r.totalWeight) * 100) || 0,
+      carbs: Math.round((r.carbs / r.totalWeight) * 100) || 0,
+      fat: Math.round((r.fat / r.totalWeight) * 100) || 0
     } : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    
+    // Safe values
+    const kcal = r.kcal || 0;
+    const protein = r.protein || 0;
+    const carbs = r.carbs || 0;
+    const fat = r.fat || 0;
+    const totalWeight = r.totalWeight || 0;
+    const ingredientsCount = (r.ingredients && r.ingredients.length) || 0;
     
     return `
       <div class="recipe-card" style="cursor:pointer;" onclick="editRecipe('${r.id}')">
         <div class="recipe-card-content">
           <div class="recipe-card-name">${r.name}</div>
-          <div class="recipe-card-meta">${r.ingredients.length} Zutaten · ${formatNum(r.totalWeight)}g gesamt</div>
+          <div class="recipe-card-meta">${ingredientsCount} Zutaten · ${formatNum(totalWeight)}g gesamt</div>
           <div class="recipe-card-macros">
             <span><strong>Gesamt:</strong></span>
-            <span><strong>${formatNum(r.kcal)}</strong> kcal</span>
-            <span style="color:#4a9eff;"><strong>P</strong> ${r.protein}g</span>
-            <span style="color:#ffd93d;"><strong>K</strong> ${r.carbs}g</span>
-            <span style="color:#ff6b9d;"><strong>F</strong> ${r.fat}g</span>
+            <span><strong>${formatNum(kcal)}</strong> kcal</span>
+            <span style="color:#4a9eff;"><strong>P</strong> ${protein}g</span>
+            <span style="color:#ffd93d;"><strong>K</strong> ${carbs}g</span>
+            <span style="color:#ff6b9d;"><strong>F</strong> ${fat}g</span>
           </div>
           <div class="recipe-card-macros-per">
             <span><strong>Pro 100g:</strong></span>
@@ -2442,7 +2450,8 @@ window.showToast = function(msg) {
 };
 
 function formatNum(n) {
-  return n.toLocaleString('de-DE');
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Number(n).toLocaleString('de-DE');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

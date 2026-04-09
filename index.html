@@ -1297,7 +1297,10 @@ function saveLS(key, value) {
 }
 
 function loadLS(key) {
-  const item = localStorage.getItem('tracker_v2_' + key);
+  // Erst mit v2_ prefix probieren
+  let item = localStorage.getItem('tracker_v2_' + key);
+  // Falls nicht gefunden, ohne prefix probieren
+  if (!item) item = localStorage.getItem('tracker_' + key);
   return item ? JSON.parse(item) : null;
 }
 

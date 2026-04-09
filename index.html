@@ -1329,7 +1329,16 @@ function loadLocalStorage() {
 
 async function loadAll() {
   loadLocalStorage();
-  if (!userId) return;
+  
+  // Wenn localStorage Daten hat, NICHT von Firebase überschreiben!
+  const hasLocalData = foodDB.length > 0 || recipes.length > 0 || Object.keys(foodLog).length > 0;
+  
+  if (!userId || hasLocalData) {
+    if (hasLocalData) {
+      console.log('Using localStorage data (not loading from Firebase)');
+    }
+    return;
+  }
   
   try {
     // Food DB ZUERST laden (wird für Rezept-Konvertierung gebraucht!)
@@ -1338,8 +1347,7 @@ async function loadAll() {
       foodDB = [];
       dbSnap.forEach(d => {
         const data = d.data();
-        // Stelle sicher dass ID ein String ist
-        if (!data.id) data.id = d.id; // Nutze Doc-ID als fallback
+        if (!data.id) data.id = d.id;
         data.id = String(data.id);
         foodDB.push(data);
       });

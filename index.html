@@ -1104,6 +1104,15 @@ textarea {
   </div>
 
   <div class="card">
+    <div class="card-title">🔥 Firebase bereinigen</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+      <strong>NUR VOR DEM ERSTEN LOGIN NACH IMPORT!</strong><br>
+      Löscht alte kaputte Daten in Firebase, damit der Upload der sauberen localStorage-Daten funktioniert.
+    </p>
+    <button class="btn" style="background:var(--danger);" onclick="clearFirebase()">🔥 Firebase leeren (nur wenn ausgeloggt!)</button>
+  </div>
+
+  <div class="card">
     <div class="card-title">⚠️ Alle Daten löschen</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
       Löscht alle lokalen Daten (Training, Ernährung, etc.)
@@ -1330,17 +1339,71 @@ function loadLocalStorage() {
   window.settings = settings;
 }
 
+async function syncToFirebase() {
+  // Upload FoodDB
+  for (const food of foodDB) {
+    await setDoc(doc(userFoodCol(), String(food.id)), food);
+  }
+  
+  // Upload Recipes
+  for (const recipe of recipes) {
+    await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+  }
+  
+  // Upload Food Log
+  for (const date in foodLog) {
+    for (const entry of foodLog[date]) {
+      await setDoc(doc(userLogCol(), String(entry.id)), entry);
+    }
+  }
+  
+  // Upload Training
+  for (const entry of trainingEntries) {
+    await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+  }
+  
+  console.log(`✓ Synced to Firebase: ${foodDB.length} foods, ${recipes.length} recipes`);
+}
+
 async function loadAll() {
   loadLocalStorage();
   
-  // Wenn localStorage Daten hat, NICHT von Firebase überschreiben!
+  if (!userId) return;
+  
   const hasLocalData = foodDB.length > 0 || recipes.length > 0 || Object.keys(foodLog).length > 0;
   
-  if (!userId || hasLocalData) {
-    if (hasLocalData) {
-      console.log('Using localStorage data (not loading from Firebase)');
+  // Prüfe ob Firebase Daten hat
+  try {
+    const recipeCheck = await getDocs(query(userRecipeCol(), limit(1)));
+    const hasFirebaseData = recipeCheck.size > 0;
+    
+    // FALL 1: localStorage voll, Firebase leer → Upload zu Firebase
+    if (hasLocalData && !hasFirebaseData) {
+      console.log('📤 First sync: Uploading localStorage to Firebase...');
+      await syncToFirebase();
+      showToast('✓ Daten zu Firebase synchronisiert!');
+      return;
     }
-    return;
+    
+    // FALL 2: localStorage leer, Firebase voll → Download
+    if (!hasLocalData && hasFirebaseData) {
+      console.log('📥 Loading from Firebase...');
+      // Lade von Firebase (der Code bleibt unten)
+    }
+    
+    // FALL 3: Beide voll → Firebase hat Priorität (normaler Sync)
+    if (hasLocalData && hasFirebaseData) {
+      console.log('🔄 Syncing with Firebase...');
+      // Lade von Firebase (überschreibt local)
+    }
+    
+    // Falls wir hier sind: Lade von Firebase
+  } catch (err) {
+    console.error('Sync check error:', err);
+    if (hasLocalData) {
+      console.log('Using localStorage data (Firebase check failed)');
+      return;
+    }
   }
   
   try {
@@ -3449,6 +3512,45 @@ window.clearOldData = function() {
 // ═══════════════════════════════════════════════════════════════════════════
 // DATEN LÖSCHEN
 // ═══════════════════════════════════════════════════════════════════════════
+window.clearFirebase = async function() {
+  if (userId) {
+    alert('❌ Bitte erst ausloggen!');
+    return;
+  }
+  
+  if (!confirm('⚠️ Firebase-Daten löschen? Das kann nicht rückgängig gemacht werden!')) return;
+  if (!confirm('⚠️⚠️ Bist du sicher? Danach musst du dich einloggen um die sauberen Daten hochzuladen!')) return;
+  
+  // Login temporär
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    const tempUserId = result.user.uid;
+    
+    showToast('🔥 Lösche Firebase Daten...');
+    
+    // Lösche alle Collections
+    const collections = ['foods', 'recipes', 'diary', 'entries', 'logEntries'];
+    
+    for (const collName of collections) {
+      const colRef = collection(db, 'users', tempUserId, collName);
+      const snapshot = await getDocs(colRef);
+      
+      for (const docSnap of snapshot.docs) {
+        await deleteDoc(doc(db, 'users', tempUserId, collName, docSnap.id));
+      }
+      
+      console.log(`Deleted ${snapshot.size} docs from ${collName}`);
+    }
+    
+    showToast('✓ Firebase geleert! Jetzt bleib eingeloggt und lade die Seite neu (F5)');
+    
+  } catch (err) {
+    console.error('Clear error:', err);
+    showToast('❌ Fehler: ' + err.message);
+  }
+};
+
 window.clearAllData = function() {
   if (!confirm('⚠️ WIRKLICH alle Daten löschen?')) return;
   if (!confirm('⚠️⚠️ LETZTE WARNUNG! Training, Ernährung, ALLES wird gelöscht!')) return;
@@ -3661,9 +3763,13 @@ function renderAll() {
 
 // Set default dates
 const today = new Date().toISOString().split('T')[0];
-document.getElementById('training-date').value = today;
-document.getElementById('log-date').value = today;
-document.getElementById('food-time').value = getCurrentTime();
+const trainingDateEl = document.getElementById('training-date');
+const logDateEl = document.getElementById('log-date');
+const foodTimeEl = document.getElementById('food-time');
+
+if (trainingDateEl) trainingDateEl.value = today;
+if (logDateEl) logDateEl.value = today;
+if (foodTimeEl) foodTimeEl.value = getCurrentTime();
 
 // Add click handlers for date inputs to show picker
 document.querySelectorAll('input[type="date"]').forEach(input => {

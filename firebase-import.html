@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Import - FDDB Daten</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 { font-size: 28px; margin-bottom: 10px; color: #333; }
+    .subtitle { color: #666; margin-bottom: 30px; font-size: 14px; }
+    
+    .login-box {
+      background: #f8f9ff;
+      padding: 30px;
+      border-radius: 12px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .import-section {
+      display: none;
+    }
+    
+    .import-section.show {
+      display: block;
+    }
+    
+    .file-input {
+      margin-bottom: 20px;
+      padding: 20px;
+      background: #f8f9ff;
+      border-radius: 12px;
+      border: 2px dashed #667eea;
+    }
+    
+    .file-input label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 15px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .btn:hover { background: #5568d3; transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .btn-secondary {
+      background: #4ade80;
+    }
+    
+    .btn-secondary:hover {
+      background: #22c55e;
+    }
+    
+    .progress {
+      display: none;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8f9ff;
+      border-radius: 12px;
+    }
+    
+    .progress.show { display: block; }
+    
+    .progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: #667eea;
+      transition: width 0.3s;
+    }
+    
+    .log {
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 13px;
+      color: #666;
+      font-family: monospace;
+      background: #f8f9ff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    
+    .log-entry {
+      padding: 4px 0;
+    }
+    
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+    .warning { color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📥 Firebase Import</h1>
+    <p class="subtitle">Importiere deine FDDB Tagebuch-Daten direkt zu Firebase</p>
+    
+    <!-- Login Box -->
+    <div id="login-box" class="login-box">
+      <p style="margin-bottom: 20px;">Bitte erst anmelden:</p>
+      <button class="btn" onclick="handleLogin()">Mit Google anmelden</button>
+    </div>
+    
+    <!-- Import Section -->
+    <div id="import-section" class="import-section">
+      <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #22c55e;">
+        <p style="color: #15803d; font-weight: 600;">✓ Angemeldet als: <span id="user-email"></span></p>
+      </div>
+      
+      <div class="file-input">
+        <label>FDDB Tagebuch CSV</label>
+        <input type="file" id="diary-file" accept=".csv">
+        <p style="font-size: 12px; color: #666; margin-top: 8px;">
+          Die CSV wird geparst und alle Lebensmittel + Einträge werden zu Firebase hochgeladen.
+        </p>
+      </div>
+      
+      <button class="btn btn-secondary" onclick="startImport()" id="import-btn">Import starten</button>
+      
+      <div id="progress" class="progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+        <p id="progress-text" style="text-align: center; font-weight: 600;">0%</p>
+      </div>
+      
+      <div id="log" class="log" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+    import { getFirestore, collection, doc, setDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC4G64mENpw68OavkIPaEheLkXw-L9zw-s",
+      authDomain: "fitness-and-food-f848a.firebaseapp.com",
+      projectId: "fitness-and-food-f848a",
+      storageBucket: "fitness-and-food-f848a.firebasestorage.app",
+      messagingSenderId: "144917992268",
+      appId: "1:144917992268:web:2d8a3874938b82aa3ef5e9"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    
+    let userId = null;
+    
+    // Auth
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        userId = user.uid;
+        document.getElementById('login-box').style.display = 'none';
+        document.getElementById('import-section').classList.add('show');
+        document.getElementById('user-email').textContent = user.email;
+      } else {
+        userId = null;
+        document.getElementById('login-box').style.display = 'block';
+        document.getElementById('import-section').classList.remove('show');
+      }
+    });
+    
+    window.handleLogin = async function() {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (err) {
+        console.error('Login error:', err);
+        alert('Login fehlgeschlagen: ' + err.message);
+      }
+    };
+    
+    // Collections
+    const userFoodCol = () => collection(db, 'users', userId, 'foods');
+    const userLogCol = () => collection(db, 'users', userId, 'logEntries');
+    
+    // Logging
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      logDiv.style.display = 'block';
+      const entry = document.createElement('div');
+      entry.className = 'log-entry ' + type;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+    
+    function updateProgress(percent, text) {
+      document.getElementById('progress').classList.add('show');
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('progress-text').textContent = text || (percent + '%');
+    }
+    
+    // Import
+    window.startImport = async function() {
+      const file = document.getElementById('diary-file').files[0];
+      
+      if (!file) {
+        alert('Bitte eine CSV-Datei auswählen!');
+        return;
+      }
+      
+      if (!userId) {
+        alert('Bitte erst anmelden!');
+        return;
+      }
+      
+      document.getElementById('import-btn').disabled = true;
+      document.getElementById('log').innerHTML = '';
+      
+      log('📁 Lese CSV-Datei...', 'info');
+      
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      
+      log(`✓ ${lines.length} Zeilen gefunden`, 'success');
+      
+      // Parse CSV
+      log('🔍 Parse CSV...', 'info');
+      
+      const entries = [];
+      const foodsMap = new Map();
+      
+      for (let i = 1; i < lines.length; i++) { // Skip header
+        const line = lines[i];
+        const parts = line.split(';');
+        
+        if (parts.length < 8) continue;
+        
+        const date = parts[0]?.trim();
+        const meal = parts[1]?.trim();
+        const time = parts[2]?.trim();
+        const name = parts[3]?.trim()?.replace(/^"(.*)"$/, '$1');
+        const amount = parseFloat(parts[4]?.replace(',', '.')) || 0;
+        const kcal = parseFloat(parts[5]?.replace(',', '.')) || 0;
+        const protein = parseFloat(parts[6]?.replace(',', '.')) || 0;
+        const carbs = parseFloat(parts[7]?.replace(',', '.')) || 0;
+        const fat = parseFloat(parts[8]?.replace(',', '.')) || 0;
+        
+        if (!date || !name || amount === 0) continue;
+        
+        // Create food entry (per 100g)
+        const foodId = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.random().toString(36).substr(2, 6);
+        
+        if (!foodsMap.has(name)) {
+          foodsMap.set(name, {
+            id: foodId,
+            name: name,
+            kcal: Math.round((kcal / amount) * 100 * 10) / 10,
+            protein: Math.round((protein / amount) * 100 * 10) / 10,
+            carbs: Math.round((carbs / amount) * 100 * 10) / 10,
+            fat: Math.round((fat / amount) * 100 * 10) / 10
+          });
+        }
+        
+        // Create diary entry
+        const entryId = Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
+        entries.push({
+          id: entryId,
+          date: date,
+          time: time || '12:00',
+          meal: meal || 'Mittags',
+          name: name,
+          foodId: foodId,
+          amount: amount,
+          kcal: Math.round(kcal * 10) / 10,
+          protein: Math.round(protein * 10) / 10,
+          carbs: Math.round(carbs * 10) / 10,
+          fat: Math.round(fat * 10) / 10
+        });
+      }
+      
+      const foods = Array.from(foodsMap.values());
+      
+      log(`✓ ${foods.length} Lebensmittel extrahiert`, 'success');
+      log(`✓ ${entries.length} Tagebuch-Einträge erstellt`, 'success');
+      
+      // Upload to Firebase
+      log('📤 Upload zu Firebase...', 'info');
+      
+      try {
+        // Upload Foods
+        log(`Uploading ${foods.length} foods...`, 'info');
+        let uploadedFoods = 0;
+        
+        for (const food of foods) {
+          await setDoc(doc(userFoodCol(), String(food.id)), food);
+          uploadedFoods++;
+          
+          if (uploadedFoods % 100 === 0) {
+            updateProgress(Math.round((uploadedFoods / foods.length) * 50), `${uploadedFoods}/${foods.length} Foods`);
+          }
+        }
+        
+        log(`✓ ${foods.length} Lebensmittel hochgeladen`, 'success');
+        
+        // Upload Diary Entries (in batches)
+        log(`Uploading ${entries.length} diary entries...`, 'info');
+        let uploadedEntries = 0;
+        
+        for (const entry of entries) {
+          await setDoc(doc(userLogCol(), String(entry.id)), entry);
+          uploadedEntries++;
+          
+          if (uploadedEntries % 100 === 0) {
+            const progress = 50 + Math.round((uploadedEntries / entries.length) * 50);
+            updateProgress(progress, `${uploadedEntries}/${entries.length} Einträge`);
+          }
+        }
+        
+        updateProgress(100, '✓ Import abgeschlossen!');
+        log(`✓ ${entries.length} Tagebuch-Einträge hochgeladen`, 'success');
+        log('🎉 IMPORT ERFOLGREICH!', 'success');
+        
+        setTimeout(() => {
+          if (confirm('Import erfolgreich! Tracker öffnen?')) {
+            window.location.href = 'tracker-firebase-only.html';
+          }
+        }, 1000);
+        
+      } catch (err) {
+        console.error('Upload error:', err);
+        log('❌ Upload fehlgeschlagen: ' + err.message, 'error');
+      } finally {
+        document.getElementById('import-btn').disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>

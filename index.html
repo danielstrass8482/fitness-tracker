@@ -818,6 +818,45 @@ textarea {
     </div>
   </div>
 
+  <!-- Edit Entry Modal -->
+  <div id="edit-entry-modal" class="modal">
+    <div class="modal-box" style="max-width:500px;">
+      <div class="modal-header">
+        <div class="modal-title">Eintrag bearbeiten</div>
+        <button class="modal-close" onclick="closeEditModal()">✕</button>
+      </div>
+      
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:600;margin-bottom:8px;" id="edit-entry-name"></div>
+      </div>
+      
+      <div class="form-group">
+        <label>Kalorien</label>
+        <input type="number" id="edit-entry-kcal" placeholder="300">
+      </div>
+      
+      <div class="grid-3" style="gap:12px;">
+        <div class="form-group">
+          <label>Protein (g)</label>
+          <input type="number" id="edit-entry-protein" placeholder="20">
+        </div>
+        <div class="form-group">
+          <label>Kohlenhydrate (g)</label>
+          <input type="number" id="edit-entry-carbs" placeholder="30">
+        </div>
+        <div class="form-group">
+          <label>Fett (g)</label>
+          <input type="number" id="edit-entry-fat" placeholder="10">
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:8px;margin-top:20px;">
+        <button class="btn-secondary" onclick="closeEditModal()" style="flex:1;">Abbrechen</button>
+        <button class="btn" onclick="saveEditedEntry()" style="flex:1;">Speichern</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Repair Wizard Modal -->
   <div id="repair-modal" class="modal">
     <div class="modal-box" style="max-width:700px;max-height:80vh;overflow-y:auto;">
@@ -842,9 +881,6 @@ textarea {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:600;">Rezepte</h2>
       <div style="display:flex;gap:8px;">
-        <button class="btn-secondary btn-sm" onclick="openRepairWizard()">🔧 Reparieren</button>
-        <button class="btn-secondary btn-sm" onclick="importOldRecipes()">📥 Alte importieren</button>
-        <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-import').click()">📄 FDDB Import</button>
         <button class="btn btn-sm" onclick="openNewRecipe()">+ Neu</button>
       </div>
     </div>
@@ -867,13 +903,9 @@ textarea {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:600;">Lebensmittel-DB</h2>
       <div style="display:flex;gap:8px;">
-        <button class="btn-secondary btn-sm" onclick="importOldFoodDB()">📥 Alte importieren</button>
-        <button class="btn-secondary btn-sm" onclick="document.getElementById('fddb-food-import').click()">📄 CSV Import</button>
-        <button class="btn-secondary btn-sm" onclick="syncFoodDB()">🔄 Sync</button>
         <button class="btn btn-sm" onclick="openNewFood()">+ Neu</button>
       </div>
     </div>
-    <input type="file" id="fddb-food-import" accept=".csv" style="display:none;" onchange="handleFoodDBImport(event)">
 
     <!-- 0 kcal Filter -->
     <div style="margin-bottom:16px;">
@@ -1095,21 +1127,12 @@ textarea {
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
       Importiere deine FDDB Rezepte und Tagebuch mit dem separaten Import-Tool:
     </p>
-    <a href="import-no-firebase.html" target="_blank">
+    <a href="import2.html" target="_blank">
       <button class="btn">🚀 Import-Tool öffnen</button>
     </a>
     <p style="font-size:12px;color:var(--muted);margin-top:8px;">
       Nach dem Import diese Seite neu laden (F5)
     </p>
-  </div>
-
-  <div class="card">
-    <div class="card-title">🔥 Firebase bereinigen</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
-      <strong>NUR VOR DEM ERSTEN LOGIN NACH IMPORT!</strong><br>
-      Löscht alte kaputte Daten in Firebase, damit der Upload der sauberen localStorage-Daten funktioniert.
-    </p>
-    <button class="btn" style="background:var(--danger);" onclick="clearFirebase()">🔥 Firebase leeren (nur wenn ausgeloggt!)</button>
   </div>
 
   <div class="card">
@@ -2514,7 +2537,10 @@ window.showToast = function(msg) {
 
 function formatNum(n) {
   if (n === null || n === undefined || isNaN(n)) return '0';
-  return Number(n).toLocaleString('de-DE');
+  return Number(n).toLocaleString('de-DE', { 
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1 
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2765,7 +2791,7 @@ function renderRecipeSearchResults() {
   }
   
   container.innerHTML = filtered.map(r => `
-    <div onclick="selectRecipeForAdd(${r.id})" style="padding:12px;border-bottom:1px solid var(--border);cursor:pointer;">
+    <div onclick="selectRecipeForAdd('${r.id}')" style="padding:12px;border-bottom:1px solid var(--border);cursor:pointer;">
       <div style="font-weight:600;margin-bottom:4px;">${r.name}</div>
       <div style="font-size:12px;color:var(--muted);">
         ${formatNum(r.kcal)} kcal · ${r.protein}g P · ${r.carbs}g C · ${r.fat}g F
@@ -3061,6 +3087,9 @@ function renderFoodLog() {
     const mealCarbs = mealEntries.reduce((sum, e) => sum + e.carbs, 0);
     const mealFat = mealEntries.reduce((sum, e) => sum + e.fat, 0);
     
+    // Prozent vom Gesamt-Konsum
+    const mealPct = totalKcal > 0 ? Math.round((mealKcal / totalKcal) * 100) : 0;
+    
     const mealDiv = document.createElement('div');
     mealDiv.className = 'meal-category';
     mealDiv.setAttribute('data-meal', key); // Für später wiederfinden
@@ -3071,19 +3100,19 @@ function renderFoodLog() {
           <span style="color:#4a9eff;">P ${mealProtein}g</span>
           <span style="color:#ffd93d;">K ${mealCarbs}g</span>
           <span style="color:#ff6b9d;">F ${mealFat}g</span>
-          <span class="meal-kcal" style="margin-left:8px;">${formatNum(mealKcal)} kcal</span>
+          <span class="meal-kcal" style="margin-left:8px;">${formatNum(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
         </div>
       </div>
       <div class="meal-entries" style="display:none;">
         ${mealEntries.length > 0 ? mealEntries.map(e => `
-          <div class="meal-entry">
+          <div class="meal-entry" onclick="editLogEntry('${e.id}')" style="cursor:pointer;">
             <div class="meal-entry-name">
               <span style="color:var(--muted);font-size:11px;margin-right:6px;">${e.time}</span>
               ${e.name}
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="meal-entry-kcal">${formatNum(e.kcal)} kcal</div>
-              <button onclick="deleteLogEntry('${e.id}', '${key}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+              <button onclick="event.stopPropagation(); deleteLogEntry('${e.id}', '${key}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:4px;">✕</button>
             </div>
           </div>
         `).join('') : '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
@@ -3127,6 +3156,67 @@ function showConfirm(message, callback) {
 window.closeConfirmModal = function() {
   document.getElementById('confirm-modal').classList.remove('open');
   confirmCallback = null;
+};
+
+window.editLogEntry = function(id) {
+  // Finde Eintrag
+  let entry = null;
+  Object.keys(foodLog).forEach(date => {
+    const found = foodLog[date].find(e => e.id === id);
+    if (found) entry = found;
+  });
+  
+  if (!entry) {
+    showToast('❌ Eintrag nicht gefunden');
+    return;
+  }
+  
+  // Öffne Edit-Modal
+  document.getElementById('edit-entry-name').textContent = entry.name;
+  document.getElementById('edit-entry-kcal').value = Math.round(entry.kcal);
+  document.getElementById('edit-entry-protein').value = Math.round(entry.protein);
+  document.getElementById('edit-entry-carbs').value = Math.round(entry.carbs);
+  document.getElementById('edit-entry-fat').value = Math.round(entry.fat);
+  
+  // Speichere ID für später
+  window.currentEditId = id;
+  
+  document.getElementById('edit-entry-modal').classList.add('open');
+};
+
+window.saveEditedEntry = async function() {
+  const kcal = parseInt(document.getElementById('edit-entry-kcal').value) || 0;
+  const protein = parseInt(document.getElementById('edit-entry-protein').value) || 0;
+  const carbs = parseInt(document.getElementById('edit-entry-carbs').value) || 0;
+  const fat = parseInt(document.getElementById('edit-entry-fat').value) || 0;
+  
+  // Update in foodLog
+  Object.keys(foodLog).forEach(date => {
+    foodLog[date] = foodLog[date].map(e => {
+      if (e.id === window.currentEditId) {
+        return { ...e, kcal, protein, carbs, fat };
+      }
+      return e;
+    });
+  });
+  
+  saveLS('foodLog', foodLog);
+  
+  if (userId) {
+    // Update in Firebase
+    const entry = Object.values(foodLog).flat().find(e => e.id === window.currentEditId);
+    if (entry) {
+      await setDoc(doc(userLogCol(), String(entry.id)), entry);
+    }
+  }
+  
+  showToast('✓ Eintrag aktualisiert');
+  document.getElementById('edit-entry-modal').classList.remove('open');
+  renderFoodLog();
+};
+
+window.closeEditModal = function() {
+  document.getElementById('edit-entry-modal').classList.remove('open');
 };
 
 window.deleteLogEntry = function(id, mealKey) {

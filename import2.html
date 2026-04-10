@@ -172,7 +172,7 @@
 <body>
   <div class="container">
     <h1>🚀 Fitness & Nutrition Tracker</h1>
-    <p class="subtitle">Importiere deine FDDB Daten - lokal, ohne Login!</p>
+    <p class="subtitle">Importiere einzeln oder kombiniert - FDDB, Garmin, oder beides!</p>
     
     <div class="step">
       <div class="step-title">
@@ -202,6 +202,20 @@
       <input type="file" id="diary-input" accept=".csv" style="display:none">
     </div>
     
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">3</span>
+        Garmin Training CSV (optional)
+      </div>
+      <div class="drop-zone" id="garmin-drop">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">Activities.csv (optional)</div>
+        <div class="file-name" id="garmin-name"></div>
+      </div>
+      <input type="file" id="garmin-input" accept=".csv" style="display:none">
+    </div>
+    
     <button id="import-btn" disabled onclick="startImport()">
       🚀 Jetzt importieren
     </button>
@@ -219,8 +233,9 @@
   <script>
     let recipeFile = null;
     let diaryFile = null;
+    let garminFile = null;
     
-    ['recipe', 'diary'].forEach(type => {
+    ['recipe', 'diary', 'garmin'].forEach(type => {
       const dropZone = document.getElementById(`${type}-drop`);
       const input = document.getElementById(`${type}-input`);
       const nameEl = document.getElementById(`${type}-name`);
@@ -256,13 +271,19 @@
           recipeFile = file;
           nameEl.textContent = `✓ ${file.name}`;
           dropZone.classList.add('has-file');
-        } else {
+        } else if (type === 'diary') {
           diaryFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        } else if (type === 'garmin') {
+          garminFile = file;
           nameEl.textContent = `✓ ${file.name}`;
           dropZone.classList.add('has-file');
         }
         
-        document.getElementById('import-btn').disabled = !(recipeFile && diaryFile);
+        // Import button immer aktiv wenn mindestens 1 Datei
+        const hasAnyFile = recipeFile || diaryFile || garminFile;
+        document.getElementById('import-btn').disabled = !hasAnyFile;
       }
     });
     
@@ -271,17 +292,94 @@
       document.getElementById('progress').style.display = 'block';
       
       try {
-        updateProgress(10, 'Lade Tagebuch...');
-        const diaryText = await diaryFile.text();
+        // Lade bestehende Daten
+        const existingFoodDB = JSON.parse(localStorage.getItem('tracker_foodDB') || '[]');
+        const existingRecipes = JSON.parse(localStorage.getItem('tracker_recipes') || '[]');
+        const existingFoodLog = JSON.parse(localStorage.getItem('tracker_foodLog') || '{}');
+        const existingTraining = JSON.parse(localStorage.getItem('tracker_training') || '[]');
+        const existingDayLogs = JSON.parse(localStorage.getItem('tracker_dayLogs') || '[]');
         
-        updateProgress(30, 'Extrahiere FoodDB...');
-        const { foodDB, foodLog } = parseDiary(diaryText);
+        let foodDB = existingFoodDB;
+        let recipes = existingRecipes;
+        let foodLog = existingFoodLog;
+        let training = existingTraining;
+        let dayLogs = existingDayLogs;
         
-        updateProgress(60, 'Lade Rezepte...');
-        const recipeText = await recipeFile.text();
-        const recipes = parseRecipes(recipeText, foodDB);
+        let progress = 10;
+        let steps = 0;
+        if (diaryFile) steps++;
+        if (recipeFile) steps++;
+        if (garminFile) steps++;
+        const stepSize = 80 / steps;
         
-        updateProgress(80, 'Speichere...');
+        // FDDB Tagebuch
+        if (diaryFile) {
+          updateProgress(progress, 'Lade Tagebuch...');
+          const diaryText = await diaryFile.text();
+          progress += stepSize / 2;
+          
+          updateProgress(progress, 'Extrahiere FoodDB...');
+          const parsed = parseDiary(diaryText);
+          
+          // Merge FoodDB (keine Duplikate nach Name)
+          const existingNames = new Set(foodDB.map(f => f.name));
+          parsed.foodDB.forEach(food => {
+            if (!existingNames.has(food.name)) {
+              foodDB.push(food);
+              existingNames.add(food.name);
+            }
+          });
+          
+          // Merge foodLog (überschreibt bei gleichem Datum)
+          Object.assign(foodLog, parsed.foodLog);
+          
+          progress += stepSize / 2;
+        }
+        
+        // FDDB Rezepte
+        if (recipeFile) {
+          updateProgress(progress, 'Lade Rezepte...');
+          const recipeText = await recipeFile.text();
+          const newRecipes = parseRecipes(recipeText, foodDB);
+          
+          // Merge Recipes (keine Duplikate nach Name)
+          const existingRecipeNames = new Set(recipes.map(r => r.name));
+          newRecipes.forEach(recipe => {
+            if (!existingRecipeNames.has(recipe.name)) {
+              recipes.push(recipe);
+              existingRecipeNames.add(recipe.name);
+            }
+          });
+          
+          progress += stepSize;
+        }
+        
+        // Garmin Training
+        if (garminFile) {
+          updateProgress(progress, 'Lade Garmin Training...');
+          const garminText = await garminFile.text();
+          const garminData = parseGarmin(garminText);
+          
+          // Merge Training (keine Duplikate nach Datum+Typ)
+          const existingKeys = new Set(training.map(t => `${t.datum}_${t.typ}`));
+          garminData.training.forEach(t => {
+            const key = `${t.datum}_${t.typ}`;
+            if (!existingKeys.has(key)) {
+              training.push(t);
+              existingKeys.add(key);
+            }
+          });
+          
+          // Merge dayLogs (überschreibt bei gleichem Datum)
+          const dayLogsMap = {};
+          dayLogs.forEach(dl => dayLogsMap[dl.datum] = dl);
+          garminData.dayLogs.forEach(dl => dayLogsMap[dl.datum] = dl);
+          dayLogs = Object.values(dayLogsMap);
+          
+          progress += stepSize;
+        }
+        
+        updateProgress(90, 'Speichere...');
         
         // Filter foodLog: nur letzte 90 Tage
         const today = new Date();
@@ -295,23 +393,35 @@
           }
         }
         
-        console.log(`Filtered diary: ${Object.keys(foodLog).length} days -> ${Object.keys(filteredLog).length} days (last 90)`);
-        
         localStorage.setItem('tracker_foodDB', JSON.stringify(foodDB));
         localStorage.setItem('tracker_recipes', JSON.stringify(recipes));
         localStorage.setItem('tracker_foodLog', JSON.stringify(filteredLog));
-        localStorage.setItem('tracker_training', JSON.stringify([]));
-        localStorage.setItem('tracker_dayLogs', JSON.stringify([]));
+        localStorage.setItem('tracker_training', JSON.stringify(training));
+        localStorage.setItem('tracker_dayLogs', JSON.stringify(dayLogs));
         
-        updateProgress(100, `✓ Fertig! ${foodDB.length} Foods, ${recipes.length} Rezepte, ${Object.keys(filteredLog).length} Tage`);
+        updateProgress(100, '✓ Import abgeschlossen!');
         
         setTimeout(() => {
-          alert(`✓ Import erfolgreich!\n\n${foodDB.length} Lebensmittel\n${recipes.length} Rezepte\n${Object.keys(filteredLog).length} Tage (letzte 90 Tage)\n\nÄltere Daten wurden weggelassen wegen localStorage Limit.`);
+          let message = '✓ Import erfolgreich!\n\n';
+          if (diaryFile) message += `${foodDB.length} Lebensmittel\n${Object.keys(filteredLog).length} Tage Tagebuch\n`;
+          if (recipeFile) message += `${recipes.length} Rezepte\n`;
+          if (garminFile) message += `${training.length} Trainingseinheiten\n`;
+          alert(message);
+          
+          // Reset
+          recipeFile = diaryFile = garminFile = null;
+          ['recipe', 'diary', 'garmin'].forEach(type => {
+            document.getElementById(`${type}-drop`).classList.remove('has-file');
+            document.getElementById(`${type}-name`).textContent = '';
+          });
+          document.getElementById('import-btn').disabled = true;
+          document.getElementById('progress').style.display = 'none';
         }, 500);
         
       } catch (err) {
         console.error(err);
         showError('Fehler: ' + err.message);
+        document.getElementById('import-btn').disabled = false;
       }
     }
     
@@ -445,6 +555,75 @@
       }
       
       return recipes;
+    }
+    
+    function parseGarmin(text) {
+      const lines = text.split('\n');
+      const training = [];
+      const dayLogsMap = {}; // Datum -> { activityKcal, entries }
+      
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        try {
+          const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+          
+          // Garmin CSV Format (beispielhaft):
+          // Aktivitätstyp,Datum,Favorit,Titel,Distanz,Kalorien,Zeit,Ø Herzfrequenz,Max. Herzfrequenz,Aerober TE,Avg. Laufeffizienz,Ø Schrittfrequenz,Max. Schrittfrequenz,Ø Pace,Beste Pace,Gesamtanstieg,Gesamtabstieg,Ø Schrittlänge,Anzahl Trainings,Dehydration,Ø Core Body Temp.,Training Load
+          
+          const activityType = cols[0];
+          const dateStr = cols[1]; // z.B. "2025-04-05 10:30"
+          const title = cols[3] || activityType;
+          const distance = parseFloat(cols[4]) || 0; // in km
+          const calories = parseInt(cols[5]) || 0;
+          const time = cols[6]; // z.B. "45:23"
+          const avgHR = parseInt(cols[7]) || null;
+          const maxHR = parseInt(cols[8]) || null;
+          
+          if (!dateStr || !calories) continue;
+          
+          // Parse Datum: "2025-04-05 10:30" -> "2025-04-05"
+          const date = dateStr.split(' ')[0];
+          
+          // Training Entry
+          const entry = {
+            id: 'training_' + Date.now() + '_' + i,
+            datum: date,
+            typ: activityType.toLowerCase(),
+            distanz: Math.round(distance * 1000), // m
+            dauer: time,
+            puls_avg: avgHR,
+            puls_max: maxHR,
+            kcal: calories,
+            notizen: title
+          };
+          
+          training.push(entry);
+          
+          // Aggregiere activityKcal pro Tag
+          if (!dayLogsMap[date]) {
+            dayLogsMap[date] = { activityKcal: 0 };
+          }
+          dayLogsMap[date].activityKcal += calories;
+          
+        } catch (e) {
+          console.warn('Garmin parse error:', e);
+        }
+      }
+      
+      // Erstelle dayLogs array
+      const dayLogs = Object.keys(dayLogsMap).map(date => ({
+        id: 'daylog_' + date,
+        datum: date,
+        typ: 'tageslog',
+        activityKcal: dayLogsMap[date].activityKcal
+      }));
+      
+      console.log(`Parsed Garmin: ${training.length} activities, ${dayLogs.length} days`);
+      
+      return { training, dayLogs };
     }
     
     function updateProgress(percent, text) {

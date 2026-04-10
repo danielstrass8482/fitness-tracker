@@ -1399,75 +1399,162 @@ async function loadAll() {
   const localTrainingCount = trainingEntries.length;
   
   try {
-    // Zähle Firebase Daten
-    const [foodSnap, recipeSnap, diarySnap, trainingSnap] = await Promise.all([
-      getDocs(query(userFoodCol(), limit(1))),
-      getDocs(query(userRecipeCol(), limit(1))),
-      getDocs(query(userLogCol(), limit(1))),
-      getDocs(query(userTrainingCol(), limit(1)))
+    // Hole vollständige Counts von Firebase
+    const [fullFoodSnap, fullRecipeSnap, fullDiarySnap, fullTrainingSnap] = await Promise.all([
+      getDocs(userFoodCol()),
+      getDocs(userRecipeCol()),
+      getDocs(userLogCol()),
+      getDocs(userTrainingCol())
     ]);
     
-    const hasFirebase = foodSnap.size > 0 || recipeSnap.size > 0 || diarySnap.size > 0 || trainingSnap.size > 0;
-    const hasLocal = localFoodCount > 0 || localRecipeCount > 0 || localDiaryDays > 0 || localTrainingCount > 0;
+    const firebaseFoodCount = fullFoodSnap.size;
+    const firebaseRecipeCount = fullRecipeSnap.size;
+    const firebaseDiaryCount = fullDiarySnap.size;
+    const firebaseTrainingCount = fullTrainingSnap.size;
     
-    // FALL 1: localStorage hat Daten, Firebase leer
-    if (hasLocal && !hasFirebase) {
-      console.log('📤 First sync: Uploading localStorage to Firebase...');
-      await syncToFirebase();
-      showToast('✓ Daten zu Firebase synchronisiert!');
-      return;
+    console.log('📊 Smart Sync - Category by Category:');
+    console.log(`  Foods: Local ${localFoodCount} vs Firebase ${firebaseFoodCount}`);
+    console.log(`  Recipes: Local ${localRecipeCount} vs Firebase ${firebaseRecipeCount}`);
+    console.log(`  Diary: Local ${localDiaryDays} days vs Firebase ${firebaseDiaryCount} entries`);
+    console.log(`  Training: Local ${localTrainingCount} vs Firebase ${firebaseTrainingCount}`);
+    
+    let actions = [];
+    
+    // FoodDB Entscheidung
+    if (localFoodCount > firebaseFoodCount) {
+      actions.push('upload_foods');
+      console.log('  → Foods: Upload (local has more)');
+    } else if (firebaseFoodCount > localFoodCount) {
+      actions.push('download_foods');
+      console.log('  → Foods: Download (firebase has more)');
+    } else {
+      console.log('  → Foods: Same count, keep local');
     }
     
-    // FALL 2: localStorage leer, Firebase hat Daten
-    if (!hasLocal && hasFirebase) {
-      console.log('📥 Loading from Firebase (localStorage empty)...');
-      await loadFromFirebase();
-      return;
+    // Recipes Entscheidung
+    if (localRecipeCount > firebaseRecipeCount) {
+      actions.push('upload_recipes');
+      console.log('  → Recipes: Upload (local has more)');
+    } else if (firebaseRecipeCount > localRecipeCount) {
+      actions.push('download_recipes');
+      console.log('  → Recipes: Download (firebase has more)');
+    } else {
+      console.log('  → Recipes: Same count, keep local');
     }
     
-    // FALL 3: Beide haben Daten → Vergleiche und wähle größeren Datensatz
-    if (hasLocal && hasFirebase) {
-      // Hole vollständige Counts von Firebase
-      const [fullFoodSnap, fullRecipeSnap, fullDiarySnap, fullTrainingSnap] = await Promise.all([
-        getDocs(userFoodCol()),
-        getDocs(userRecipeCol()),
-        getDocs(userLogCol()),
-        getDocs(userTrainingCol())
-      ]);
+    // Diary Entscheidung (vergleiche Tage vs Einträge ist schwierig, nutze Einträge)
+    const localDiaryEntries = Object.values(foodLog).flat().length;
+    if (localDiaryEntries > firebaseDiaryCount) {
+      actions.push('upload_diary');
+      console.log('  → Diary: Upload (local has more entries)');
+    } else if (firebaseDiaryCount > localDiaryEntries) {
+      actions.push('download_diary');
+      console.log('  → Diary: Download (firebase has more entries)');
+    } else {
+      console.log('  → Diary: Same count, keep local');
+    }
+    
+    // Training Entscheidung
+    if (localTrainingCount > firebaseTrainingCount) {
+      actions.push('upload_training');
+      console.log('  → Training: Upload (local has more)');
+    } else if (firebaseTrainingCount > localTrainingCount) {
+      actions.push('download_training');
+      console.log('  → Training: Download (firebase has more)');
+    } else {
+      console.log('  → Training: Same count, keep local');
+    }
+    
+    // Führe Actions aus
+    for (const action of actions) {
+      if (action === 'upload_foods') {
+        showToast('⏳ Uploading Foods...');
+        for (const food of foodDB) {
+          await setDoc(doc(userFoodCol(), String(food.id)), food);
+        }
+      }
       
-      const firebaseFoodCount = fullFoodSnap.size;
-      const firebaseRecipeCount = fullRecipeSnap.size;
-      const firebaseDiaryCount = fullDiarySnap.size;
-      const firebaseTrainingCount = fullTrainingSnap.size;
+      if (action === 'download_foods') {
+        showToast('⏳ Downloading Foods...');
+        foodDB = [];
+        fullFoodSnap.forEach(d => {
+          const data = d.data();
+          if (!data.id) data.id = d.id;
+          data.id = String(data.id);
+          foodDB.push(data);
+        });
+        saveLS('foodDB', foodDB);
+        window.foodDB = foodDB;
+      }
       
-      console.log('📊 Data comparison:');
-      console.log(`  Foods: Local ${localFoodCount} vs Firebase ${firebaseFoodCount}`);
-      console.log(`  Recipes: Local ${localRecipeCount} vs Firebase ${firebaseRecipeCount}`);
-      console.log(`  Diary: Local ${localDiaryDays} days vs Firebase ${firebaseDiaryCount} entries`);
-      console.log(`  Training: Local ${localTrainingCount} vs Firebase ${firebaseTrainingCount}`);
+      if (action === 'upload_recipes') {
+        showToast('⏳ Uploading Recipes...');
+        for (const recipe of recipes) {
+          await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+        }
+      }
       
-      // Wer mehr Daten hat gewinnt (gewichtet: FoodDB ist am wichtigsten)
-      const localScore = localFoodCount * 2 + localRecipeCount + localDiaryDays + localTrainingCount;
-      const firebaseScore = firebaseFoodCount * 2 + firebaseRecipeCount + firebaseDiaryCount + firebaseTrainingCount;
+      if (action === 'download_recipes') {
+        showToast('⏳ Downloading Recipes...');
+        recipes = [];
+        fullRecipeSnap.forEach(d => {
+          const data = d.data();
+          data.id = String(data.id);
+          recipes.push(data);
+        });
+        saveLS('recipes', recipes);
+        window.recipes = recipes;
+      }
       
-      if (localScore > firebaseScore) {
-        console.log(`🏆 localStorage wins (${localScore} vs ${firebaseScore}) - Uploading...`);
-        await syncToFirebase();
-        showToast('✓ Lokale Daten zu Firebase synchronisiert!');
-        return;
-      } else {
-        console.log(`🏆 Firebase wins (${firebaseScore} vs ${localScore}) - Downloading...`);
-        await loadFromFirebase();
-        return;
+      if (action === 'upload_diary') {
+        showToast('⏳ Uploading Diary...');
+        for (const date in foodLog) {
+          for (const entry of foodLog[date]) {
+            await setDoc(doc(userLogCol(), String(entry.id)), entry);
+          }
+        }
+      }
+      
+      if (action === 'download_diary') {
+        showToast('⏳ Downloading Diary...');
+        foodLog = {};
+        fullDiarySnap.forEach(d => {
+          const entry = d.data();
+          if (!foodLog[entry.date]) foodLog[entry.date] = [];
+          foodLog[entry.date].push(entry);
+        });
+        saveLS('foodLog', foodLog);
+        window.foodLog = foodLog;
+      }
+      
+      if (action === 'upload_training') {
+        showToast('⏳ Uploading Training...');
+        for (const entry of trainingEntries) {
+          await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        }
+      }
+      
+      if (action === 'download_training') {
+        showToast('⏳ Downloading Training...');
+        trainingEntries = [];
+        fullTrainingSnap.forEach(d => trainingEntries.push(d.data()));
+        dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+        saveLS('training', trainingEntries);
+        saveLS('dayLogs', dayLogs);
+        window.trainingEntries = trainingEntries;
+        window.dayLogs = dayLogs;
       }
     }
     
-  } catch (err) {
-    console.error('Sync error:', err);
-    if (hasLocal) {
-      console.log('Using localStorage data (Firebase sync failed)');
-      return;
+    if (actions.length > 0) {
+      showToast('✓ Smart Sync abgeschlossen!');
     }
+    
+    renderAll();
+    
+  } catch (err) {
+    console.error('Smart Sync error:', err);
+    showToast('⚠️ Sync fehlgeschlagen - nutze lokale Daten');
   }
 }
 

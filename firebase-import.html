@@ -275,17 +275,46 @@
         
         if (parts.length < 8) continue;
         
-        const date = parts[0]?.trim();
-        const meal = parts[1]?.trim();
-        const time = parts[2]?.trim();
-        const name = parts[3]?.trim()?.replace(/^"(.*)"$/, '$1');
-        const amount = parseFloat(parts[4]?.replace(',', '.')) || 0;
-        const kcal = parseFloat(parts[5]?.replace(',', '.')) || 0;
-        const protein = parseFloat(parts[6]?.replace(',', '.')) || 0;
-        const carbs = parseFloat(parts[7]?.replace(',', '.')) || 0;
-        const fat = parseFloat(parts[8]?.replace(',', '.')) || 0;
+        // Parse: "06.04.2026 14:50";"105 g Gemischter Salat";"1323891";"251";"0";"4,5";"2,7";"1,4";
+        const datetimeStr = parts[0]?.trim()?.replace(/^"(.*)"$/, '$1');
+        const nameWithAmount = parts[1]?.trim()?.replace(/^"(.*)"$/, '$1');
+        const kj = parseFloat(parts[3]?.replace(',', '.')) || 0;
+        const fat = parseFloat(parts[5]?.replace(',', '.')) || 0;
+        const carbs = parseFloat(parts[6]?.replace(',', '.')) || 0;
+        const protein = parseFloat(parts[7]?.replace(',', '.')) || 0;
         
-        if (!date || !name || amount === 0) continue;
+        if (!datetimeStr || !nameWithAmount) continue;
+        
+        // Parse datetime: "06.04.2026 14:50" → date="2026-04-06", time="14:50"
+        const dtParts = datetimeStr.split(' ');
+        if (dtParts.length !== 2) continue;
+        
+        const dateParts = dtParts[0].split('.');
+        if (dateParts.length !== 3) continue;
+        
+        const date = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // YYYY-MM-DD
+        const time = dtParts[1]; // HH:MM
+        
+        // Parse name and amount: "105 g Gemischter Salat" → amount=105, name="Gemischter Salat"
+        const match = nameWithAmount.match(/^(\d+(?:,\d+)?)\s*g?\s*(.+)$/);
+        if (!match) continue;
+        
+        const amount = parseFloat(match[1].replace(',', '.'));
+        const name = match[2].trim();
+        
+        if (!name || amount === 0) continue;
+        
+        // Convert kJ to kcal
+        const kcal = kj / 4.184;
+        
+        // Auto-detect meal from time
+        const hour = parseInt(time.split(':')[0]);
+        let meal = 'Abends';
+        if (hour >= 6 && hour < 12) meal = 'Morgens';
+        else if (hour >= 12 && hour < 14) meal = 'Mittags';
+        else if (hour >= 14 && hour < 17) meal = 'Nachmittags';
+        else if (hour >= 17 && hour < 21) meal = 'Abends';
+        else meal = 'Nachts';
         
         // Create food entry (per 100g)
         const foodId = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.random().toString(36).substr(2, 6);
@@ -306,10 +335,10 @@
         entries.push({
           id: entryId,
           date: date,
-          time: time || '12:00',
-          meal: meal || 'Mittags',
+          time: time,
+          meal: meal,
           name: name,
-          foodId: foodId,
+          foodId: foodsMap.get(name).id,
           amount: amount,
           kcal: Math.round(kcal * 10) / 10,
           protein: Math.round(protein * 10) / 10,

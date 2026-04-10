@@ -277,18 +277,82 @@
       <button class="tab" data-tab="ernaehrung">Ernährung</button>
       <button class="tab" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="daten">Daten</button>
+      <button class="tab" data-tab="einstellungen">Einstellungen</button>
     </div>
     
     <div id="training-tab" class="tab-content active">
-      <div style="margin-bottom:30px;">
-        <h2 style="margin-bottom:15px;">Training</h2>
-        <p style="color:var(--muted);font-size:14px;">Training-Features werden noch implementiert</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;">
+        <!-- Training Entry -->
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <h3 style="margin-bottom:20px;">Training Loggen</h3>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
+            <input type="date" id="training-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Typ</label>
+            <select id="training-type" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <option value="pull">Pull-ups</option>
+              <option value="push">Push-ups</option>
+              <option value="lauf">Lauf</option>
+              <option value="rad">Rad</option>
+            </select>
+          </div>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Sets / Details</label>
+            <input type="text" id="training-sets" placeholder="z.B. 11-10-7 oder 5km/25min" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Notizen</label>
+            <textarea id="training-notiz" rows="3" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;"></textarea>
+          </div>
+          
+          <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
+        </div>
+        
+        <!-- Day Log -->
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <h3 style="margin-bottom:20px;">Tageslog</h3>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
+            <input type="date" id="log-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
+              <input type="number" id="log-weight" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Schritte</label>
+              <input type="number" id="log-steps" placeholder="10000" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Schlaf (1-5)</label>
+              <input type="number" id="log-sleep" min="1" max="5" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Energie (1-5)</label>
+              <input type="number" id="log-energy" min="1" max="5" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+          </div>
+          
+          <button class="btn" onclick="saveDayLog()" style="width:100%;">Tageslog speichern</button>
+        </div>
       </div>
       
-      <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);text-align:center;">
-        <div style="font-size:48px;margin-bottom:15px;">🏋️</div>
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">Training-Tracking</div>
-        <div style="color:var(--muted);font-size:14px;">Kommt bald...</div>
+      <!-- Training History -->
+      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+        <h3 style="margin-bottom:20px;">Letzten Einträge</h3>
+        <div id="training-history" style="max-height:400px;overflow-y:auto;"></div>
       </div>
     </div>
     
@@ -330,13 +394,81 @@
     <div id="dashboard-tab" class="tab-content">
       <div style="margin-bottom:30px;">
         <h2 style="margin-bottom:15px;">Dashboard</h2>
-        <p style="color:var(--muted);font-size:14px;">Übersicht über deine Fortschritte</p>
+        <p style="color:var(--muted);font-size:14px;">Übersicht über deine Daten</p>
       </div>
       
-      <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);text-align:center;">
-        <div style="font-size:48px;margin-bottom:15px;">📊</div>
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">Dashboard & Charts</div>
-        <div style="color:var(--muted);font-size:14px;">Kommt bald...</div>
+      <!-- Quick Stats Grid -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:30px;">
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Lebensmittel</div>
+          <div style="font-size:32px;font-weight:600;" id="dash-foods">0</div>
+        </div>
+        
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Rezepte</div>
+          <div style="font-size:32px;font-weight:600;" id="dash-recipes">0</div>
+        </div>
+        
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Tage</div>
+          <div style="font-size:32px;font-weight:600;" id="dash-days">0</div>
+        </div>
+        
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Training Einheiten</div>
+          <div style="font-size:32px;font-weight:600;" id="dash-trainings">0</div>
+        </div>
+      </div>
+      
+      <!-- Recent Activity -->
+      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+        <h3 style="margin-bottom:20px;">Letzte Aktivität</h3>
+        <div id="recent-activity" style="max-height:300px;overflow-y:auto;"></div>
+      </div>
+      
+      <!-- Week Overview -->
+      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+        <h3 style="margin-bottom:20px;">Diese Woche</h3>
+        <div id="week-stats"></div>
+      </div>
+    </div>
+    
+    <div id="einstellungen-tab" class="tab-content">
+      <div style="max-width:800px;margin:0 auto;">
+        <h2 style="margin-bottom:30px;">Einstellungen</h2>
+        
+        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <h3 style="margin-bottom:20px;">TDEE & Ziele</h3>
+          
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Täglicher Kalorienbedarf (TDEE)</label>
+            <input type="number" id="settings-tdee" placeholder="2700" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Wird für die Tages-Anzeige genutzt</div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:15px;">
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Protein-Ziel (g)</label>
+              <input type="number" id="settings-protein" placeholder="150" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Kohlenhydrate (g)</label>
+              <input type="number" id="settings-carbs" placeholder="325" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Fett (g)</label>
+              <input type="number" id="settings-fat" placeholder="95" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+          </div>
+          
+          <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
+        </div>
+        
+        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
+          <h3 style="margin-bottom:15px;color:var(--danger);">⚠️ Danger Zone</h3>
+          <p style="color:var(--muted);margin-bottom:20px;font-size:14px;">Diese Aktionen können nicht rückgängig gemacht werden!</p>
+          <button class="btn" onclick="confirmDeleteAllData()" style="background:var(--danger);border:1px solid var(--danger);width:100%;">Alle Daten löschen</button>
+        </div>
       </div>
     </div>
     
@@ -609,6 +741,9 @@
         console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
         showToast(`✓ ${foodDB.length} Foods, ${recipes.length} Rezepte geladen`);
         
+        // Load settings
+        await loadSettings();
+        
         // Render initial
         renderAll();
         
@@ -624,6 +759,105 @@
       renderDataStats();
       renderFoodDB();
       renderRecipes();
+      renderTrainingHistory();
+      renderDashboard();
+    }
+    
+    function renderDashboard() {
+      // Update quick stats
+      if (document.getElementById('dash-foods')) {
+        document.getElementById('dash-foods').textContent = foodDB.length;
+        document.getElementById('dash-recipes').textContent = recipes.length;
+        document.getElementById('dash-days').textContent = Object.keys(foodLog).length;
+        document.getElementById('dash-trainings').textContent = trainingEntries.filter(e => e.typ !== 'tageslog').length;
+      }
+      
+      // Recent Activity
+      const recentContainer = document.getElementById('recent-activity');
+      if (recentContainer) {
+        const allActivities = [];
+        
+        // Recent diary entries
+        Object.keys(foodLog).sort().reverse().slice(0, 3).forEach(date => {
+          const entries = foodLog[date] || [];
+          if (entries.length > 0) {
+            allActivities.push({
+              type: 'food',
+              date: date,
+              text: `${entries.length} Mahlzeiten eingetragen`,
+              icon: '🍽️'
+            });
+          }
+        });
+        
+        // Recent training
+        trainingEntries
+          .filter(e => e.typ !== 'tageslog')
+          .sort((a, b) => b.datum.localeCompare(a.datum))
+          .slice(0, 3)
+          .forEach(e => {
+            allActivities.push({
+              type: 'training',
+              date: e.datum,
+              text: `${e.typ.toUpperCase()} - ${e.sets}`,
+              icon: '🏋️'
+            });
+          });
+        
+        // Sort by date
+        allActivities.sort((a, b) => b.date.localeCompare(a.date));
+        
+        if (allActivities.length === 0) {
+          recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivität</div>';
+        } else {
+          recentContainer.innerHTML = allActivities.slice(0, 10).map(a => `
+            <div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:15px;">
+              <div style="font-size:24px;">${a.icon}</div>
+              <div style="flex:1;">
+                <div style="font-weight:500;">${a.text}</div>
+                <div style="font-size:12px;color:var(--muted);">${a.date}</div>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+      
+      // Week stats
+      const weekContainer = document.getElementById('week-stats');
+      if (weekContainer) {
+        const today = new Date();
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay() + 1); // Monday
+        
+        let weekDays = 0;
+        let weekTrainings = 0;
+        
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(weekStart);
+          d.setDate(weekStart.getDate() + i);
+          const dateStr = d.toISOString().split('T')[0];
+          
+          if (foodLog[dateStr] && foodLog[dateStr].length > 0) weekDays++;
+          
+          const dayTrainings = trainingEntries.filter(e => 
+            e.typ !== 'tageslog' && e.datum === dateStr
+          );
+          weekTrainings += dayTrainings.length;
+        }
+        
+        weekContainer.innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+            <div>
+              <div style="font-size:32px;font-weight:600;margin-bottom:5px;">${weekDays}/7</div>
+              <div style="font-size:13px;color:var(--muted);">Tage geloggt</div>
+            </div>
+            <div>
+              <div style="font-size:32px;font-weight:600;margin-bottom:5px;">${weekTrainings}</div>
+              <div style="font-size:13px;color:var(--muted);">Training Einheiten</div>
+            </div>
+          </div>
+        `;
+      }
     }
     
     // Render Statistics
@@ -913,8 +1147,8 @@
       document.getElementById('daily-carbs').textContent = totalCarbs + 'g';
       document.getElementById('daily-fat').textContent = totalFat + 'g';
       
-      // Goal (TODO: get from settings)
-      const kcalGoal = 2700;
+      // Goal from settings
+      const kcalGoal = settings.tdee || 2700;
       document.getElementById('daily-kcal-goal').textContent = `/ ${kcalGoal} kcal`;
       
       // Group by meal
@@ -1242,6 +1476,258 @@
         document.getElementById(target + '-subtab').classList.add('active');
       }
     });
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRAINING FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    window.saveTrainingEntry = async function() {
+      const date = document.getElementById('training-date').value;
+      const type = document.getElementById('training-type').value;
+      const sets = document.getElementById('training-sets').value;
+      const notiz = document.getElementById('training-notiz').value;
+      
+      if (!date || !type || !sets) {
+        showToast('❌ Bitte alle Pflichtfelder ausfüllen');
+        return;
+      }
+      
+      const entry = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        datum: date,
+        typ: type,
+        sets: sets,
+        notiz: notiz,
+        timestamp: new Date().toISOString()
+      };
+      
+      try {
+        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        trainingEntries.push(entry);
+        window.trainingEntries = trainingEntries;
+        
+        renderTrainingHistory();
+        renderDataStats();
+        
+        // Clear form
+        document.getElementById('training-sets').value = '';
+        document.getElementById('training-notiz').value = '';
+        
+        showToast('✓ Training gespeichert');
+      } catch (err) {
+        console.error('Save error:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+    };
+    
+    window.saveDayLog = async function() {
+      const date = document.getElementById('log-date').value;
+      const weight = parseFloat(document.getElementById('log-weight').value) || null;
+      const steps = parseInt(document.getElementById('log-steps').value) || null;
+      const sleep = parseInt(document.getElementById('log-sleep').value) || null;
+      const energy = parseInt(document.getElementById('log-energy').value) || null;
+      
+      if (!date) {
+        showToast('❌ Bitte Datum angeben');
+        return;
+      }
+      
+      const entry = {
+        id: 'log_' + date.replace(/-/g, ''),
+        datum: date,
+        typ: 'tageslog',
+        weight: weight,
+        steps: steps,
+        sleep: sleep,
+        energy: energy,
+        timestamp: new Date().toISOString()
+      };
+      
+      try {
+        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        
+        // Update local
+        const idx = trainingEntries.findIndex(e => e.id === entry.id);
+        if (idx >= 0) {
+          trainingEntries[idx] = entry;
+        } else {
+          trainingEntries.push(entry);
+        }
+        dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+        window.trainingEntries = trainingEntries;
+        window.dayLogs = dayLogs;
+        
+        renderTrainingHistory();
+        renderDataStats();
+        
+        showToast('✓ Tageslog gespeichert');
+      } catch (err) {
+        console.error('Save error:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+    };
+    
+    function renderTrainingHistory() {
+      const container = document.getElementById('training-history');
+      if (!container) return;
+      
+      const sorted = [...trainingEntries]
+        .filter(e => e.typ !== 'tageslog')
+        .sort((a, b) => b.datum.localeCompare(a.datum))
+        .slice(0, 20);
+      
+      if (sorted.length === 0) {
+        container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Einträge</div>';
+        return;
+      }
+      
+      container.innerHTML = sorted.map(e => `
+        <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
+          <div>
+            <div style="font-weight:500;margin-bottom:4px;">${e.typ.toUpperCase()} - ${e.sets}</div>
+            <div style="font-size:13px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
+          </div>
+          <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+        </div>
+      `).join('');
+    }
+    
+    window.deleteTraining = async function(id) {
+      if (!confirm('Training löschen?')) return;
+      
+      try {
+        await deleteDoc(doc(userTrainingCol(), String(id)));
+        trainingEntries = trainingEntries.filter(e => e.id !== id);
+        dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+        window.trainingEntries = trainingEntries;
+        window.dayLogs = dayLogs;
+        
+        renderTrainingHistory();
+        renderDataStats();
+        showToast('✓ Gelöscht');
+      } catch (err) {
+        console.error('Delete error:', err);
+        showToast('❌ Löschen fehlgeschlagen');
+      }
+    };
+    
+    // Initialize today's date on forms
+    setTimeout(() => {
+      const today = new Date().toISOString().split('T')[0];
+      const trainingDate = document.getElementById('training-date');
+      const logDate = document.getElementById('log-date');
+      if (trainingDate) trainingDate.value = today;
+      if (logDate) logDate.value = today;
+    }, 100);
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SETTINGS FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    let settings = {
+      tdee: 2700,
+      proteinGoal: 150,
+      carbsGoal: 325,
+      fatGoal: 95
+    };
+    
+    async function loadSettings() {
+      try {
+        const docRef = doc(db, 'users', userId, 'settings', 'main');
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          settings = docSnap.data();
+          
+          // Fill form
+          if (document.getElementById('settings-tdee')) {
+            document.getElementById('settings-tdee').value = settings.tdee || '';
+            document.getElementById('settings-protein').value = settings.proteinGoal || '';
+            document.getElementById('settings-carbs').value = settings.carbsGoal || '';
+            document.getElementById('settings-fat').value = settings.fatGoal || '';
+          }
+        }
+      } catch (err) {
+        console.error('Load settings error:', err);
+      }
+    }
+    
+    window.saveSettings = async function() {
+      const tdee = parseInt(document.getElementById('settings-tdee').value) || 2700;
+      const protein = parseInt(document.getElementById('settings-protein').value) || 150;
+      const carbs = parseInt(document.getElementById('settings-carbs').value) || 325;
+      const fat = parseInt(document.getElementById('settings-fat').value) || 95;
+      
+      settings = {
+        tdee: tdee,
+        proteinGoal: protein,
+        carbsGoal: carbs,
+        fatGoal: fat
+      };
+      
+      try {
+        const docRef = doc(db, 'users', userId, 'settings', 'main');
+        await setDoc(docRef, settings);
+        
+        // Update display
+        renderFoodLog();
+        
+        showToast('✓ Einstellungen gespeichert');
+      } catch (err) {
+        console.error('Save settings error:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+    };
+    
+    window.confirmDeleteAllData = async function() {
+      const confirm1 = prompt('WARNUNG! Alle Daten werden gelöscht!\n\nTippe "LÖSCHEN" um fortzufahren:');
+      if (confirm1 !== 'LÖSCHEN') {
+        showToast('Abgebrochen');
+        return;
+      }
+      
+      const confirm2 = prompt('Bist du SICHER? Dies kann NICHT rückgängig gemacht werden!\n\nTippe "JA LÖSCHEN" um alle Daten zu löschen:');
+      if (confirm2 !== 'JA LÖSCHEN') {
+        showToast('Abgebrochen');
+        return;
+      }
+      
+      try {
+        showToast('⏳ Lösche alle Daten...');
+        
+        // Delete all collections
+        const collections = [userFoodCol(), userRecipeCol(), userLogCol(), userTrainingCol()];
+        
+        for (const col of collections) {
+          const snapshot = await getDocs(col);
+          const deletePromises = [];
+          snapshot.forEach(d => {
+            deletePromises.push(deleteDoc(d.ref));
+          });
+          await Promise.all(deletePromises);
+        }
+        
+        // Clear local
+        foodDB = [];
+        recipes = [];
+        foodLog = {};
+        trainingEntries = [];
+        dayLogs = [];
+        
+        window.foodDB = foodDB;
+        window.recipes = recipes;
+        window.foodLog = foodLog;
+        window.trainingEntries = trainingEntries;
+        window.dayLogs = dayLogs;
+        
+        renderAll();
+        
+        showToast('✓ Alle Daten gelöscht');
+      } catch (err) {
+        console.error('Delete error:', err);
+        showToast('❌ Löschen fehlgeschlagen');
+      }
+    };
   </script>
 </body>
 </html>

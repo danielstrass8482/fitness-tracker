@@ -1393,42 +1393,85 @@ async function loadAll() {
   
   if (!userId) return;
   
-  const hasLocalData = foodDB.length > 0 || recipes.length > 0 || Object.keys(foodLog).length > 0;
+  const localFoodCount = foodDB.length;
+  const localRecipeCount = recipes.length;
+  const localDiaryDays = Object.keys(foodLog).length;
+  const localTrainingCount = trainingEntries.length;
   
-  // Prüfe ob Firebase Daten hat
   try {
-    const recipeCheck = await getDocs(query(userRecipeCol(), limit(1)));
-    const hasFirebaseData = recipeCheck.size > 0;
+    // Zähle Firebase Daten
+    const [foodSnap, recipeSnap, diarySnap, trainingSnap] = await Promise.all([
+      getDocs(query(userFoodCol(), limit(1))),
+      getDocs(query(userRecipeCol(), limit(1))),
+      getDocs(query(userLogCol(), limit(1))),
+      getDocs(query(userTrainingCol(), limit(1)))
+    ]);
     
-    // FALL 1: localStorage voll, Firebase leer → Upload zu Firebase
-    if (hasLocalData && !hasFirebaseData) {
+    const hasFirebase = foodSnap.size > 0 || recipeSnap.size > 0 || diarySnap.size > 0 || trainingSnap.size > 0;
+    const hasLocal = localFoodCount > 0 || localRecipeCount > 0 || localDiaryDays > 0 || localTrainingCount > 0;
+    
+    // FALL 1: localStorage hat Daten, Firebase leer
+    if (hasLocal && !hasFirebase) {
       console.log('📤 First sync: Uploading localStorage to Firebase...');
       await syncToFirebase();
       showToast('✓ Daten zu Firebase synchronisiert!');
       return;
     }
     
-    // FALL 2: localStorage leer, Firebase voll → Download
-    if (!hasLocalData && hasFirebaseData) {
-      console.log('📥 Loading from Firebase...');
-      // Lade von Firebase (der Code bleibt unten)
+    // FALL 2: localStorage leer, Firebase hat Daten
+    if (!hasLocal && hasFirebase) {
+      console.log('📥 Loading from Firebase (localStorage empty)...');
+      await loadFromFirebase();
+      return;
     }
     
-    // FALL 3: Beide voll → Firebase hat Priorität (normaler Sync)
-    if (hasLocalData && hasFirebaseData) {
-      console.log('🔄 Syncing with Firebase...');
-      // Lade von Firebase (überschreibt local)
+    // FALL 3: Beide haben Daten → Vergleiche und wähle größeren Datensatz
+    if (hasLocal && hasFirebase) {
+      // Hole vollständige Counts von Firebase
+      const [fullFoodSnap, fullRecipeSnap, fullDiarySnap, fullTrainingSnap] = await Promise.all([
+        getDocs(userFoodCol()),
+        getDocs(userRecipeCol()),
+        getDocs(userLogCol()),
+        getDocs(userTrainingCol())
+      ]);
+      
+      const firebaseFoodCount = fullFoodSnap.size;
+      const firebaseRecipeCount = fullRecipeSnap.size;
+      const firebaseDiaryCount = fullDiarySnap.size;
+      const firebaseTrainingCount = fullTrainingSnap.size;
+      
+      console.log('📊 Data comparison:');
+      console.log(`  Foods: Local ${localFoodCount} vs Firebase ${firebaseFoodCount}`);
+      console.log(`  Recipes: Local ${localRecipeCount} vs Firebase ${firebaseRecipeCount}`);
+      console.log(`  Diary: Local ${localDiaryDays} days vs Firebase ${firebaseDiaryCount} entries`);
+      console.log(`  Training: Local ${localTrainingCount} vs Firebase ${firebaseTrainingCount}`);
+      
+      // Wer mehr Daten hat gewinnt (gewichtet: FoodDB ist am wichtigsten)
+      const localScore = localFoodCount * 2 + localRecipeCount + localDiaryDays + localTrainingCount;
+      const firebaseScore = firebaseFoodCount * 2 + firebaseRecipeCount + firebaseDiaryCount + firebaseTrainingCount;
+      
+      if (localScore > firebaseScore) {
+        console.log(`🏆 localStorage wins (${localScore} vs ${firebaseScore}) - Uploading...`);
+        await syncToFirebase();
+        showToast('✓ Lokale Daten zu Firebase synchronisiert!');
+        return;
+      } else {
+        console.log(`🏆 Firebase wins (${firebaseScore} vs ${localScore}) - Downloading...`);
+        await loadFromFirebase();
+        return;
+      }
     }
     
-    // Falls wir hier sind: Lade von Firebase
   } catch (err) {
-    console.error('Sync check error:', err);
-    if (hasLocalData) {
-      console.log('Using localStorage data (Firebase check failed)');
+    console.error('Sync error:', err);
+    if (hasLocal) {
+      console.log('Using localStorage data (Firebase sync failed)');
       return;
     }
   }
-  
+}
+
+async function loadFromFirebase() {
   try {
     // Food DB ZUERST laden (wird für Rezept-Konvertierung gebraucht!)
     const dbSnap = await getDocs(userFoodCol());
@@ -1479,7 +1522,6 @@ async function loadAll() {
         if (data.ingredients && Array.isArray(data.ingredients)) {
           data.ingredients = data.ingredients.map(ing => {
             if (!ing.name && ing.foodId) {
-              // Finde Food in DB
               const food = foodDB.find(f => String(f.id) === String(ing.foodId));
               return {
                 name: food ? food.name : ing.foodId,
@@ -1490,7 +1532,7 @@ async function loadAll() {
                 fat: ing.fat || (food ? food.fat : 0)
               };
             }
-            return ing; // Schon OK
+            return ing;
           });
         }
         
@@ -1510,7 +1552,6 @@ async function loadAll() {
           };
           recipes.push(converted);
         } else {
-          // ID als String
           data.id = String(data.id);
           recipes.push(data);
         }
@@ -1520,7 +1561,8 @@ async function loadAll() {
     
     renderAll();
   } catch(e) {
-    console.error('Load error:', e);
+    console.error('Firebase load error:', e);
+    showToast('⚠️ Firebase Sync fehlgeschlagen');
   }
 }
 
@@ -2996,6 +3038,12 @@ function renderFoodLog() {
     totalFat += e.fat;
   });
   
+  // Runde auf 1 Nachkommastelle um Fließkomma-Fehler zu vermeiden
+  totalKcal = Math.round(totalKcal * 10) / 10;
+  totalProtein = Math.round(totalProtein * 10) / 10;
+  totalCarbs = Math.round(totalCarbs * 10) / 10;
+  totalFat = Math.round(totalFat * 10) / 10;
+  
   // Get goals for today
   const todayLog = dayLogs.find(l => l.datum === currentDate);
   const steps = todayLog?.steps || 10000; // Default 10.000 Schritte
@@ -3082,10 +3130,10 @@ function renderFoodLog() {
       return timeA.localeCompare(timeB);
     });
     
-    const mealKcal = mealEntries.reduce((sum, e) => sum + e.kcal, 0);
-    const mealProtein = mealEntries.reduce((sum, e) => sum + e.protein, 0);
-    const mealCarbs = mealEntries.reduce((sum, e) => sum + e.carbs, 0);
-    const mealFat = mealEntries.reduce((sum, e) => sum + e.fat, 0);
+    const mealKcal = Math.round(mealEntries.reduce((sum, e) => sum + e.kcal, 0) * 10) / 10;
+    const mealProtein = Math.round(mealEntries.reduce((sum, e) => sum + e.protein, 0) * 10) / 10;
+    const mealCarbs = Math.round(mealEntries.reduce((sum, e) => sum + e.carbs, 0) * 10) / 10;
+    const mealFat = Math.round(mealEntries.reduce((sum, e) => sum + e.fat, 0) * 10) / 10;
     
     // Prozent vom Gesamt-Konsum
     const mealPct = totalKcal > 0 ? Math.round((mealKcal / totalKcal) * 100) : 0;

@@ -276,39 +276,30 @@
         if (parts.length < 8) continue;
         
         // Parse: "06.04.2026 14:50";"105 g Gemischter Salat";"1323891";"251";"0";"4,5";"2,7";"1,4";
-        const datetimeStr = parts[0]?.trim()?.replace(/^"(.*)"$/, '$1');
-        const nameWithAmount = parts[1]?.trim()?.replace(/^"(.*)"$/, '$1');
-        const kj = parseFloat(parts[3]?.replace(',', '.')) || 0;
-        const fat = parseFloat(parts[5]?.replace(',', '.')) || 0;
-        const carbs = parseFloat(parts[6]?.replace(',', '.')) || 0;
-        const protein = parseFloat(parts[7]?.replace(',', '.')) || 0;
+        const datumStr = parts[0]?.replace(/"/g, '').trim();
+        const bezeichnung = parts[1]?.replace(/"/g, '').trim();
+        const kj = parseFloat(parts[3]?.replace(/"/g, '').replace(',', '.')) || 0;
+        const fat = parseFloat(parts[5]?.replace(/"/g, '').replace(',', '.')) || 0;
+        const carbs = parseFloat(parts[6]?.replace(/"/g, '').replace(',', '.')) || 0;
+        const protein = parseFloat(parts[7]?.replace(/"/g, '').replace(',', '.')) || 0;
         
-        if (!datetimeStr || !nameWithAmount) continue;
+        if (!datumStr || !bezeichnung) continue;
         
-        // Parse datetime: "06.04.2026 14:50" → date="2026-04-06", time="14:50"
-        const dtParts = datetimeStr.split(' ');
-        if (dtParts.length !== 2) continue;
+        // Parse date: "06.04.2026 14:50" → "2026-04-06"
+        const dateMatch = datumStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (!dateMatch) continue;
+        const date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
         
-        const dateParts = dtParts[0].split('.');
-        if (dateParts.length !== 3) continue;
+        // Parse time: "06.04.2026 14:50" → "14:50"
+        const timeMatch = datumStr.match(/(\d{2}):(\d{2})/);
+        const hour = timeMatch ? parseInt(timeMatch[1]) : 12;
+        const minute = timeMatch ? parseInt(timeMatch[2]) : 0;
+        const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
         
-        const date = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // YYYY-MM-DD
-        const time = dtParts[1]; // HH:MM
-        
-        // Parse name and amount: "105 g Gemischter Salat" → amount=105, name="Gemischter Salat"
-        const match = nameWithAmount.match(/^(\d+(?:,\d+)?)\s*g?\s*(.+)$/);
-        if (!match) continue;
-        
-        const amount = parseFloat(match[1].replace(',', '.'));
-        const name = match[2].trim();
-        
-        if (!name || amount === 0) continue;
-        
-        // Convert kJ to kcal
-        const kcal = kj / 4.184;
+        // Convert kJ to kcal (for the TOTAL amount eaten, not per 100g!)
+        const kcal = Math.round(kj / 4.184);
         
         // Auto-detect meal from time
-        const hour = parseInt(time.split(':')[0]);
         let meal = 'Abends';
         if (hour >= 6 && hour < 12) meal = 'Morgens';
         else if (hour >= 12 && hour < 14) meal = 'Mittags';
@@ -316,62 +307,33 @@
         else if (hour >= 17 && hour < 21) meal = 'Abends';
         else meal = 'Nachts';
         
-        // Create food entry (per 100g)
-        const foodId = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.random().toString(36).substr(2, 6);
-        
-        if (!foodsMap.has(name)) {
-          foodsMap.set(name, {
-            id: foodId,
-            name: name,
-            kcal: Math.round((kcal / amount) * 100 * 10) / 10,
-            protein: Math.round((protein / amount) * 100 * 10) / 10,
-            carbs: Math.round((carbs / amount) * 100 * 10) / 10,
-            fat: Math.round((fat / amount) * 100 * 10) / 10
-          });
-        }
-        
-        // Create diary entry
+        // Create diary entry with TOTAL values (not per 100g!)
         const entryId = Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
         entries.push({
           id: entryId,
           date: date,
           time: time,
           meal: meal,
-          name: name,
-          foodId: foodsMap.get(name).id,
-          amount: amount,
-          kcal: Math.round(kcal * 10) / 10,
-          protein: Math.round(protein * 10) / 10,
-          carbs: Math.round(carbs * 10) / 10,
-          fat: Math.round(fat * 10) / 10
+          name: bezeichnung,
+          foodId: null,
+          amount: 0,
+          kcal: Math.round(kcal),
+          protein: Math.round(protein),
+          carbs: Math.round(carbs),
+          fat: Math.round(fat)
         });
       }
       
-      const foods = Array.from(foodsMap.values());
+      // Remove foodsMap - we don't create foods from diary anymore
+      const foods = [];
       
-      log(`✓ ${foods.length} Lebensmittel extrahiert`, 'success');
       log(`✓ ${entries.length} Tagebuch-Einträge erstellt`, 'success');
       
       // Upload to Firebase
       log('📤 Upload zu Firebase...', 'info');
       
       try {
-        // Upload Foods
-        log(`Uploading ${foods.length} foods...`, 'info');
-        let uploadedFoods = 0;
-        
-        for (const food of foods) {
-          await setDoc(doc(userFoodCol(), String(food.id)), food);
-          uploadedFoods++;
-          
-          if (uploadedFoods % 100 === 0) {
-            updateProgress(Math.round((uploadedFoods / foods.length) * 50), `${uploadedFoods}/${foods.length} Foods`);
-          }
-        }
-        
-        log(`✓ ${foods.length} Lebensmittel hochgeladen`, 'success');
-        
-        // Upload Diary Entries (in batches)
+        // Upload Diary Entries only
         log(`Uploading ${entries.length} diary entries...`, 'info');
         let uploadedEntries = 0;
         
@@ -380,8 +342,7 @@
           uploadedEntries++;
           
           if (uploadedEntries % 100 === 0) {
-            const progress = 50 + Math.round((uploadedEntries / entries.length) * 50);
-            updateProgress(progress, `${uploadedEntries}/${entries.length} Einträge`);
+            updateProgress(Math.round((uploadedEntries / entries.length) * 100), `${uploadedEntries}/${entries.length} Einträge`);
           }
         }
         

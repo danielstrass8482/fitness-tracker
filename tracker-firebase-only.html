@@ -564,6 +564,54 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
   
+  <!-- FoodDB Edit Modal -->
+  <div id="edit-fooddb-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+    <div style="max-width:500px;width:100%;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
+      <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <h3 id="fooddb-modal-title">Lebensmittel bearbeiten</h3>
+        <button onclick="closeFoodDBModal()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+      </div>
+      
+      <div style="padding:20px;">
+        <input type="hidden" id="fooddb-id">
+        
+        <div style="margin-bottom:15px;">
+          <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Name</label>
+          <input type="text" id="fooddb-name" placeholder="z.B. Hähnchenbrust" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+          <div>
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Kalorien</label>
+            <input type="number" id="fooddb-kcal" placeholder="165" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Protein (g)</label>
+            <input type="number" id="fooddb-protein" placeholder="31" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+          <div>
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Kohlenhydrate (g)</label>
+            <input type="number" id="fooddb-carbs" placeholder="0" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Fett (g)</label>
+            <input type="number" id="fooddb-fat" placeholder="3.6" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+        </div>
+        
+        <p style="font-size:12px;color:var(--muted);margin-bottom:15px;">Alle Werte pro 100g</p>
+        
+        <div style="display:flex;gap:10px;">
+          <button onclick="closeFoodDBModal()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+          <button onclick="saveFoodDBModal()" class="btn" style="flex:1;">Speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <!-- Add Food Modal -->
   <div id="add-food-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;padding:20px;overflow-y:auto;">
     <div style="max-width:600px;margin:50px auto;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
@@ -925,66 +973,68 @@
     }
     
     window.openAddFoodDB = function() {
-      const name = prompt('Name des Lebensmittels:');
-      if (!name) return;
-      
-      const kcal = parseFloat(prompt('Kalorien pro 100g:', '0')) || 0;
-      const protein = parseFloat(prompt('Protein pro 100g (g):', '0')) || 0;
-      const carbs = parseFloat(prompt('Kohlenhydrate pro 100g (g):', '0')) || 0;
-      const fat = parseFloat(prompt('Fett pro 100g (g):', '0')) || 0;
-      
-      const food = {
-        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        name: name,
-        kcal: Math.round(kcal * 10) / 10,
-        protein: Math.round(protein * 10) / 10,
-        carbs: Math.round(carbs * 10) / 10,
-        fat: Math.round(fat * 10) / 10
-      };
-      
-      setDoc(doc(userFoodCol(), String(food.id)), food).then(() => {
-        foodDB.push(food);
-        window.foodDB = foodDB;
-        renderFoodDB();
-        renderDataStats();
-        showToast('✓ Lebensmittel hinzugefügt');
-      }).catch(err => {
-        console.error('Add error:', err);
-        showToast('❌ Fehler beim Hinzufügen');
-      });
+      document.getElementById('edit-fooddb-modal').style.display = 'flex';
+      document.getElementById('fooddb-modal-title').textContent = 'Neues Lebensmittel';
+      document.getElementById('fooddb-id').value = '';
+      document.getElementById('fooddb-name').value = '';
+      document.getElementById('fooddb-kcal').value = '';
+      document.getElementById('fooddb-protein').value = '';
+      document.getElementById('fooddb-carbs').value = '';
+      document.getElementById('fooddb-fat').value = '';
     };
     
     window.editFoodDB = function(id) {
       const food = foodDB.find(f => String(f.id) === String(id));
       if (!food) return;
       
-      const name = prompt('Name:', food.name);
-      if (!name) return;
+      document.getElementById('edit-fooddb-modal').style.display = 'flex';
+      document.getElementById('fooddb-modal-title').textContent = 'Lebensmittel bearbeiten';
+      document.getElementById('fooddb-id').value = food.id;
+      document.getElementById('fooddb-name').value = food.name;
+      document.getElementById('fooddb-kcal').value = food.kcal || 0;
+      document.getElementById('fooddb-protein').value = food.protein || 0;
+      document.getElementById('fooddb-carbs').value = food.carbs || 0;
+      document.getElementById('fooddb-fat').value = food.fat || 0;
+    };
+    
+    window.closeFoodDBModal = function() {
+      document.getElementById('edit-fooddb-modal').style.display = 'none';
+    };
+    
+    window.saveFoodDBModal = async function() {
+      const id = document.getElementById('fooddb-id').value || (Date.now() + '_' + Math.random().toString(36).substr(2, 9));
+      const name = document.getElementById('fooddb-name').value.trim();
+      const kcal = parseFloat(document.getElementById('fooddb-kcal').value) || 0;
+      const protein = parseFloat(document.getElementById('fooddb-protein').value) || 0;
+      const carbs = parseFloat(document.getElementById('fooddb-carbs').value) || 0;
+      const fat = parseFloat(document.getElementById('fooddb-fat').value) || 0;
       
-      const kcal = parseFloat(prompt('Kalorien pro 100g:', food.kcal)) || 0;
-      const protein = parseFloat(prompt('Protein pro 100g (g):', food.protein)) || 0;
-      const carbs = parseFloat(prompt('Kohlenhydrate pro 100g (g):', food.carbs)) || 0;
-      const fat = parseFloat(prompt('Fett pro 100g (g):', food.fat)) || 0;
+      if (!name) {
+        alert('Bitte Name eingeben!');
+        return;
+      }
       
-      const updated = {
-        ...food,
-        name: name,
-        kcal: Math.round(kcal * 10) / 10,
-        protein: Math.round(protein * 10) / 10,
-        carbs: Math.round(carbs * 10) / 10,
-        fat: Math.round(fat * 10) / 10
-      };
+      const food = { id, name, kcal, protein, carbs, fat };
       
-      setDoc(doc(userFoodCol(), String(id)), updated).then(() => {
+      try {
+        await setDoc(doc(userFoodCol(), String(id)), food);
+        
         const idx = foodDB.findIndex(f => String(f.id) === String(id));
-        if (idx >= 0) foodDB[idx] = updated;
+        if (idx >= 0) {
+          foodDB[idx] = food;
+        } else {
+          foodDB.push(food);
+        }
         window.foodDB = foodDB;
+        
         renderFoodDB();
-        showToast('✓ Aktualisiert');
-      }).catch(err => {
-        console.error('Update error:', err);
-        showToast('❌ Fehler beim Aktualisieren');
-      });
+        renderDataStats();
+        closeFoodDBModal();
+        showToast('✓ Gespeichert');
+      } catch (err) {
+        console.error('Save error:', err);
+        showToast('❌ Fehler beim Speichern');
+      }
     };
     
     window.deleteFoodDB = async function(id) {

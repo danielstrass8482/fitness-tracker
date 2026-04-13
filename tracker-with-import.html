@@ -1222,7 +1222,7 @@
 
     function renderDashboard() {
       const canvas = document.getElementById('dash-chart');
-      if (!canvas || !canvas.offsetParent) return; // not visible yet
+      if (!canvas) return;
 
       const { fromDate, toDate } = getDateRange();
       const days = buildDayIndex(fromDate, toDate);

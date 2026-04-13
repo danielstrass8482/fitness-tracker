@@ -2409,13 +2409,13 @@
           const text = await importRecipeFile.text();
           const parsed = parseRecipes(text, localFoodDB);
           
-          // Merge Recipes – Update bestehende (für Nährwert-Neuberechnung), neue hinzufügen
+          // Merge Recipes – Update bestehende (alte ID beibehalten!), neue hinzufügen
           const existingRecipeMap = new Map(localRecipes.map(r => [r.name, r]));
           parsed.forEach(recipe => {
             if (existingRecipeMap.has(recipe.name)) {
-              // Update bestehende – Nährwerte neu berechnet
               const idx = localRecipes.findIndex(r => r.name === recipe.name);
-              localRecipes[idx] = { ...localRecipes[idx], ...recipe };
+              const oldId = localRecipes[idx].id; // alte ID beibehalten
+              localRecipes[idx] = { ...recipe, id: oldId };
             } else {
               localRecipes.push(recipe);
             }

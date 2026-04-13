@@ -1509,6 +1509,79 @@
       renderFoodLog();
     };
     
+
+    // ── Aktivitätskalorien-Berechnung ────────────────────────────────────────
+    function calcActivityKcal(entry) {
+      const weight = settings.weight || 75;
+
+      // Zeit in Stunden aus "HH:MM:SS" oder "MM:SS"
+      function parseHours(timeStr) {
+        if (!timeStr || timeStr === '--') return 0;
+        // Strip sub-seconds e.g. "00:51:06.5" → "00:51:06"
+        const clean = timeStr.split('.')[0];
+        const parts = clean.split(':').map(Number);
+        if (parts.length === 3) return parts[0] + parts[1] / 60 + parts[2] / 3600;
+        if (parts.length === 2) return parts[0] / 60 + parts[1] / 3600;
+        return 0;
+      }
+
+      const hours = parseHours(entry.zeit || '');
+      const distanz = parseFloat(entry.distanz) || 0;
+
+      switch (entry.typ) {
+        case 'laufen':
+          // 1,04 kcal × km × kg
+          return distanz > 0 ? Math.round(1.04 * distanz * weight) : 0;
+
+        case 'gehen':
+        case 'wandern':
+          // MET 3,5 × kg × h
+          return hours > 0 ? Math.round(3.5 * weight * hours) : 0;
+
+        case 'rad': {
+          // MET je nach Durchschnittsgeschwindigkeit
+          const kmh = hours > 0 ? distanz / hours : 0;
+          let met = 4.0;
+          if (kmh >= 22) met = 10.0;
+          else if (kmh >= 19) met = 8.0;
+          else if (kmh >= 16) met = 6.0;
+          return hours > 0 ? Math.round(met * weight * hours) : 0;
+        }
+
+        case 'rad_ebike':
+          // MET 2,5 × kg × h
+          return hours > 0 ? Math.round(2.5 * weight * hours) : 0;
+
+        default:
+          return 0;
+      }
+    }
+
+    function calcDayActivityKcal(date) {
+      return trainingEntries
+        .filter(e => e.datum === date && e.source === 'garmin')
+        .reduce((sum, e) => sum + calcActivityKcal(e), 0);
+    }
+
+    function calcDailyKcalGoal(date) {
+      // BMR × 1,375 (Basis) + Aktivitätskalorien des Tages
+      const age = settings.age;
+      const height = settings.height;
+      const weight = settings.weight;
+      const gender = settings.gender || 'male';
+
+      if (age && height && weight) {
+        let bmr = gender === 'male'
+          ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+          : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+        const base = Math.round(bmr * 1.375);
+        const activity = calcDayActivityKcal(date);
+        return { base, activity, total: base + activity };
+      }
+      // Fallback: manueller TDEE
+      return { base: settings.tdee || 2700, activity: 0, total: settings.tdee || 2700 };
+    }
+
     // Render Food Log
     function renderFoodLog() {
       // Update date display
@@ -1543,9 +1616,13 @@
       document.getElementById('daily-carbs').textContent = fmt(totalCarbs, 1) + 'g';
       document.getElementById('daily-fat').textContent = fmt(totalFat, 1) + 'g';
       
-      // Goal from settings
-      const kcalGoal = settings.tdee || 2700;
-      document.getElementById('daily-kcal-goal').textContent = `/ ${fmt(kcalGoal)} kcal`;
+      // Dynamisches Kalorienziel: BMR × 1,375 + Aktivität
+      const goalData = calcDailyKcalGoal(currentDate);
+      const kcalGoal = goalData.total;
+      const goalText = goalData.activity > 0
+        ? `/ ${fmt(kcalGoal)} kcal (Basis ${fmt(goalData.base)} + ${fmt(goalData.activity)} Aktivität)`
+        : `/ ${fmt(kcalGoal)} kcal`;
+      document.getElementById('daily-kcal-goal').textContent = goalText;
       
       // Makro goals in tiles
       const proteinGoal = settings.proteinGoal || 0;
@@ -2902,6 +2979,7 @@
             notiz: titel !== rawTyp ? titel : '',
             kalorien,
             distanz,
+            zeit,   // raw "HH:MM:SS" für Kalorienberechnung
             schritte: schritte !== '--' ? schritte.replace(',', '') : null,
             source: 'garmin',
             timestamp: rawDatum

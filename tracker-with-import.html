@@ -1219,14 +1219,26 @@
     // ── Recipe Modal State ───────────────────────────────────────────────────
     let recipeModalIngredients = []; // working copy
 
-    function recipeNutritionFromIngredients(ings) {
-      return {
-        totalWeight: Math.round(ings.reduce((s, i) => s + (i.amount || 0), 0)),
+    function recipeNutritionFromIngredients(ings, fallbackRecipe) {
+      const totalWeight = Math.round(ings.reduce((s, i) => s + (i.amount || 0), 0));
+      const fromIngs = {
+        totalWeight,
         kcal: Math.round(ings.reduce((s, i) => s + (i.kcal || 0), 0) * 10) / 10,
         protein: Math.round(ings.reduce((s, i) => s + (i.protein || 0), 0) * 10) / 10,
         carbs: Math.round(ings.reduce((s, i) => s + (i.carbs || 0), 0) * 10) / 10,
         fat: Math.round(ings.reduce((s, i) => s + (i.fat || 0), 0) * 10) / 10,
       };
+      // If ingredients have no nutrition data, fall back to recipe-level totals
+      if (fromIngs.kcal === 0 && fallbackRecipe && (fallbackRecipe.kcal || 0) > 0) {
+        return {
+          totalWeight: fallbackRecipe.totalWeight || totalWeight,
+          kcal: fallbackRecipe.kcal || 0,
+          protein: fallbackRecipe.protein || 0,
+          carbs: fallbackRecipe.carbs || 0,
+          fat: fallbackRecipe.fat || 0,
+        };
+      }
+      return fromIngs;
     }
 
     window.openRecipeModal = function(id) {
@@ -1250,7 +1262,8 @@
     };
 
     function renderRecipeModalIngredients() {
-      const nutr = recipeNutritionFromIngredients(recipeModalIngredients);
+      const currentRecipe = document.getElementById('recipe-modal-id').value ? recipes.find(r => String(r.id) === document.getElementById('recipe-modal-id').value) : null;
+      const nutr = recipeNutritionFromIngredients(recipeModalIngredients, currentRecipe);
       const portions = parseInt(document.getElementById('recipe-modal-portions').value) || 1;
       const per100 = nutr.totalWeight > 0 ? {
         kcal: Math.round(nutr.kcal / nutr.totalWeight * 100 * 10) / 10,
@@ -1379,7 +1392,8 @@
       const portions = parseInt(document.getElementById('recipe-modal-portions').value) || 1;
       if (!name) { showToast('❌ Bitte Rezeptname eingeben'); return; }
       
-      const nutr = recipeNutritionFromIngredients(recipeModalIngredients);
+      const currentRecipe = document.getElementById('recipe-modal-id').value ? recipes.find(r => String(r.id) === document.getElementById('recipe-modal-id').value) : null;
+      const nutr = recipeNutritionFromIngredients(recipeModalIngredients, currentRecipe);
       const recipe = {
         id, name, portions,
         totalWeight: nutr.totalWeight,
@@ -2099,17 +2113,25 @@
         return;
       }
       
-      const typeLabels = { pullups: 'Pull-ups', pushups: 'Push-ups' };
+      const typeLabels = {
+        pullups: 'Pull-ups', pushups: 'Push-ups',
+        laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
+        rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
+        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining',
+        yoga: '🧘 Yoga', crosstraining: '⚡ Crosstraining', cardio: '❤️ Cardio'
+      };
       container.innerHTML = sorted.map(e => {
-        const typeLabel = typeLabels[e.typ] || e.typ.toUpperCase();
+        const typeLabel = typeLabels[e.typ] || e.typ;
+        const isGarmin = e.source === 'garmin';
         const variantLabel = e.variantLabel || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
-        const setsTotal = e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
+        const setsTotal = !isGarmin && e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
+        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
           <div>
-            <div style="font-weight:500;margin-bottom:4px;">${title}</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}</div>
+            <div style="font-weight:500;margin-bottom:4px;">${title}${sourceBadge}</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets || ''}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}${e.kalorien > 0 ? ` · ${fmt(e.kalorien)} kcal` : ''}</div>
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
           <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
@@ -2309,39 +2331,48 @@
       try {
         updateImportProgress(5, 'Lade bestehende Daten...');
         logImport('📦 Starte Import...');
-        
-        // Load existing data from Firebase
-        const existingFoodDB = [];
-        const existingRecipes = [];
-        const existingFoodLog = {};
-        const existingTraining = [];
-        const existingDayLogs = [];
-        
-        const foodSnap = await getDocs(userFoodCol());
-        foodSnap.forEach(doc => existingFoodDB.push({id: doc.id, ...doc.data()}));
-        
-        const recipeSnap = await getDocs(userRecipeCol());
-        recipeSnap.forEach(doc => existingRecipes.push({id: doc.id, ...doc.data()}));
-        
-        const logSnap = await getDocs(userLogCol());
-        logSnap.forEach(doc => {
-          const entry = {id: doc.id, ...doc.data()};
-          if (!existingFoodLog[entry.date]) existingFoodLog[entry.date] = [];
-          existingFoodLog[entry.date].push(entry);
-        });
-        
-        const trainingSnap = await getDocs(userTrainingCol());
-        trainingSnap.forEach(doc => {
-          const e = {id: doc.id, ...doc.data()};
-          if (e.typ === 'tageslog') existingDayLogs.push(e);
-          else existingTraining.push(e);
-        });
-        
-        let localFoodDB = existingFoodDB;
-        let localRecipes = existingRecipes;
-        let localFoodLog = existingFoodLog;
-        let localTraining = existingTraining;
-        let localDayLogs = existingDayLogs;
+
+        // Nur die Collections laden, die auch importiert werden
+        const needsFoodDB = !!importFoodDBFile || !!importDiaryFile;
+        const needsRecipes = !!importRecipeFile;
+        const needsDiary = !!importDiaryFile;
+        const needsTraining = !!importGarminFile;
+
+        let localFoodDB = [];
+        let localRecipes = [];
+        let localFoodLog = {};
+        let localTraining = [];
+        let localDayLogs = [];
+
+        if (needsFoodDB) {
+          const foodSnap = await getDocs(userFoodCol());
+          foodSnap.forEach(doc => localFoodDB.push({id: doc.id, ...doc.data()}));
+          logImport(`  ${localFoodDB.length} bestehende Foods geladen`);
+        }
+        if (needsRecipes) {
+          const recipeSnap = await getDocs(userRecipeCol());
+          recipeSnap.forEach(doc => localRecipes.push({id: doc.id, ...doc.data()}));
+          logImport(`  ${localRecipes.length} bestehende Rezepte geladen`);
+        }
+        if (needsDiary) {
+          const logSnap = await getDocs(userLogCol());
+          logSnap.forEach(doc => {
+            const entry = {id: doc.id, ...doc.data()};
+            if (!localFoodLog[entry.date]) localFoodLog[entry.date] = [];
+            localFoodLog[entry.date].push(entry);
+          });
+          const diaryCount = Object.values(localFoodLog).flat().length;
+          logImport(`  ${diaryCount} bestehende Tagebuch-Einträge geladen`);
+        }
+        if (needsTraining) {
+          const trainingSnap = await getDocs(userTrainingCol());
+          trainingSnap.forEach(doc => {
+            const e = {id: doc.id, ...doc.data()};
+            if (e.typ === 'tageslog') localDayLogs.push(e);
+            else localTraining.push(e);
+          });
+          logImport(`  ${localTraining.length} bestehende Training-Einträge geladen`);
+        }
         
         let progress = 10;
         let steps = 0;
@@ -2434,58 +2465,77 @@
         // Parse Garmin
         if (importGarminFile) {
           updateImportProgress(progress, 'Lade Garmin...');
-          logImport('🏃 Garmin wird übersprungen (noch nicht implementiert)');
+          logImport('🏃 Lade Garmin Aktivitäten...');
+          const text = await importGarminFile.text();
+          const parsed = parseGarmin(text);
+
+          // Merge – deduplizieren per Datum+Typ+Zeit
+          const existingKeys = new Set(localTraining.map(e => `${e.datum}|${e.typ}|${e.garminTime || ''}`));
+          let newCount = 0;
+          parsed.forEach(entry => {
+            const key = `${entry.datum}|${entry.typ}|${entry.garminTime || ''}`;
+            if (!existingKeys.has(key)) {
+              localTraining.push(entry);
+              existingKeys.add(key);
+              newCount++;
+            }
+          });
+          logImport(`✓ ${newCount} neue Garmin-Aktivitäten (${parsed.length - newCount} Duplikate übersprungen)`, 'success');
           progress += stepSize;
         }
         
         updateImportProgress(70, 'Speichere zu Firebase...');
         logImport('💾 Speichere zu Firebase...');
-        
-        // Upload Foods
-        let uploadedFoods = 0;
-        for (const food of localFoodDB) {
-          await setDoc(doc(userFoodCol(), String(food.id)), food);
-          uploadedFoods++;
-          if (uploadedFoods % 50 === 0) {
-            updateImportProgress(70 + Math.round((uploadedFoods / localFoodDB.length) * 10), `Foods: ${uploadedFoods}/${localFoodDB.length}`);
+
+        // Nur die Collections hochladen, die auch importiert wurden
+        if (needsFoodDB && localFoodDB.length > 0) {
+          let uploadedFoods = 0;
+          for (const food of localFoodDB) {
+            await setDoc(doc(userFoodCol(), String(food.id)), food);
+            uploadedFoods++;
+            if (uploadedFoods % 50 === 0) {
+              updateImportProgress(70 + Math.round((uploadedFoods / localFoodDB.length) * 5), `Foods: ${uploadedFoods}/${localFoodDB.length}`);
+            }
           }
+          logImport(`✓ ${localFoodDB.length} Foods gespeichert`, 'success');
         }
-        logImport(`✓ ${localFoodDB.length} Foods gespeichert`, 'success');
-        
-        // Upload Recipes
-        for (const recipe of localRecipes) {
-          await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
-        }
-        logImport(`✓ ${localRecipes.length} Rezepte gespeichert`, 'success');
-        
-        // Upload foodLog entries - batch parallel upload with pauses to avoid timeout
-        const allEntries = Object.values(localFoodLog).flat();
-        let uploadedEntries = 0;
-        const BATCH_SIZE = 500;
-        for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
-          const batch = allEntries.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry)));
-          uploadedEntries += batch.length;
-          updateImportProgress(
-            80 + Math.round((uploadedEntries / allEntries.length) * 15),
-            `Diary: ${uploadedEntries}/${allEntries.length}`
-          );
-          logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${fmt(uploadedEntries)} Einträge hochgeladen`);
-          // Short pause between batches to avoid Firebase rate limits
-          if (i + BATCH_SIZE < allEntries.length) {
-            await new Promise(r => setTimeout(r, 150));
+
+        if (needsRecipes && localRecipes.length > 0) {
+          for (const recipe of localRecipes) {
+            await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
           }
+          logImport(`✓ ${localRecipes.length} Rezepte gespeichert`, 'success');
         }
-        logImport(`✓ ${allEntries.length} Tagebuch-Einträge gespeichert`, 'success');
-        
-        // Upload Training + DayLogs
-        for (const t of localTraining) {
-          await setDoc(doc(userTrainingCol(), String(t.id)), t);
+
+        if (needsDiary) {
+          const allEntries = Object.values(localFoodLog).flat();
+          let uploadedEntries = 0;
+          const BATCH_SIZE = 500;
+          for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+            const batch = allEntries.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry)));
+            uploadedEntries += batch.length;
+            updateImportProgress(
+              75 + Math.round((uploadedEntries / allEntries.length) * 20),
+              `Diary: ${uploadedEntries}/${allEntries.length}`
+            );
+            logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${fmt(uploadedEntries)} Einträge hochgeladen`);
+            if (i + BATCH_SIZE < allEntries.length) {
+              await new Promise(r => setTimeout(r, 150));
+            }
+          }
+          logImport(`✓ ${allEntries.length} Tagebuch-Einträge gespeichert`, 'success');
         }
-        for (const dl of localDayLogs) {
-          await setDoc(doc(userTrainingCol(), String(dl.id || dl.datum)), {...dl, typ: 'tageslog'});
+
+        if (needsTraining && (localTraining.length > 0 || localDayLogs.length > 0)) {
+          for (const t of localTraining) {
+            await setDoc(doc(userTrainingCol(), String(t.id)), t);
+          }
+          for (const dl of localDayLogs) {
+            await setDoc(doc(userTrainingCol(), String(dl.id || dl.datum)), {...dl, typ: 'tageslog'});
+          }
+          logImport(`✓ ${localTraining.length} Training-Einträge gespeichert`, 'success');
         }
-        logImport(`✓ ${localTraining.length} Training + ${localDayLogs.length} Tage gespeichert`, 'success');
         
         updateImportProgress(100, '✓ Import abgeschlossen!');
         logImport('🎉 Import erfolgreich!', 'success');
@@ -2613,6 +2663,109 @@
       return { totalWeight: Math.round(totalWeight), kcal, protein, carbs, fat };
     }
     
+    // Parser: Garmin Activities CSV
+    function parseGarmin(text) {
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) return [];
+
+      // Parse header
+      const header = lines[0].split(',').map(h => h.replace(/\r/g, '').trim());
+      const col = name => header.indexOf(name);
+
+      const iTyp = col('Aktivitätstyp');
+      const iDatum = col('Datum');
+      const iTitel = col('Titel');
+      const iDistanz = col('Distanz');
+      const iKalorien = col('Kalorien');
+      const iZeit = col('Zeit');
+      const iHF = col('Ø Herzfrequenz');
+      const iMaxHF = col('Maximale Herzfrequenz');
+      const iPace = col('Ø Pace');
+      const iTritt = col('Ø Trittfrequenz');
+      const iAnstieg = col('Anstieg gesamt');
+      const iSchritte = col('Schritte');
+
+      // Map Garmin types → internal types
+      const typMap = {
+        'Laufen': 'laufen',
+        'Gehen': 'gehen',
+        'Wandern': 'wandern',
+        'Bergwandern': 'wandern',
+        'Radfahren': 'rad',
+        'E-Bike-Fahren': 'rad_ebike',
+        'Radfahren, Indoor': 'rad_indoor',
+        'Schwimmen': 'schwimmen',
+        'Krafttraining': 'kraft',
+        'Yoga': 'yoga',
+        'Crosstraining': 'crosstraining',
+        'Cardio': 'cardio',
+      };
+
+      const entries = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          // Handle quoted CSV fields
+          const parts = [];
+          let cur = '', inQuote = false;
+          for (const ch of lines[i].replace(/\r/g, '')) {
+            if (ch === '"') { inQuote = !inQuote; }
+            else if (ch === ',' && !inQuote) { parts.push(cur.trim()); cur = ''; }
+            else { cur += ch; }
+          }
+          parts.push(cur.trim());
+
+          const rawTyp = parts[iTyp] || '';
+          const typ = typMap[rawTyp] || rawTyp.toLowerCase().replace(/[^a-z]/g, '_');
+          if (!typ || rawTyp === 'Aktivitätstyp') continue;
+
+          const rawDatum = parts[iDatum] || '';
+          if (!rawDatum) continue;
+          // Garmin format: "2026-03-20 15:44:37"
+          const datum = rawDatum.split(' ')[0];
+          const garminTime = rawDatum.split(' ')[1] || '';
+
+          const distanz = parseFloat((parts[iDistanz] || '0').replace(',', '.')) || 0;
+          const kalorien = parseInt(parts[iKalorien] || '0') || 0;
+          const zeit = parts[iZeit] || '';
+          const hf = parts[iHF] || '--';
+          const maxHF = parts[iMaxHF] || '--';
+          const pace = parts[iPace] || '--';
+          const tritt = parts[iTritt] || '--';
+          const anstieg = parts[iAnstieg] || '--';
+          const schritte = parts[iSchritte] || '--';
+          const titel = parts[iTitel] || rawTyp;
+
+          // Build sets string (summary of key metrics)
+          const details = [];
+          if (distanz > 0) details.push(`${distanz.toFixed(2).replace('.', ',')} km`);
+          if (zeit) details.push(zeit);
+          if (pace !== '--' && (typ === 'laufen' || typ === 'gehen')) details.push(`Pace: ${pace}`);
+          if (tritt !== '--' && (typ === 'rad' || typ === 'rad_ebike')) details.push(`${tritt} rpm`);
+          if (hf !== '--') details.push(`HF: ${hf}`);
+          if (anstieg !== '--' && anstieg !== '0') details.push(`↑${anstieg}m`);
+
+          entries.push({
+            id: 'garmin_' + datum.replace(/-/g, '') + '_' + garminTime.replace(/:/g, '') + '_' + typ,
+            datum,
+            garminTime,
+            typ,
+            sets: details.join(' · '),
+            notiz: titel !== rawTyp ? titel : '',
+            kalorien,
+            distanz,
+            schritte: schritte !== '--' ? schritte.replace(',', '') : null,
+            source: 'garmin',
+            timestamp: rawDatum
+          });
+        } catch (err) {
+          console.warn('Skip Garmin line:', i, err);
+        }
+      }
+
+      return entries;
+    }
+
     function parseDiary(text) {
       const lines = text.split('\n');
       const foodLog = {};

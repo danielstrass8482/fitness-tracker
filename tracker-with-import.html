@@ -1266,8 +1266,17 @@
             plugins: { legend: { labels: { color: '#e8e8e8', font: { size: 12 } } } },
             scales: {
               x: { ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: '#222' } },
-              y: { ticks: { color: '#888' }, grid: { color: '#222' }, position: 'left' },
-              y2: { ticks: { color: '#888' }, grid: { display: false }, position: 'right' }
+              y: {
+                ticks: { color: '#888' }, grid: { color: '#222' }, position: 'left',
+                min: (() => { const vals = data1.map(d=>d.value).filter(v=>v!==null&&v!==undefined); return vals.length ? Math.max(0, Math.min(...vals) * 0.9) : 0; })(),
+                max: (() => { const vals = data1.map(d=>d.value).filter(v=>v!==null&&v!==undefined); return vals.length ? Math.max(...vals) * 1.1 : undefined; })()
+              },
+              y2: {
+                ticks: { color: '#888' }, grid: { display: false }, position: 'right',
+                display: !!(var2 && var2 !== var1),
+                min: (() => { const vals = data2.map(d=>d.value).filter(v=>v!==null&&v!==undefined); return vals.length ? Math.max(0, Math.min(...vals) * 0.9) : 0; })(),
+                max: (() => { const vals = data2.map(d=>d.value).filter(v=>v!==null&&v!==undefined); return vals.length ? Math.max(...vals) * 1.1 : undefined; })()
+              }
             }
           }
         });

@@ -293,22 +293,29 @@
           
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Typ</label>
-            <select id="training-type" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-              <option value="pull">Pull-ups</option>
-              <option value="push">Push-ups</option>
-              <option value="lauf">Lauf</option>
-              <option value="rad">Rad</option>
+            <select id="training-type" onchange="updateVariantOptions()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <option value="pullups">Pull-ups</option>
+              <option value="pushups">Push-ups</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Variante</label>
+            <select id="training-variant" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <option value="regulaer">Regulär</option>
+              <option value="reverse">Reverse</option>
+              <option value="hammer">Hammer Grip</option>
             </select>
           </div>
           
           <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Sets / Details</label>
-            <input type="text" id="training-sets" placeholder="z.B. 11-10-7 oder 5km/25min" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Sets (z.B. 11-10-7)</label>
+            <input type="text" id="training-sets" placeholder="z.B. 11-10-7" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           </div>
           
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Notizen</label>
-            <textarea id="training-notiz" rows="3" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;"></textarea>
+            <textarea id="training-notiz" rows="2" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;"></textarea>
           </div>
           
           <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
@@ -323,10 +330,10 @@
             <input type="date" id="log-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           </div>
           
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
             <div>
               <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
-              <input type="number" id="log-weight" step="0.1" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <input type="number" id="log-weight" step="0.1" placeholder="75.0" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
             </div>
             <div>
               <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Schritte</label>
@@ -334,15 +341,8 @@
             </div>
           </div>
           
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Schlaf (1-5)</label>
-              <input type="number" id="log-sleep" min="1" max="5" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-            </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Energie (1-5)</label>
-              <input type="number" id="log-energy" min="1" max="5" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-            </div>
+          <div style="padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);margin-bottom:20px;">
+            <div style="font-size:12px;color:var(--muted);">Weitere Körpermaße (z.B. Bauchumfang, Körperfett) werden in einer zukünftigen Version ergänzt.</div>
           </div>
           
           <button class="btn" onclick="saveDayLog()" style="width:100%;">Tageslog speichern</button>
@@ -351,7 +351,7 @@
       
       <!-- Training History -->
       <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-        <h3 style="margin-bottom:20px;">Letzten Einträge</h3>
+        <h3 style="margin-bottom:20px;">Letzte Einträge</h3>
         <div id="training-history" style="max-height:400px;overflow-y:auto;"></div>
       </div>
     </div>
@@ -846,10 +846,10 @@
     function renderDashboard() {
       // Update quick stats
       if (document.getElementById('dash-foods')) {
-        document.getElementById('dash-foods').textContent = foodDB.length;
-        document.getElementById('dash-recipes').textContent = recipes.length;
-        document.getElementById('dash-days').textContent = Object.keys(foodLog).length;
-        document.getElementById('dash-trainings').textContent = trainingEntries.filter(e => e.typ !== 'tageslog').length;
+        document.getElementById('dash-foods').textContent = fmt(foodDB.length);
+        document.getElementById('dash-recipes').textContent = fmt(recipes.length);
+        document.getElementById('dash-days').textContent = fmt(Object.keys(foodLog).length);
+        document.getElementById('dash-trainings').textContent = fmt(trainingEntries.filter(e => e.typ !== 'tageslog').length);
       }
       
       // Recent Activity
@@ -942,19 +942,19 @@
     
     // Render Statistics
     function renderDataStats() {
-      document.getElementById('stat-fooddb').textContent = foodDB.length;
-      document.getElementById('stat-recipes').textContent = recipes.length;
+      document.getElementById('stat-fooddb').textContent = fmt(foodDB.length);
+      document.getElementById('stat-recipes').textContent = fmt(recipes.length);
       
       let diaryCount = 0;
       Object.values(foodLog).forEach(entries => diaryCount += entries.length);
-      document.getElementById('stat-diary').textContent = diaryCount;
-      document.getElementById('stat-days').textContent = Object.keys(foodLog).length;
+      document.getElementById('stat-diary').textContent = fmt(diaryCount);
+      document.getElementById('stat-days').textContent = fmt(Object.keys(foodLog).length);
       
       const trainingCount = trainingEntries.filter(e => e.typ !== 'tageslog').length;
-      document.getElementById('stat-training').textContent = trainingCount;
+      document.getElementById('stat-training').textContent = fmt(trainingCount);
       
-      document.getElementById('fooddb-count').textContent = foodDB.length;
-      document.getElementById('recipe-count').textContent = recipes.length;
+      document.getElementById('fooddb-count').textContent = fmt(foodDB.length);
+      document.getElementById('recipe-count').textContent = fmt(recipes.length);
     }
     
     // FoodDB Management
@@ -989,7 +989,7 @@
           <div>
             <div style="font-weight:500;margin-bottom:4px;">${f.name}</div>
             <div style="font-size:12px;color:var(--muted);">
-              ${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g / 100g
+              ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g
             </div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -1224,14 +1224,14 @@
       totalFat = Math.round(totalFat * 10) / 10;
       
       // Update display
-      document.getElementById('daily-kcal').textContent = totalKcal;
-      document.getElementById('daily-protein').textContent = totalProtein + 'g';
-      document.getElementById('daily-carbs').textContent = totalCarbs + 'g';
-      document.getElementById('daily-fat').textContent = totalFat + 'g';
+      document.getElementById('daily-kcal').textContent = fmt(totalKcal);
+      document.getElementById('daily-protein').textContent = fmt(totalProtein, 1) + 'g';
+      document.getElementById('daily-carbs').textContent = fmt(totalCarbs, 1) + 'g';
+      document.getElementById('daily-fat').textContent = fmt(totalFat, 1) + 'g';
       
       // Goal from settings
       const kcalGoal = settings.tdee || 2700;
-      document.getElementById('daily-kcal-goal').textContent = `/ ${kcalGoal} kcal`;
+      document.getElementById('daily-kcal-goal').textContent = `/ ${fmt(kcalGoal)} kcal`;
       
       // Group by meal
       const mealOrder = ['Morgens (6-12h)', 'Mittags (12-14h)', 'Nachmittags (14-17h)', 'Abends (17-21h)', 'Nachts (21-6h)'];
@@ -1282,10 +1282,10 @@
           <div class="meal-header" onclick="toggleMeal(this)">
             <div class="meal-title">▶ ${mealName}</div>
             <div style="display:flex;gap:12px;font-size:12px;">
-              <span style="color:#4a9eff;">P ${mealProtein}g</span>
-              <span style="color:#ffd93d;">K ${mealCarbs}g</span>
-              <span style="color:#ff6b9d;">F ${mealFat}g</span>
-              <span>${mealKcal} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
+              <span style="color:#4a9eff;">P ${fmt(mealProtein,1)}g</span>
+              <span style="color:#ffd93d;">K ${fmt(mealCarbs,1)}g</span>
+              <span style="color:#ff6b9d;">F ${fmt(mealFat,1)}g</span>
+              <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
             </div>
           </div>
           <div class="meal-entries" style="display:none;">
@@ -1296,7 +1296,7 @@
                   ${e.name}
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                  <span>${e.kcal} kcal</span>
+                  <span>${fmt(e.kcal)} kcal</span>
                   <button onclick="event.stopPropagation();deleteEntry('${e.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">✕</button>
                 </div>
               </div>
@@ -1381,7 +1381,7 @@
           <div>
             <div style="font-weight:500;">${f.name}</div>
             <div style="font-size:11px;color:var(--muted);">
-              ${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g
+              ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g
             </div>
           </div>
           <div style="font-size:11px;color:var(--muted);">pro 100g</div>
@@ -1410,10 +1410,10 @@
       const carbs = Math.round((selectedFood.carbs || 0) * factor * 10) / 10;
       const fat = Math.round((selectedFood.fat || 0) * factor * 10) / 10;
       
-      document.getElementById('calc-kcal').textContent = kcal;
-      document.getElementById('calc-protein').textContent = protein;
-      document.getElementById('calc-carbs').textContent = carbs;
-      document.getElementById('calc-fat').textContent = fat;
+      document.getElementById('calc-kcal').textContent = fmt(kcal);
+      document.getElementById('calc-protein').textContent = fmt(protein, 1);
+      document.getElementById('calc-carbs').textContent = fmt(carbs, 1);
+      document.getElementById('calc-fat').textContent = fmt(fat, 1);
     };
     
     window.saveFood = async function() {
@@ -1563,9 +1563,26 @@
     // TRAINING FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
     
+    window.updateVariantOptions = function() {
+      const type = document.getElementById('training-type').value;
+      const variantSel = document.getElementById('training-variant');
+      if (type === 'pullups') {
+        variantSel.innerHTML = `
+          <option value="regulaer">Regulär</option>
+          <option value="reverse">Reverse</option>
+          <option value="hammer">Hammer Grip</option>`;
+      } else {
+        variantSel.innerHTML = `
+          <option value="weit">Weit</option>
+          <option value="eng">Eng</option>
+          <option value="diamond">Diamond</option>`;
+      }
+    };
+
     window.saveTrainingEntry = async function() {
       const date = document.getElementById('training-date').value;
       const type = document.getElementById('training-type').value;
+      const variant = document.getElementById('training-variant').value;
       const sets = document.getElementById('training-sets').value;
       const notiz = document.getElementById('training-notiz').value;
       
@@ -1573,11 +1590,18 @@
         showToast('❌ Bitte alle Pflichtfelder ausfüllen');
         return;
       }
+
+      const variantLabels = {
+        regulaer: 'Regulär', reverse: 'Reverse', hammer: 'Hammer Grip',
+        weit: 'Weit', eng: 'Eng', diamond: 'Diamond'
+      };
       
       const entry = {
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         datum: date,
         typ: type,
+        variant: variant,
+        variantLabel: variantLabels[variant] || variant,
         sets: sets,
         notiz: notiz,
         timestamp: new Date().toISOString()
@@ -1606,8 +1630,6 @@
       const date = document.getElementById('log-date').value;
       const weight = parseFloat(document.getElementById('log-weight').value) || null;
       const steps = parseInt(document.getElementById('log-steps').value) || null;
-      const sleep = parseInt(document.getElementById('log-sleep').value) || null;
-      const energy = parseInt(document.getElementById('log-energy').value) || null;
       
       if (!date) {
         showToast('❌ Bitte Datum angeben');
@@ -1620,8 +1642,6 @@
         typ: 'tageslog',
         weight: weight,
         steps: steps,
-        sleep: sleep,
-        energy: energy,
         timestamp: new Date().toISOString()
       };
       
@@ -1663,15 +1683,22 @@
         return;
       }
       
-      container.innerHTML = sorted.map(e => `
+      const typeLabels = { pullups: 'Pull-ups', pushups: 'Push-ups' };
+      container.innerHTML = sorted.map(e => {
+        const typeLabel = typeLabels[e.typ] || e.typ.toUpperCase();
+        const variantLabel = e.variantLabel || e.variant || '';
+        const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
+        const setsTotal = e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
+        return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
           <div>
-            <div style="font-weight:500;margin-bottom:4px;">${e.typ.toUpperCase()} - ${e.sets}</div>
-            <div style="font-size:13px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
+            <div style="font-weight:500;margin-bottom:4px;">${title}</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}</div>
+            <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
           <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
         </div>
-      `).join('');
+      `}).join('');
     }
     
     window.deleteTraining = async function(id) {
@@ -1706,6 +1733,17 @@
     // SETTINGS FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
     
+
+    // ── Number formatting helper ──────────────────────────────────────────────
+    function fmt(n, decimals = 0) {
+      if (n === null || n === undefined || isNaN(n)) return '–';
+      return Number(n).toLocaleString('de-DE', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+    window.fmt = fmt;
+
     let settings = {
       tdee: 2700,
       proteinGoal: 150,
@@ -2016,7 +2054,7 @@
             80 + Math.round((uploadedEntries / allEntries.length) * 15),
             `Diary: ${uploadedEntries}/${allEntries.length}`
           );
-          logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${uploadedEntries} Einträge hochgeladen`);
+          logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${fmt(uploadedEntries)} Einträge hochgeladen`);
           // Short pause between batches to avoid Firebase rate limits
           if (i + BATCH_SIZE < allEntries.length) {
             await new Promise(r => setTimeout(r, 150));

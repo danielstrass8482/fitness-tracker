@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FDDB Daten importieren - Firebase</title>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, collection, doc, setDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBvTU5OhJnvJW-hYJYYVTro2rNcNr60aCk",
+      authDomain: "fitness-tracker-c6f97.firebaseapp.com",
+      projectId: "fitness-tracker-c6f97",
+      storageBucket: "fitness-tracker-c6f97.firebasestorage.app",
+      messagingSenderId: "187864668697",
+      appId: "1:187864668697:web:e2437802dbb11a23482888"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    let userId = null;
+    
+    // Collections
+    const userFoodCol = () => collection(db, 'users', userId, 'foods');
+    const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
+    const userLogCol = () => collection(db, 'users', userId, 'logEntries');
+    const userTrainingCol = () => collection(db, 'users', userId, 'entries');
+    
+    // Auth
+    window.loginWithGoogle = async function() {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (err) {
+        console.error('Login error:', err);
+        showError('Login fehlgeschlagen: ' + err.message);
+      }
+    };
+    
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        userId = user.uid;
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('import-section').style.display = 'block';
+        document.getElementById('auth-text').textContent = `Angemeldet als ${user.email}`;
+      } else {
+        userId = null;
+        document.getElementById('auth-section').style.display = 'block';
+        document.getElementById('import-section').style.display = 'none';
+      }
+    });
+    
+    // Delete All Data
+    window.deleteAllData = async function() {
+      if (!userId) {
+        alert('Bitte erst anmelden!');
+        return;
+      }
+      
+      const confirm1 = confirm('⚠️ ACHTUNG!\n\nAlle Daten werden UNWIDERRUFLICH gelöscht:\n- Foods\n- Recipes\n- Diary\n- Training\n\nWirklich fortfahren?');
+      if (!confirm1) return;
+      
+      const confirm2 = confirm('🚨 LETZTE WARNUNG!\n\nDies kann NICHT rückgängig gemacht werden!\n\nJETZT löschen?');
+      if (!confirm2) return;
+      
+      const statusEl = document.getElementById('delete-status');
+      statusEl.textContent = '⏳ Lösche Daten...';
+      
+      try {
+        let totalDeleted = 0;
+        
+        // Delete Foods
+        statusEl.textContent = '🗑️ Lösche Foods...';
+        const foodSnap = await getDocs(userFoodCol());
+        let deletedFoods = 0;
+        for (const docSnap of foodSnap.docs) {
+          await docSnap.ref.delete();
+          deletedFoods++;
+          totalDeleted++;
+          if (deletedFoods % 50 === 0) {
+            statusEl.textContent = `🗑️ Foods: ${deletedFoods}/${foodSnap.size}`;
+          }
+        }
+        
+        // Delete Recipes
+        statusEl.textContent = '🗑️ Lösche Recipes...';
+        const recipeSnap = await getDocs(userRecipeCol());
+        for (const docSnap of recipeSnap.docs) {
+          await docSnap.ref.delete();
+          totalDeleted++;
+        }
+        
+        // Delete Log Entries
+        statusEl.textContent = '🗑️ Lösche Diary...';
+        const logSnap = await getDocs(userLogCol());
+        let deletedLogs = 0;
+        for (const docSnap of logSnap.docs) {
+          await docSnap.ref.delete();
+          deletedLogs++;
+          totalDeleted++;
+          if (deletedLogs % 100 === 0) {
+            statusEl.textContent = `🗑️ Diary: ${deletedLogs}/${logSnap.size}`;
+          }
+        }
+        
+        // Delete Training
+        statusEl.textContent = '🗑️ Lösche Training...';
+        const trainingSnap = await getDocs(userTrainingCol());
+        for (const docSnap of trainingSnap.docs) {
+          await docSnap.ref.delete();
+          totalDeleted++;
+        }
+        
+        statusEl.textContent = `✅ ${totalDeleted} Einträge gelöscht!`;
+        alert(`✅ Alle Daten gelöscht!\n\n${totalDeleted} Einträge entfernt.`);
+        
+      } catch (err) {
+        console.error('Delete error:', err);
+        statusEl.textContent = '❌ Fehler: ' + err.message;
+        alert('❌ Fehler beim Löschen: ' + err.message);
+      }
+    };
+    
+    // File handling
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .drop-zone {
+      border: 3px dashed #667eea;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #f8f9ff;
+    }
+    
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #764ba2;
+      background: #f0f2ff;
+      transform: scale(1.02);
+    }
+    
+    .drop-zone.has-file {
+      border-color: #10b981;
+      background: #ecfdf5;
+    }
+    
+    .drop-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    
+    .drop-text {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    
+    .drop-hint {
+      font-size: 12px;
+      color: #999;
+    }
+    
+    .file-name {
+      font-size: 14px;
+      color: #10b981;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .progress {
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    .progress-text {
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
+    
+    .error {
+      background: #fee;
+      border: 1px solid #fcc;
+      padding: 12px;
+      border-radius: 8px;
+      color: #c33;
+      font-size: 14px;
+      margin-top: 15px;
+      display: none;
+    }
+    
+    .step {
+      margin-bottom: 25px;
+    }
+    
+    .step-number {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      background: #667eea;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 28px;
+      font-weight: 600;
+      margin-right: 10px;
+      font-size: 14px;
+    }
+    
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Fitness & Nutrition Tracker</h1>
+    <p class="subtitle">Importiere einzeln oder kombiniert - FDDB, Garmin, oder beides!</p>
+    
+    <!-- Auth Section -->
+    <div id="auth-section" style="background:#f8f9ff;padding:30px;border-radius:12px;text-align:center;margin-bottom:30px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:15px;color:#333;">🔐 Anmeldung erforderlich</div>
+      <div id="auth-status" style="margin-bottom:20px;color:#666;">
+        <span id="auth-text">Bitte melde dich an, um zu importieren</span>
+      </div>
+      <button id="login-btn" onclick="loginWithGoogle()" style="padding:14px 30px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;">
+        Mit Google anmelden
+      </button>
+    </div>
+    
+    <!-- Import Section (hidden until logged in) -->
+    <div id="import-section" style="display:none;">
+    
+    <!-- Danger Zone -->
+    <div style="background:#fee;border:2px solid #fcc;border-radius:12px;padding:20px;margin-bottom:30px;">
+      <div style="font-size:16px;font-weight:600;color:#c33;margin-bottom:10px;">⚠️ Danger Zone</div>
+      <div style="font-size:14px;color:#666;margin-bottom:15px;">Lösche ALLE Daten (Foods, Recipes, Diary, Training). Diese Aktion kann nicht rückgängig gemacht werden!</div>
+      <button onclick="deleteAllData()" style="padding:12px 24px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">
+        🗑️ Alle Daten löschen
+      </button>
+      <div id="delete-status" style="margin-top:15px;font-size:13px;color:#666;"></div>
+    </div>
+    
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">1</span>
+        FDDB Rezepte CSV
+      </div>
+      <div class="drop-zone" id="recipe-drop">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">lists_*.csv</div>
+        <div class="file-name" id="recipe-name"></div>
+      </div>
+      <input type="file" id="recipe-input" accept=".csv" style="display:none">
+    </div>
+    
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">2</span>
+        FDDB Tagebuch CSV
+      </div>
+      <div class="drop-zone" id="diary-drop">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">fddb_complete_all.csv</div>
+        <div class="file-name" id="diary-name"></div>
+      </div>
+      <input type="file" id="diary-input" accept=".csv" style="display:none">
+    </div>
+    
+    <div class="step">
+      <div class="step-title">
+        <span class="step-number">3</span>
+        Garmin Training CSV (optional)
+      </div>
+      <div class="drop-zone" id="garmin-drop">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Datei hier ablegen oder klicken</div>
+        <div class="drop-hint">Activities.csv (optional)</div>
+        <div class="file-name" id="garmin-name"></div>
+      </div>
+      <input type="file" id="garmin-input" accept=".csv" style="display:none">
+    </div>
+    
+    <button id="import-btn" disabled onclick="startImport()">
+      🚀 Jetzt importieren
+    </button>
+    
+    <div class="progress" id="progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
+    
+    
+    </div><!-- end import-section -->
+    
+    <div class="error" id="error"></div>
+  </div>
+
+  <script type="module">
+    let recipeFile = null;
+    let diaryFile = null;
+    let garminFile = null;
+    
+    ['recipe', 'diary', 'garmin'].forEach(type => {
+      const dropZone = document.getElementById(`${type}-drop`);
+      const input = document.getElementById(`${type}-input`);
+      const nameEl = document.getElementById(`${type}-name`);
+      
+      dropZone.addEventListener('click', () => input.click());
+      
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+      
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+      
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleFile(e.dataTransfer.files[0], type);
+      });
+      
+      input.addEventListener('change', (e) => {
+        handleFile(e.target.files[0], type);
+      });
+      
+      function handleFile(file, type) {
+        if (!file || !file.name.endsWith('.csv')) {
+          showError('Bitte nur CSV-Dateien verwenden!');
+          return;
+        }
+        
+        if (type === 'recipe') {
+          recipeFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        } else if (type === 'diary') {
+          diaryFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        } else if (type === 'garmin') {
+          garminFile = file;
+          nameEl.textContent = `✓ ${file.name}`;
+          dropZone.classList.add('has-file');
+        }
+        
+        // Import button immer aktiv wenn mindestens 1 Datei
+        const hasAnyFile = recipeFile || diaryFile || garminFile;
+        document.getElementById('import-btn').disabled = !hasAnyFile;
+      }
+    });
+    
+    async function startImport() {
+      if (!userId) {
+        showError('Bitte erst anmelden!');
+        return;
+      }
+      
+      document.getElementById('import-btn').disabled = true;
+      document.getElementById('progress').style.display = 'block';
+      
+      try {
+        updateProgress(5, 'Lade bestehende Daten...');
+        
+        // Lade bestehende Daten aus Firebase
+        const existingFoodDB = [];
+        const existingRecipes = [];
+        const existingFoodLog = {};
+        const existingTraining = [];
+        const existingDayLogs = [];
+        
+        const foodSnap = await getDocs(userFoodCol());
+        foodSnap.forEach(doc => existingFoodDB.push({id: doc.id, ...doc.data()}));
+        
+        const recipeSnap = await getDocs(userRecipeCol());
+        recipeSnap.forEach(doc => existingRecipes.push({id: doc.id, ...doc.data()}));
+        
+        const logSnap = await getDocs(userLogCol());
+        logSnap.forEach(doc => {
+          const entry = {id: doc.id, ...doc.data()};
+          if (!existingFoodLog[entry.date]) existingFoodLog[entry.date] = [];
+          existingFoodLog[entry.date].push(entry);
+        });
+        
+        const trainingSnap = await getDocs(userTrainingCol());
+        trainingSnap.forEach(doc => {
+          const e = {id: doc.id, ...doc.data()};
+          if (e.typ === 'tageslog') existingDayLogs.push(e);
+          else existingTraining.push(e);
+        });
+        
+        let foodDB = existingFoodDB;
+        let recipes = existingRecipes;
+        let foodLog = existingFoodLog;
+        let training = existingTraining;
+        let dayLogs = existingDayLogs;
+        
+        let progress = 10;
+        let steps = 0;
+        if (diaryFile) steps++;
+        if (recipeFile) steps++;
+        if (garminFile) steps++;
+        const stepSize = 80 / steps;
+        
+        // FDDB Tagebuch
+        if (diaryFile) {
+          updateProgress(progress, 'Lade Tagebuch...');
+          const diaryText = await diaryFile.text();
+          progress += stepSize / 2;
+          
+          updateProgress(progress, 'Extrahiere FoodDB...');
+          const parsed = parseDiary(diaryText);
+          
+          // Merge FoodDB (keine Duplikate nach Name)
+          const existingNames = new Set(foodDB.map(f => f.name));
+          parsed.foodDB.forEach(food => {
+            if (!existingNames.has(food.name)) {
+              foodDB.push(food);
+              existingNames.add(food.name);
+            }
+          });
+          
+          // Merge foodLog (überschreibt bei gleichem Datum)
+          Object.assign(foodLog, parsed.foodLog);
+          
+          progress += stepSize / 2;
+        }
+        
+        // FDDB Rezepte
+        if (recipeFile) {
+          updateProgress(progress, 'Lade Rezepte...');
+          const recipeText = await recipeFile.text();
+          const newRecipes = parseRecipes(recipeText, foodDB);
+          
+          // Merge Recipes (keine Duplikate nach Name)
+          const existingRecipeNames = new Set(recipes.map(r => r.name));
+          newRecipes.forEach(recipe => {
+            if (!existingRecipeNames.has(recipe.name)) {
+              recipes.push(recipe);
+              existingRecipeNames.add(recipe.name);
+            }
+          });
+          
+          progress += stepSize;
+        }
+        
+        // Garmin Training
+        if (garminFile) {
+          updateProgress(progress, 'Lade Garmin Training...');
+          const garminText = await garminFile.text();
+          const garminData = parseGarmin(garminText);
+          
+          // Merge Training (keine Duplikate nach Datum+Typ)
+          const existingKeys = new Set(training.map(t => `${t.datum}_${t.typ}`));
+          garminData.training.forEach(t => {
+            const key = `${t.datum}_${t.typ}`;
+            if (!existingKeys.has(key)) {
+              training.push(t);
+              existingKeys.add(key);
+            }
+          });
+          
+          // Merge dayLogs (überschreibt bei gleichem Datum)
+          const dayLogsMap = {};
+          dayLogs.forEach(dl => dayLogsMap[dl.datum] = dl);
+          garminData.dayLogs.forEach(dl => dayLogsMap[dl.datum] = dl);
+          dayLogs = Object.values(dayLogsMap);
+          
+          progress += stepSize;
+        }
+        
+        updateProgress(90, 'Speichere zu Firebase...');
+        
+        // Upload Foods
+        let uploadedFoods = 0;
+        for (const food of foodDB) {
+          await setDoc(doc(userFoodCol(), String(food.id)), food);
+          uploadedFoods++;
+          if (uploadedFoods % 50 === 0) {
+            updateProgress(90 + Math.round((uploadedFoods / foodDB.length) * 3), `Foods: ${uploadedFoods}/${foodDB.length}`);
+          }
+        }
+        
+        // Upload Recipes
+        let uploadedRecipes = 0;
+        for (const recipe of recipes) {
+          await setDoc(doc(userRecipeCol(), String(recipe.id)), recipe);
+          uploadedRecipes++;
+        }
+        
+        // Upload foodLog entries
+        const allEntries = Object.values(foodLog).flat();
+        let uploadedEntries = 0;
+        for (const entry of allEntries) {
+          await setDoc(doc(userLogCol(), String(entry.id)), entry);
+          uploadedEntries++;
+          if (uploadedEntries % 100 === 0) {
+            updateProgress(93 + Math.round((uploadedEntries / allEntries.length) * 5), `Diary: ${uploadedEntries}/${allEntries.length}`);
+          }
+        }
+        
+        // Upload Training + DayLogs
+        let uploadedTraining = 0;
+        for (const t of training) {
+          await setDoc(doc(userTrainingCol(), String(t.id)), t);
+          uploadedTraining++;
+        }
+        for (const dl of dayLogs) {
+          await setDoc(doc(userTrainingCol(), String(dl.id || dl.datum)), {...dl, typ: 'tageslog'});
+        }
+        
+        updateProgress(100, '✓ Import abgeschlossen!');
+        
+        setTimeout(() => {
+          let message = '✓ Import erfolgreich!\n\n';
+          if (diaryFile) message += `${foodDB.length} Lebensmittel\n${allEntries.length} Tagebuch-Einträge\n`;
+          if (recipeFile) message += `${recipes.length} Rezepte\n`;
+          if (garminFile) message += `${training.length} Trainingseinheiten\n${dayLogs.length} Tage\n`;
+          alert(message);
+          
+          // Reset
+          recipeFile = diaryFile = garminFile = null;
+          ['recipe', 'diary', 'garmin'].forEach(type => {
+            document.getElementById(`${type}-drop`).classList.remove('has-file');
+            document.getElementById(`${type}-name`).textContent = '';
+          });
+          document.getElementById('import-btn').disabled = true;
+          document.getElementById('progress').style.display = 'none';
+        }, 500);
+        
+      } catch (err) {
+        console.error(err);
+        showError('Fehler: ' + err.message);
+        document.getElementById('import-btn').disabled = false;
+      }
+    }
+    
+    function parseDiary(text) {
+      const lines = text.split('\n');
+      const foodLog = {};
+      const foodMap = new Map();
+      
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(';').map(p => p.replace(/^"|"$/g, '').trim());
+        if (parts.length < 8) continue;
+        
+        const dateTime = parts[0];
+        const nameWithAmount = parts[1];
+        const kj = parseFloat(parts[3]) || 0;
+        const fat = parseFloat(parts[5].replace(',', '.')) || 0;
+        const carbs = parseFloat(parts[6].replace(',', '.')) || 0;
+        const protein = parseFloat(parts[7].replace(',', '.')) || 0;
+        
+        if (!dateTime || !nameWithAmount) continue;
+        
+        const [datePart, timePart] = dateTime.split(' ');
+        const [day, month, year] = datePart.split('.');
+        const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const time = timePart || '00:00';
+        
+        const amountMatch = nameWithAmount.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+        let foodName = nameWithAmount;
+        let amount = 100;
+        
+        if (amountMatch) {
+          amount = parseFloat(amountMatch[1]);
+          foodName = amountMatch[3].trim();
+        }
+        
+        const kcal = Math.round(kj / 4.184);
+        const factor = 100 / amount;
+        
+        if (!foodMap.has(foodName)) {
+          foodMap.set(foodName, {
+            kcal: Math.round(kcal * factor),
+            protein: Math.round(protein * factor * 10) / 10,
+            carbs: Math.round(carbs * factor * 10) / 10,
+            fat: Math.round(fat * factor * 10) / 10,
+            count: 1
+          });
+        }
+        
+        const hour = parseInt(time.split(':')[0]);
+        let meal = 'Nachts';
+        if (hour >= 6 && hour < 11) meal = 'Morgens';
+        else if (hour >= 11 && hour < 15) meal = 'Mittags';
+        else if (hour >= 15 && hour < 19) meal = 'Nachmittags';
+        else if (hour >= 19 && hour < 23) meal = 'Abends';
+        
+        const entry = {
+          id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          date, meal, time,
+          name: foodName,
+          kcal, protein, carbs, fat, amount
+        };
+        
+        if (!foodLog[date]) foodLog[date] = [];
+        foodLog[date].push(entry);
+      }
+      
+      const foodDB = Array.from(foodMap.entries()).map(([name, data], idx) => ({
+        id: 'food_' + Date.now() + '_' + idx,
+        name,
+        kcal: data.kcal,
+        protein: data.protein,
+        carbs: data.carbs,
+        fat: data.fat
+      }));
+      
+      return { foodDB, foodLog };
+    }
+    
+    function parseRecipes(text, foodDB) {
+      const lines = text.split('\n').filter(l => l.trim());
+      const recipes = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const match = lines[i].match(/^"([^"]+)";"[^"]*";"[^"]*";"(\d+)";"[^"]*";"[^"]*";"([^"]+)";$/);
+          if (!match) continue;
+          
+          const name = match[1];
+          const portions = parseInt(match[2]) || 1;
+          const productsStr = match[3];
+          
+          const ingredients = [];
+          let totalWeight = 0, totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+          
+          for (const ingStr of productsStr.split(',').map(s => s.trim())) {
+            const amountMatch = ingStr.match(/^([\d.]+)\s*(g|ml)\s+(.+)$/);
+            if (!amountMatch) continue;
+            
+            const amount = parseFloat(amountMatch[1]);
+            const foodName = amountMatch[3].trim();
+            const food = foodDB.find(f => f.name === foodName);
+            if (!food) continue;
+            
+            const factor = amount / 100;
+            ingredients.push({
+              name: foodName, amount,
+              kcal: food.kcal,
+              protein: food.protein,
+              carbs: food.carbs,
+              fat: food.fat
+            });
+            
+            totalWeight += amount;
+            totalKcal += food.kcal * factor;
+            totalProtein += food.protein * factor;
+            totalCarbs += food.carbs * factor;
+            totalFat += food.fat * factor;
+          }
+          
+          if (ingredients.length === 0) continue;
+          
+          recipes.push({
+            id: 'recipe_' + Date.now() + '_' + i,
+            name, portions, ingredients, totalWeight,
+            kcal: Math.round(totalKcal),
+            protein: Math.round(totalProtein),
+            carbs: Math.round(totalCarbs),
+            fat: Math.round(totalFat)
+          });
+        } catch (e) {}
+      }
+      
+      return recipes;
+    }
+    
+    function parseGarmin(text) {
+      const lines = text.split('\n');
+      const training = [];
+      const dayLogsMap = {}; // Datum -> { activityKcal, entries }
+      
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        try {
+          const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+          
+          // Garmin CSV Format (beispielhaft):
+          // Aktivitätstyp,Datum,Favorit,Titel,Distanz,Kalorien,Zeit,Ø Herzfrequenz,Max. Herzfrequenz,Aerober TE,Avg. Laufeffizienz,Ø Schrittfrequenz,Max. Schrittfrequenz,Ø Pace,Beste Pace,Gesamtanstieg,Gesamtabstieg,Ø Schrittlänge,Anzahl Trainings,Dehydration,Ø Core Body Temp.,Training Load
+          
+          const activityType = cols[0];
+          const dateStr = cols[1]; // z.B. "2025-04-05 10:30"
+          const title = cols[3] || activityType;
+          const distance = parseFloat(cols[4]) || 0; // in km
+          const calories = parseInt(cols[5]) || 0;
+          const time = cols[6]; // z.B. "45:23"
+          const avgHR = parseInt(cols[7]) || null;
+          const maxHR = parseInt(cols[8]) || null;
+          
+          if (!dateStr || !calories) continue;
+          
+          // Parse Datum: "2025-04-05 10:30" -> "2025-04-05"
+          const date = dateStr.split(' ')[0];
+          
+          // Training Entry
+          const entry = {
+            id: 'training_' + Date.now() + '_' + i,
+            datum: date,
+            typ: activityType.toLowerCase(),
+            distanz: Math.round(distance * 1000), // m
+            dauer: time,
+            puls_avg: avgHR,
+            puls_max: maxHR,
+            kcal: calories,
+            notizen: title
+          };
+          
+          training.push(entry);
+          
+          // Aggregiere activityKcal pro Tag
+          if (!dayLogsMap[date]) {
+            dayLogsMap[date] = { activityKcal: 0 };
+          }
+          dayLogsMap[date].activityKcal += calories;
+          
+        } catch (e) {
+          console.warn('Garmin parse error:', e);
+        }
+      }
+      
+      // Erstelle dayLogs array
+      const dayLogs = Object.keys(dayLogsMap).map(date => ({
+        id: 'daylog_' + date,
+        datum: date,
+        typ: 'tageslog',
+        activityKcal: dayLogsMap[date].activityKcal
+      }));
+      
+      console.log(`Parsed Garmin: ${training.length} activities, ${dayLogs.length} days`);
+      
+      return { training, dayLogs };
+    }
+    
+    function updateProgress(percent, text) {
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('progress-text').textContent = text;
+    }
+    
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

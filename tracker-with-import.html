@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Training & Ernährung</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -250,6 +251,24 @@
     
     .subtab-content { display: none; }
     .subtab-content.active { display: block; }
+
+    /* Dashboard buttons */
+    .dash-btn {
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dash-btn:hover { color: var(--text); }
+    .dash-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -392,44 +411,112 @@
     </div>
     
     <div id="dashboard-tab" class="tab-content">
-      <div style="margin-bottom:30px;">
-        <h2 style="margin-bottom:15px;">Dashboard</h2>
-        <p style="color:var(--muted);font-size:14px;">Übersicht über deine Daten</p>
+
+      <!-- ── Haupt-Chart ──────────────────────────────────────────────── -->
+      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+
+        <!-- Steuerleiste -->
+        <div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:16px;align-items:flex-end;">
+
+          <!-- Zeitraum -->
+          <div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ZEITRAUM</div>
+            <div style="display:flex;gap:4px;">
+              <button class="dash-btn active" data-range="1M" onclick="setDashRange('1M',this)">1M</button>
+              <button class="dash-btn" data-range="2M" onclick="setDashRange('2M',this)">2M</button>
+              <button class="dash-btn" data-range="3M" onclick="setDashRange('3M',this)">3M</button>
+              <button class="dash-btn" data-range="6M" onclick="setDashRange('6M',this)">6M</button>
+              <button class="dash-btn" data-range="12M" onclick="setDashRange('12M',this)">12M</button>
+              <button class="dash-btn" data-range="all" onclick="setDashRange('all',this)">Alles</button>
+            </div>
+          </div>
+
+          <!-- Ansicht -->
+          <div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ANSICHT</div>
+            <div style="display:flex;gap:4px;">
+              <button class="dash-btn active" data-view="days" onclick="setDashView('days',this)">Tage</button>
+              <button class="dash-btn" data-view="weeks" onclick="setDashView('weeks',this)">Wochen</button>
+              <button class="dash-btn" data-view="months" onclick="setDashView('months',this)">Monate</button>
+            </div>
+          </div>
+
+          <!-- Charttyp -->
+          <div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">CHARTTYP</div>
+            <div style="display:flex;gap:4px;">
+              <button class="dash-btn active" data-chart="line" onclick="setDashChart('line',this)">Linie</button>
+              <button class="dash-btn" data-chart="bar" onclick="setDashChart('bar',this)">Balken</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Variablen -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 1</div>
+            <select id="dash-var1" onchange="renderDashboard()" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+              <option value="">— keine —</option>
+              <optgroup label="Ernährung">
+                <option value="kcal">Kalorien konsumiert</option>
+                <option value="kcal_goal">Kalorienziel</option>
+                <option value="protein">Protein (g)</option>
+                <option value="carbs">Kohlenhydrate (g)</option>
+                <option value="fat">Fett (g)</option>
+              </optgroup>
+              <optgroup label="Körper">
+                <option value="weight">Gewicht (kg)</option>
+                <option value="steps_total">Schritte gesamt</option>
+                <option value="steps_activity">Aktivitätsschritte</option>
+                <option value="steps_daily">Alltagsschritte</option>
+              </optgroup>
+              <optgroup label="Aktivität">
+                <option value="act_kcal_calc">Aktivitätskalorien (berechnet)</option>
+                <option value="act_kcal_garmin">Aktivitätskalorien (Garmin)</option>
+                <option value="run_km">Laufkilometer</option>
+                <option value="trainings">Trainingseinheiten</option>
+              </optgroup>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 2</div>
+            <select id="dash-var2" onchange="renderDashboard()" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+              <option value="">— keine —</option>
+              <optgroup label="Ernährung">
+                <option value="kcal">Kalorien konsumiert</option>
+                <option value="kcal_goal">Kalorienziel</option>
+                <option value="protein">Protein (g)</option>
+                <option value="carbs">Kohlenhydrate (g)</option>
+                <option value="fat">Fett (g)</option>
+              </optgroup>
+              <optgroup label="Körper">
+                <option value="weight">Gewicht (kg)</option>
+                <option value="steps_total">Schritte gesamt</option>
+                <option value="steps_activity">Aktivitätsschritte</option>
+                <option value="steps_daily">Alltagsschritte</option>
+              </optgroup>
+              <optgroup label="Aktivität">
+                <option value="act_kcal_calc">Aktivitätskalorien (berechnet)</option>
+                <option value="act_kcal_garmin">Aktivitätskalorien (Garmin)</option>
+                <option value="run_km">Laufkilometer</option>
+                <option value="trainings">Trainingseinheiten</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        <!-- Canvas -->
+        <canvas id="dash-chart" style="width:100%;height:300px;display:block;"></canvas>
+        <div id="dash-chart-empty" style="display:none;text-align:center;padding:60px;color:var(--muted);font-size:14px;">Keine Daten für diesen Zeitraum</div>
       </div>
-      
-      <!-- Quick Stats Grid -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:30px;">
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Lebensmittel</div>
-          <div style="font-size:32px;font-weight:600;" id="dash-foods">0</div>
-        </div>
-        
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Rezepte</div>
-          <div style="font-size:32px;font-weight:600;" id="dash-recipes">0</div>
-        </div>
-        
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Tage</div>
-          <div style="font-size:32px;font-weight:600;" id="dash-days">0</div>
-        </div>
-        
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Training Einheiten</div>
-          <div style="font-size:32px;font-weight:600;" id="dash-trainings">0</div>
-        </div>
-      </div>
-      
-      <!-- Recent Activity -->
-      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-        <h3 style="margin-bottom:20px;">Letzte Aktivität</h3>
-        <div id="recent-activity" style="max-height:300px;overflow-y:auto;"></div>
-      </div>
-      
-      <!-- Week Overview -->
-      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-        <h3 style="margin-bottom:20px;">Diese Woche</h3>
-        <div id="week-stats"></div>
+
+      <!-- ── Kacheln ──────────────────────────────────────────────────── -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:20px;" id="dash-tiles"></div>
+
+      <!-- ── Letzte Aktivitäten ───────────────────────────────────────── -->
+      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
+        <h3 style="margin-bottom:16px;font-size:15px;">Letzte Aktivitäten</h3>
+        <div id="recent-activity" style="max-height:280px;overflow-y:auto;"></div>
       </div>
     </div>
     
@@ -976,100 +1063,282 @@
       renderDashboard();
     }
     
-    function renderDashboard() {
-      // Update quick stats
-      if (document.getElementById('dash-foods')) {
-        document.getElementById('dash-foods').textContent = fmt(foodDB.length);
-        document.getElementById('dash-recipes').textContent = fmt(recipes.length);
-        document.getElementById('dash-days').textContent = fmt(Object.keys(foodLog).length);
-        document.getElementById('dash-trainings').textContent = fmt(trainingEntries.filter(e => e.typ !== 'tageslog').length);
+    // ── Dashboard State ────────────────────────────────────────────────────
+    let dashRange = '1M';
+    let dashView = 'days';
+    let dashChart = 'line';
+    let dashChartInstance = null;
+
+    window.setDashRange = function(r, el) {
+      dashRange = r;
+      document.querySelectorAll('[data-range]').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      renderDashboard();
+    };
+    window.setDashView = function(v, el) {
+      dashView = v;
+      document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      renderDashboard();
+    };
+    window.setDashChart = function(c, el) {
+      dashChart = c;
+      document.querySelectorAll('[data-chart]').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      renderDashboard();
+    };
+
+    // ── Build daily data index ─────────────────────────────────────────────
+    function buildDayIndex(fromDate, toDate) {
+      const days = {};
+      // seed with all dates in range
+      let cur = new Date(fromDate + 'T12:00:00');
+      const end = new Date(toDate + 'T12:00:00');
+      while (cur <= end) {
+        const d = cur.toISOString().split('T')[0];
+        days[d] = {
+          kcal: 0, protein: 0, carbs: 0, fat: 0, kcal_goal: 0,
+          weight: null,
+          steps_total: 0, steps_activity: 0, steps_daily: 0,
+          act_kcal_calc: 0, act_kcal_garmin: 0,
+          run_km: 0, trainings: 0
+        };
+        cur.setDate(cur.getDate() + 1);
       }
-      
-      // Recent Activity
-      const recentContainer = document.getElementById('recent-activity');
-      if (recentContainer) {
-        const allActivities = [];
-        
-        // Recent diary entries
-        Object.keys(foodLog).sort().reverse().slice(0, 3).forEach(date => {
-          const entries = foodLog[date] || [];
-          if (entries.length > 0) {
-            allActivities.push({
-              type: 'food',
-              date: date,
-              text: `${entries.length} Mahlzeiten eingetragen`,
-              icon: '🍽️'
-            });
+
+      // Food log
+      Object.entries(foodLog).forEach(([date, entries]) => {
+        if (!days[date]) return;
+        entries.forEach(e => {
+          days[date].kcal += e.kcal || 0;
+          days[date].protein += e.protein || 0;
+          days[date].carbs += e.carbs || 0;
+          days[date].fat += e.fat || 0;
+        });
+        days[date].kcal = Math.round(days[date].kcal);
+        days[date].kcal_goal = calcDailyKcalGoal(date).total;
+      });
+
+      // Day logs (weight + steps)
+      trainingEntries.filter(e => e.typ === 'tageslog').forEach(e => {
+        if (!days[e.datum]) return;
+        if (e.weight) days[e.datum].weight = e.weight;
+        if (e.steps) days[e.datum].steps_total = parseInt(String(e.steps).replace(/\D/g, '')) || 0;
+      });
+
+      // Garmin training
+      trainingEntries.filter(e => e.source === 'garmin').forEach(e => {
+        if (!days[e.datum]) return;
+        const calcKcal = calcActivityKcal(e);
+        days[e.datum].act_kcal_calc += calcKcal;
+        days[e.datum].act_kcal_garmin += e.kalorien || 0;
+        days[e.datum].trainings++;
+        if (e.typ === 'laufen') days[e.datum].run_km += parseFloat(e.distanz) || 0;
+        // Activity steps from Garmin
+        const actSteps = parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
+        days[e.datum].steps_activity += actSteps;
+      });
+
+      // Compute daily steps
+      Object.values(days).forEach(d => {
+        d.steps_daily = Math.max(0, d.steps_total - d.steps_activity);
+        d.run_km = Math.round(d.run_km * 10) / 10;
+      });
+
+      return days;
+    }
+
+    function getDateRange() {
+      const today = new Date().toISOString().split('T')[0];
+      const allDates = [
+        ...Object.keys(foodLog),
+        ...trainingEntries.filter(e => e.datum).map(e => e.datum)
+      ].sort();
+      const earliest = allDates[0] || today;
+
+      let fromDate;
+      if (dashRange === 'all') fromDate = earliest;
+      else {
+        const months = parseInt(dashRange);
+        const d = new Date();
+        d.setMonth(d.getMonth() - months);
+        fromDate = d.toISOString().split('T')[0];
+      }
+      return { fromDate, toDate: today };
+    }
+
+    function aggregateData(days, variable) {
+      const entries = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
+
+      if (dashView === 'days') {
+        return entries.map(([date, d]) => ({ label: date.slice(5), value: d[variable] ?? null }));
+      }
+
+      // Weekly / Monthly grouping
+      const groups = {};
+      entries.forEach(([date, d]) => {
+        let key;
+        if (dashView === 'weeks') {
+          const dt = new Date(date + 'T12:00:00');
+          const mon = new Date(dt);
+          mon.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+          key = mon.toISOString().split('T')[0];
+        } else {
+          key = date.slice(0, 7);
+        }
+        if (!groups[key]) groups[key] = [];
+        const val = d[variable];
+        if (val !== null && val !== undefined) groups[key].push(val);
+      });
+
+      return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
+        if (vals.length === 0) return { label: key.slice(5) || key, value: null };
+        // weight → average, everything else → sum
+        const isAvg = variable === 'weight';
+        const value = isAvg
+          ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10
+          : Math.round(vals.reduce((s, v) => s + v, 0) * 10) / 10;
+        return { label: dashView === 'months' ? key : key.slice(5), value };
+      });
+    }
+
+    const VAR_LABELS = {
+      kcal: 'Kalorien konsumiert', kcal_goal: 'Kalorienziel',
+      protein: 'Protein (g)', carbs: 'Kohlenhydrate (g)', fat: 'Fett (g)',
+      weight: 'Gewicht (kg)',
+      steps_total: 'Schritte gesamt', steps_activity: 'Aktivitätsschritte', steps_daily: 'Alltagsschritte',
+      act_kcal_calc: 'Aktivitätskalorien (berechnet)', act_kcal_garmin: 'Aktivitätskalorien (Garmin)',
+      run_km: 'Laufkilometer', trainings: 'Trainingseinheiten'
+    };
+    const VAR_COLORS = {
+      kcal: '#4a9eff', kcal_goal: '#888', protein: '#4a9eff', carbs: '#ffd93d', fat: '#ff6b9d',
+      weight: '#10b981',
+      steps_total: '#a78bfa', steps_activity: '#f59e0b', steps_daily: '#34d399',
+      act_kcal_calc: '#f97316', act_kcal_garmin: '#fb923c',
+      run_km: '#22d3ee', trainings: '#818cf8'
+    };
+
+    function renderDashboard() {
+      if (!document.getElementById('dash-chart')) return;
+
+      const { fromDate, toDate } = getDateRange();
+      const days = buildDayIndex(fromDate, toDate);
+
+      const var1 = document.getElementById('dash-var1')?.value || '';
+      const var2 = document.getElementById('dash-var2')?.value || '';
+
+      // ── Chart ──────────────────────────────────────────────────────────
+      const data1 = var1 ? aggregateData(days, var1) : [];
+      const data2 = var2 ? aggregateData(days, var2) : [];
+      const labels = (data1.length ? data1 : data2).map(d => d.label);
+      const hasData = data1.some(d => d.value) || data2.some(d => d.value);
+
+      document.getElementById('dash-chart').style.display = hasData ? 'block' : 'none';
+      document.getElementById('dash-chart-empty').style.display = hasData ? 'none' : 'block';
+
+      if (hasData) {
+        const datasets = [];
+        if (var1 && data1.length) datasets.push({
+          label: VAR_LABELS[var1] || var1,
+          data: data1.map(d => d.value),
+          borderColor: VAR_COLORS[var1] || '#4a9eff',
+          backgroundColor: (dashChart === 'bar' ? VAR_COLORS[var1] : 'transparent') || '#4a9eff',
+          tension: 0.3, pointRadius: labels.length > 60 ? 0 : 3,
+          yAxisID: 'y', spanGaps: true
+        });
+        if (var2 && data2.length) datasets.push({
+          label: VAR_LABELS[var2] || var2,
+          data: data2.map(d => d.value),
+          borderColor: VAR_COLORS[var2] || '#10b981',
+          backgroundColor: (dashChart === 'bar' ? VAR_COLORS[var2] : 'transparent') || '#10b981',
+          tension: 0.3, pointRadius: labels.length > 60 ? 0 : 3,
+          yAxisID: var2 !== var1 ? 'y2' : 'y', spanGaps: true
+        });
+
+        if (dashChartInstance) dashChartInstance.destroy();
+        const ctx = document.getElementById('dash-chart').getContext('2d');
+        dashChartInstance = new Chart(ctx, {
+          type: dashChart === 'bar' ? 'bar' : 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: '#e8e8e8', font: { size: 12 } } } },
+            scales: {
+              x: { ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: '#222' } },
+              y: { ticks: { color: '#888' }, grid: { color: '#222' }, position: 'left' },
+              y2: { ticks: { color: '#888' }, grid: { display: false }, position: 'right' }
+            }
           }
         });
-        
-        // Recent training
-        trainingEntries
+      }
+
+      // ── Kacheln (7-Tage-Schnitt / aktuelle Woche) ──────────────────────
+      const last7 = Object.entries(days).sort(([a],[b]) => b.localeCompare(a)).slice(0,7).map(([,d]) => d);
+      const avg = key => {
+        const vals = last7.map(d => d[key]).filter(v => v !== null && v > 0);
+        return vals.length ? Math.round(vals.reduce((s,v) => s+v, 0) / vals.length * 10) / 10 : null;
+      };
+      const sum = key => Math.round(last7.reduce((s,d) => s + (d[key] || 0), 0) * 10) / 10;
+      const latest = key => {
+        for (const d of Object.entries(days).sort(([a],[b]) => b.localeCompare(a))) {
+          if (d[1][key] !== null && d[1][key] !== undefined && d[1][key] > 0) return d[1][key];
+        }
+        return null;
+      };
+
+      const tiles = [
+        { label: 'Ø Kalorien (7 Tage)', value: avg('kcal'), unit: 'kcal', color: '#4a9eff' },
+        { label: 'Ø Protein (7 Tage)', value: avg('protein'), unit: 'g', color: '#4a9eff' },
+        { label: 'Aktuelles Gewicht', value: latest('weight'), unit: 'kg', color: '#10b981' },
+        { label: 'Laufkm (7 Tage)', value: sum('run_km'), unit: 'km', color: '#22d3ee' },
+        { label: 'Ø Gesamtschritte', value: avg('steps_total'), unit: '', color: '#a78bfa' },
+        { label: 'Ø Aktivitätsschritte', value: avg('steps_activity'), unit: '', color: '#f59e0b' },
+        { label: 'Ø Alltagsschritte', value: avg('steps_daily'), unit: '', color: '#34d399' },
+        { label: 'Ø Aktivitätskalorien', value: avg('act_kcal_calc'), unit: 'kcal', color: '#f97316' },
+        { label: 'Trainings (7 Tage)', value: sum('trainings'), unit: '', color: '#818cf8' },
+      ];
+
+      document.getElementById('dash-tiles').innerHTML = tiles.map(t => `
+        <div style="background:var(--surface);padding:18px;border-radius:12px;border:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${t.label}</div>
+          <div style="font-size:26px;font-weight:600;color:${t.color};">
+            ${t.value !== null ? fmt(t.value) + (t.unit ? ' ' + t.unit : '') : '–'}
+          </div>
+        </div>
+      `).join('');
+
+      // ── Letzte Aktivitäten ─────────────────────────────────────────────
+      const typeLabels = {
+        pullups: 'Pull-ups', pushups: 'Push-ups',
+        laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
+        rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
+        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining'
+      };
+      const recentContainer = document.getElementById('recent-activity');
+      if (recentContainer) {
+        const recent = trainingEntries
           .filter(e => e.typ !== 'tageslog')
           .sort((a, b) => b.datum.localeCompare(a.datum))
-          .slice(0, 3)
-          .forEach(e => {
-            allActivities.push({
-              type: 'training',
-              date: e.datum,
-              text: `${e.typ.toUpperCase()} - ${e.sets}`,
-              icon: '🏋️'
-            });
-          });
-        
-        // Sort by date
-        allActivities.sort((a, b) => b.date.localeCompare(a.date));
-        
-        if (allActivities.length === 0) {
-          recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivität</div>';
+          .slice(0, 15);
+        if (recent.length === 0) {
+          recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivitäten</div>';
         } else {
-          recentContainer.innerHTML = allActivities.slice(0, 10).map(a => `
-            <div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:15px;">
-              <div style="font-size:24px;">${a.icon}</div>
-              <div style="flex:1;">
-                <div style="font-weight:500;">${a.text}</div>
-                <div style="font-size:12px;color:var(--muted);">${a.date}</div>
+          recentContainer.innerHTML = recent.map(e => {
+            const calcKcal = calcActivityKcal(e);
+            const label = typeLabels[e.typ] || e.typ;
+            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
+            return `
+              <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:500;font-size:14px;">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
+                  <div style="font-size:12px;color:var(--muted);">${e.datum} · ${e.sets || ''}</div>
+                </div>
+                ${calcKcal > 0 ? `<div style="font-size:14px;font-weight:600;color:#f97316;">${fmt(calcKcal)} kcal</div>` : ''}
               </div>
-            </div>
-          `).join('');
+            `;
+          }).join('');
         }
-      }
-      
-      // Week stats
-      const weekContainer = document.getElementById('week-stats');
-      if (weekContainer) {
-        const today = new Date();
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay() + 1); // Monday
-        
-        let weekDays = 0;
-        let weekTrainings = 0;
-        
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(weekStart);
-          d.setDate(weekStart.getDate() + i);
-          const dateStr = d.toISOString().split('T')[0];
-          
-          if (foodLog[dateStr] && foodLog[dateStr].length > 0) weekDays++;
-          
-          const dayTrainings = trainingEntries.filter(e => 
-            e.typ !== 'tageslog' && e.datum === dateStr
-          );
-          weekTrainings += dayTrainings.length;
-        }
-        
-        weekContainer.innerHTML = `
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-            <div>
-              <div style="font-size:32px;font-weight:600;margin-bottom:5px;">${weekDays}/7</div>
-              <div style="font-size:13px;color:var(--muted);">Tage geloggt</div>
-            </div>
-            <div>
-              <div style="font-size:32px;font-weight:600;margin-bottom:5px;">${weekTrainings}</div>
-              <div style="font-size:13px;color:var(--muted);">Training Einheiten</div>
-            </div>
-          </div>
-        `;
       }
     }
     

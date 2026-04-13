@@ -2333,7 +2333,7 @@
         logImport('📦 Starte Import...');
 
         // Nur die Collections laden, die auch importiert werden
-        const needsFoodDB = !!importFoodDBFile || !!importDiaryFile;
+        const needsFoodDB = !!importFoodDBFile || !!importDiaryFile || !!importRecipeFile; // Rezepte brauchen FoodDB für Nährwert-Berechnung
         const needsRecipes = !!importRecipeFile;
         const needsDiary = !!importDiaryFile;
         const needsTraining = !!importGarminFile;
@@ -2409,12 +2409,15 @@
           const text = await importRecipeFile.text();
           const parsed = parseRecipes(text, localFoodDB);
           
-          // Merge Recipes
-          const existingRecipeNames = new Set(localRecipes.map(r => r.name));
+          // Merge Recipes – Update bestehende (für Nährwert-Neuberechnung), neue hinzufügen
+          const existingRecipeMap = new Map(localRecipes.map(r => [r.name, r]));
           parsed.forEach(recipe => {
-            if (!existingRecipeNames.has(recipe.name)) {
+            if (existingRecipeMap.has(recipe.name)) {
+              // Update bestehende – Nährwerte neu berechnet
+              const idx = localRecipes.findIndex(r => r.name === recipe.name);
+              localRecipes[idx] = { ...localRecipes[idx], ...recipe };
+            } else {
               localRecipes.push(recipe);
-              existingRecipeNames.add(recipe.name);
             }
           });
           

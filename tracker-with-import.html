@@ -520,23 +520,30 @@
           <h3 style="margin-bottom:15px;">📥 FDDB & Garmin Import</h3>
           <p style="color:var(--muted);margin-bottom:20px;">Importiere deine Daten aus FDDB und Garmin direkt zu Firebase</p>
           
+          <!-- FDDB FoodDB -->
+          <div style="margin-bottom:20px;">
+            <div style="font-weight:600;margin-bottom:10px;">1️⃣ FDDB Lebensmittel-DB CSV</div>
+            <input type="file" id="import-fooddb-file" accept=".csv" style="display:block;margin-bottom:5px;">
+            <div style="font-size:12px;color:var(--muted);">fddb_complete_all.csv (Format: name;kcal;protein;carbs;fat)</div>
+          </div>
+          
           <!-- FDDB Rezepte -->
           <div style="margin-bottom:20px;">
-            <div style="font-weight:600;margin-bottom:10px;">1️⃣ FDDB Rezepte CSV</div>
+            <div style="font-weight:600;margin-bottom:10px;">2️⃣ FDDB Rezepte CSV</div>
             <input type="file" id="import-recipe-file" accept=".csv" style="display:block;margin-bottom:5px;">
-            <div style="font-size:12px;color:var(--muted);">lists_*.csv</div>
+            <div style="font-size:12px;color:var(--muted);">lists_*.csv (Format: name;...;produkte)</div>
           </div>
           
           <!-- FDDB Tagebuch -->
           <div style="margin-bottom:20px;">
-            <div style="font-weight:600;margin-bottom:10px;">2️⃣ FDDB Tagebuch CSV</div>
+            <div style="font-weight:600;margin-bottom:10px;">3️⃣ FDDB Tagebuch CSV</div>
             <input type="file" id="import-diary-file" accept=".csv" style="display:block;margin-bottom:5px;">
-            <div style="font-size:12px;color:var(--muted);">fddb_complete_all.csv</div>
+            <div style="font-size:12px;color:var(--muted);">diary_*.csv (Format: datum;bezeichnung;kj;fett;kh;protein)</div>
           </div>
           
           <!-- Garmin Training -->
           <div style="margin-bottom:20px;">
-            <div style="font-weight:600;margin-bottom:10px;">3️⃣ Garmin Training CSV (optional)</div>
+            <div style="font-weight:600;margin-bottom:10px;">4️⃣ Garmin Training CSV (optional)</div>
             <input type="file" id="import-garmin-file" accept=".csv" style="display:block;margin-bottom:5px;">
             <div style="font-size:12px;color:var(--muted);">Activities.csv</div>
           </div>
@@ -1806,19 +1813,21 @@
     
     // ===== IMPORT LOGIC =====
     
+    let importFoodDBFile = null;
     let importRecipeFile = null;
     let importDiaryFile = null;
     let importGarminFile = null;
     
-    ['import-recipe-file', 'import-diary-file', 'import-garmin-file'].forEach(id => {
+    ['import-fooddb-file', 'import-recipe-file', 'import-diary-file', 'import-garmin-file'].forEach(id => {
       const input = document.getElementById(id);
       input.addEventListener('change', (e) => {
         const file = e.target.files[0];
+        if (id === 'import-fooddb-file') importFoodDBFile = file;
         if (id === 'import-recipe-file') importRecipeFile = file;
         if (id === 'import-diary-file') importDiaryFile = file;
         if (id === 'import-garmin-file') importGarminFile = file;
         
-        const hasAny = importRecipeFile || importDiaryFile || importGarminFile;
+        const hasAny = importFoodDBFile || importRecipeFile || importDiaryFile || importGarminFile;
         document.getElementById('start-import-btn').disabled = !hasAny;
       });
     });
@@ -1887,23 +1896,60 @@
         
         let progress = 10;
         let steps = 0;
-        if (importDiaryFile) steps++;
+        if (importFoodDBFile) steps++;
         if (importRecipeFile) steps++;
+        if (importDiaryFile) steps++;
         if (importGarminFile) steps++;
         const stepSize = 60 / steps;
+        
+        // Parse FDDB FoodDB
+        if (importFoodDBFile) {
+          updateImportProgress(progress, 'Lade FoodDB...');
+          logImport('🥗 Lade FDDB FoodDB...');
+          const text = await importFoodDBFile.text();
+          const parsed = parseFoodDB(text);
+          
+          // Merge FoodDB
+          const existingNames = new Set(localFoodDB.map(f => f.name));
+          parsed.forEach(food => {
+            if (!existingNames.has(food.name)) {
+              localFoodDB.push(food);
+              existingNames.add(food.name);
+            }
+          });
+          
+          logImport(`✓ ${parsed.length} Foods aus FoodDB`, 'success');
+          progress += stepSize;
+        }
+        
+        // Parse FDDB Recipes
+        if (importRecipeFile) {
+          updateImportProgress(progress, 'Lade Rezepte...');
+          logImport('📋 Lade FDDB Rezepte...');
+          const text = await importRecipeFile.text();
+          const parsed = parseRecipes(text, localFoodDB);
+          
+          // Merge Recipes
+          const existingRecipeNames = new Set(localRecipes.map(r => r.name));
+          parsed.forEach(recipe => {
+            if (!existingRecipeNames.has(recipe.name)) {
+              localRecipes.push(recipe);
+              existingRecipeNames.add(recipe.name);
+            }
+          });
+          
+          logImport(`✓ ${parsed.length} Rezepte`, 'success');
+          progress += stepSize;
+        }
         
         // Parse FDDB Diary
         if (importDiaryFile) {
           updateImportProgress(progress, 'Lade Tagebuch...');
           logImport('📖 Lade FDDB Tagebuch...');
-          const diaryText = await importDiaryFile.text();
-          progress += stepSize / 2;
+          const text = await importDiaryFile.text();
+          const parsed = parseDiary(text);
           
-          updateImportProgress(progress, 'Extrahiere FoodDB...');
-          logImport('🔍 Extrahiere Lebensmittel...');
-          const parsed = parseDiary(diaryText);
-          
-          // Merge FoodDB
+          // Merge FoodDB from diary
           const existingNames = new Set(localFoodDB.map(f => f.name));
           parsed.foodDB.forEach(food => {
             if (!existingNames.has(food.name)) {
@@ -1917,17 +1963,10 @@
           
           logImport(`✓ ${parsed.foodDB.length} Foods extrahiert`, 'success');
           logImport(`✓ ${Object.values(parsed.foodLog).flat().length} Tagebuch-Einträge`, 'success');
-          progress += stepSize / 2;
-        }
-        
-        // Parse FDDB Recipes (simplified - just log for now)
-        if (importRecipeFile) {
-          updateImportProgress(progress, 'Lade Rezepte...');
-          logImport('📋 FDDB Rezepte wird übersprungen (noch nicht implementiert)');
           progress += stepSize;
         }
         
-        // Parse Garmin (simplified - just log for now)
+        // Parse Garmin
         if (importGarminFile) {
           updateImportProgress(progress, 'Lade Garmin...');
           logImport('🏃 Garmin wird übersprungen (noch nicht implementiert)');
@@ -1984,7 +2023,8 @@
         showToast('✓ Import erfolgreich!');
         
         // Reset
-        importRecipeFile = importDiaryFile = importGarminFile = null;
+        importFoodDBFile = importRecipeFile = importDiaryFile = importGarminFile = null;
+        document.getElementById('import-fooddb-file').value = '';
         document.getElementById('import-recipe-file').value = '';
         document.getElementById('import-diary-file').value = '';
         document.getElementById('import-garmin-file').value = '';
@@ -1997,6 +2037,86 @@
         document.getElementById('start-import-btn').disabled = false;
       }
     };
+    
+    
+    // Parser: FDDB FoodDB (name;kcal;protein;carbs;fat)
+    function parseFoodDB(text) {
+      const lines = text.split('\n').filter(l => l.trim());
+      const foods = [];
+      
+      for (let i = 1; i < lines.length; i++) { // Skip header
+        const parts = lines[i].split(';').map(p => p.replace(/\r/g, '').trim());
+        if (parts.length < 5) continue;
+        
+        const name = parts[0];
+        const kcal = parseFloat(parts[1]) || 0;
+        const protein = parseFloat(parts[2]) || 0;
+        const carbs = parseFloat(parts[3]) || 0;
+        const fat = parseFloat(parts[4]) || 0;
+        
+        if (!name) continue;
+        
+        foods.push({
+          id: 'fooddb_' + Date.now() + '_' + i,
+          name,
+          kcal: Math.round(kcal * 10) / 10,
+          protein: Math.round(protein * 10) / 10,
+          carbs: Math.round(carbs * 10) / 10,
+          fat: Math.round(fat * 10) / 10
+        });
+      }
+      
+      return foods;
+    }
+    
+    // Parser: FDDB Recipes (name;beschreibung;kategorie;anzahl_portionen;zeit_vorbereitung;zeit_kochen;produkte;)
+    function parseRecipes(text, foodDB) {
+      const lines = text.split('\n').filter(l => l.trim());
+      const recipes = [];
+      
+      for (let i = 1; i < lines.length; i++) { // Skip header
+        try {
+          const match = lines[i].match(/^"([^"]+)";"([^"]*)";"([^"]*)";"(\d+)";"[^"]*";"[^"]*";"([^"]+)";$/);
+          if (!match) continue;
+          
+          const name = match[1];
+          const portions = parseInt(match[4]) || 1;
+          const produkteStr = match[5];
+          
+          // Parse ingredients: "250 g Dinkelmehl, 100 g Butter, ..."
+          const ingredients = [];
+          const produkteParts = produkteStr.split(', ');
+          
+          produkteParts.forEach(part => {
+            const ingredMatch = part.match(/^(\d+(?:,\d+)?)\s*(g|ml)\s+(.+)$/);
+            if (ingredMatch) {
+              const amount = parseFloat(ingredMatch[1].replace(',', '.'));
+              const foodName = ingredMatch[3].trim();
+              
+              // Try to find in foodDB
+              const food = foodDB.find(f => f.name === foodName);
+              
+              ingredients.push({
+                foodId: food?.id || null,
+                name: foodName,
+                amount: amount
+              });
+            }
+          });
+          
+          recipes.push({
+            id: 'recipe_' + Date.now() + '_' + i,
+            name,
+            portions,
+            ingredients
+          });
+        } catch (err) {
+          console.warn('Skip recipe line:', err);
+        }
+      }
+      
+      return recipes;
+    }
     
     function parseDiary(text) {
       const lines = text.split('\n');

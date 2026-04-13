@@ -2617,9 +2617,13 @@
             if (ingredMatch) {
               const amount = parseFloat(ingredMatch[1].replace(',', '.'));
               const foodName = ingredMatch[3].trim();
-              const food = foodDB.find(f => f.name === foodName);
+              // ID deterministisch aus Name berechnen – identisch zu parseFoodDB()
+              const foodId = 'fooddb_' + foodName.toLowerCase().replace(/[^a-z0-9äöü]/g, '_').substring(0, 40);
+              // Erst per deterministischer ID suchen, dann per exaktem Namen als Fallback
+              const food = foodDB.find(f => f.id === foodId)
+                        || foodDB.find(f => f.name === foodName);
               ingredients.push({
-                foodId: food?.id || null,
+                foodId,
                 name: foodName,
                 amount: amount,
                 kcal: food ? Math.round(food.kcal * amount / 100 * 10) / 10 : 0,

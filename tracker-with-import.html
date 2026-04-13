@@ -1221,7 +1221,8 @@
     };
 
     function renderDashboard() {
-      if (!document.getElementById('dash-chart')) return;
+      const canvas = document.getElementById('dash-chart');
+      if (!canvas || !canvas.offsetParent) return; // not visible yet
 
       const { fromDate, toDate } = getDateRange();
       const days = buildDayIndex(fromDate, toDate);
@@ -2398,6 +2399,10 @@
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(target + '-tab').classList.add('active');
+        // Re-render dashboard when tab becomes visible (canvas needs to be in DOM)
+        if (target === 'dashboard') {
+          requestAnimationFrame(() => renderDashboard());
+        }
       });
     });
     

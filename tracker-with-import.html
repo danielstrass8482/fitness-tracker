@@ -1789,20 +1789,15 @@
           await Promise.all(deletePromises);
         }
         
-        // Clear local
-        foodDB = [];
-        recipes = [];
-        foodLog = {};
-        trainingEntries = [];
-        dayLogs = [];
-        
-        window.foodDB = foodDB;
-        window.recipes = recipes;
-        window.foodLog = foodLog;
-        window.trainingEntries = trainingEntries;
-        window.dayLogs = dayLogs;
-        
+        // Clear local arrays immediately so UI shows empty right away
+        foodDB = []; recipes = []; foodLog = {}; trainingEntries = []; dayLogs = [];
+        window.foodDB = foodDB; window.recipes = recipes; window.foodLog = foodLog;
+        window.trainingEntries = trainingEntries; window.dayLogs = dayLogs;
         renderAll();
+        
+        // Short pause then force reload from server (bypasses Firebase local cache)
+        await new Promise(r => setTimeout(r, 500));
+        await loadAllData();
         
         showToast('✓ Alle Daten gelöscht');
       } catch (err) {
@@ -1958,11 +1953,27 @@
             }
           });
           
-          // Merge foodLog
-          Object.assign(localFoodLog, parsed.foodLog);
+          // Merge foodLog with deduplication
+          // Key: date + name + time + amount → avoids re-import duplicates
+          const existingLogKeys = new Set();
+          Object.values(localFoodLog).flat().forEach(e => {
+            existingLogKeys.add(`${e.date}|${e.name}|${e.time}|${e.amount}`);
+          });
+          let newEntryCount = 0;
+          Object.entries(parsed.foodLog).forEach(([date, entries]) => {
+            if (!localFoodLog[date]) localFoodLog[date] = [];
+            entries.forEach(entry => {
+              const key = `${entry.date}|${entry.name}|${entry.time}|${entry.amount}`;
+              if (!existingLogKeys.has(key)) {
+                localFoodLog[date].push(entry);
+                existingLogKeys.add(key);
+                newEntryCount++;
+              }
+            });
+          });
           
           logImport(`✓ ${parsed.foodDB.length} Foods extrahiert`, 'success');
-          logImport(`✓ ${Object.values(parsed.foodLog).flat().length} Tagebuch-Einträge`, 'success');
+          logImport(`✓ ${newEntryCount} neue Tagebuch-Einträge (${Object.values(parsed.foodLog).flat().length - newEntryCount} Duplikate übersprungen)`, 'success');
           progress += stepSize;
         }
         
@@ -1993,14 +2004,22 @@
         }
         logImport(`✓ ${localRecipes.length} Rezepte gespeichert`, 'success');
         
-        // Upload foodLog entries
+        // Upload foodLog entries - batch parallel upload with pauses to avoid timeout
         const allEntries = Object.values(localFoodLog).flat();
         let uploadedEntries = 0;
-        for (const entry of allEntries) {
-          await setDoc(doc(userLogCol(), String(entry.id)), entry);
-          uploadedEntries++;
-          if (uploadedEntries % 100 === 0) {
-            updateImportProgress(80 + Math.round((uploadedEntries / allEntries.length) * 15), `Diary: ${uploadedEntries}/${allEntries.length}`);
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+          const batch = allEntries.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry)));
+          uploadedEntries += batch.length;
+          updateImportProgress(
+            80 + Math.round((uploadedEntries / allEntries.length) * 15),
+            `Diary: ${uploadedEntries}/${allEntries.length}`
+          );
+          logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${uploadedEntries} Einträge hochgeladen`);
+          // Short pause between batches to avoid Firebase rate limits
+          if (i + BATCH_SIZE < allEntries.length) {
+            await new Promise(r => setTimeout(r, 150));
           }
         }
         logImport(`✓ ${allEntries.length} Tagebuch-Einträge gespeichert`, 'success');
@@ -2057,7 +2076,7 @@
         if (!name) continue;
         
         foods.push({
-          id: 'fooddb_' + Date.now() + '_' + i,
+          id: 'fooddb_' + name.toLowerCase().replace(/[^a-z0-9äöü]/g, '_').substring(0, 40),
           name,
           kcal: Math.round(kcal * 10) / 10,
           protein: Math.round(protein * 10) / 10,

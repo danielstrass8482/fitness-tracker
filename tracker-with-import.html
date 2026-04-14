@@ -598,6 +598,25 @@
             <div style="font-size:12px;color:var(--muted);margin-top:4px;">Wird automatisch aus dem Rechner befüllt, kann aber manuell überschrieben werden</div>
           </div>
 
+          <!-- Makro-Vorschlag -->
+          <div style="background:var(--bg);border-radius:8px;padding:15px;margin-bottom:15px;border:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:500;">Makro-Vorschlag berechnen</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
+              <div>
+                <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);">Ziel</label>
+                <select id="macro-goal" style="width:100%;padding:9px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+                  <option value="lose">Abnehmen (−300 kcal Defizit)</option>
+                  <option value="maintain" selected>Gewicht halten</option>
+                  <option value="gain">Aufbauen (+200 kcal Überschuss)</option>
+                </select>
+              </div>
+              <button onclick="calcMacroSuggestion()" class="btn" style="width:auto;padding:9px 16px;white-space:nowrap;">Vorschlag berechnen</button>
+            </div>
+            <div id="macro-suggestion" style="display:none;margin-top:12px;font-size:12px;color:var(--muted);line-height:1.8;"></div>
+          </div>
+
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:20px;">
             <div>
               <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Protein-Ziel (g)</label>
@@ -626,6 +645,32 @@
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
         
+        <!-- Strava Integration -->
+        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+            <div style="background:#fc4c02;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;">🟠</div>
+            <h3>Strava Integration</h3>
+          </div>
+
+          <div id="strava-disconnected">
+            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Strava um Aktivitäten automatisch zu importieren.</p>
+            <button class="btn" onclick="connectStrava()" style="background:#fc4c02;border-color:#fc4c02;width:100%;">Mit Strava verbinden</button>
+          </div>
+
+          <div id="strava-connected" style="display:none;">
+            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
+              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="strava-athlete-name"></div>
+              <div style="font-size:12px;color:var(--muted);" id="strava-last-sync"></div>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn" onclick="syncStrava(false)" style="flex:1;">🔄 Neue Aktivitäten sync</button>
+              <button class="btn" onclick="syncStrava(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
+            </div>
+            <button onclick="disconnectStrava()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Strava trennen</button>
+          </div>
+        </div>
+
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:15px;color:var(--danger);">⚠️ Danger Zone</h3>
           <p style="color:var(--muted);margin-bottom:20px;font-size:14px;">Diese Aktionen können nicht rückgängig gemacht werden!</p>
@@ -912,11 +957,22 @@
 
           <!-- Barcode Scanner -->
           <div id="barcode-container" style="display:none;margin-bottom:10px;">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
               <span>📷 Barcode scannen</span>
-              <button onclick="stopBarcodeScanner()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕ Schließen</button>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:none;border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:13px;padding:3px 8px;border-radius:5px;">🔦</button>
+                <button onclick="stopBarcodeScanner()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕ Schließen</button>
+              </div>
             </div>
-            <video id="barcode-video" style="width:100%;border-radius:8px;background:#000;max-height:200px;" autoplay playsinline></video>
+            <video id="barcode-video" style="width:100%;border-radius:8px;background:#000;max-height:220px;object-fit:cover;" autoplay playsinline></video>
+            <div id="barcode-zoom-control" style="display:none;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:12px;color:var(--muted);">🔍</span>
+                <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1"
+                  style="flex:1;accent-color:var(--primary);" oninput="applyZoom(this.value)">
+                <span id="barcode-zoom-label" style="font-size:12px;color:var(--muted);min-width:30px;">1×</span>
+              </div>
+            </div>
             <div id="barcode-status" style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;">Kamera wird gestartet...</div>
           </div>
 
@@ -976,6 +1032,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
     import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
     
     // Firebase Config - RICHTIGE DB mit Blaze Plan!
     const firebaseConfig = {
@@ -990,6 +1047,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const functions = getFunctions(app, 'europe-west1');
     
     // Global State
     let userId = null;
@@ -2534,17 +2592,68 @@
       }
     }
 
+    let torchOn = false;
+    let videoTrack = null;
+
+    window.applyZoom = async function(val) {
+      document.getElementById('barcode-zoom-label').textContent = parseFloat(val).toFixed(1) + '×';
+      if (videoTrack) {
+        try { await videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }); } catch(e) {}
+      }
+    };
+
+    window.toggleTorch = async function() {
+      if (!videoTrack) return;
+      torchOn = !torchOn;
+      try {
+        await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+        document.getElementById('torch-btn').style.background = torchOn ? 'var(--warning)' : 'none';
+        document.getElementById('torch-btn').style.color = torchOn ? '#000' : 'var(--text)';
+      } catch(e) { showToast('Taschenlampe nicht verfügbar'); torchOn = false; }
+    };
+
     window.startBarcodeScanner = async function() {
       document.getElementById('barcode-container').style.display = 'block';
       document.getElementById('off-results-container').style.display = 'none';
       document.getElementById('food-form').style.display = 'none';
+      torchOn = false;
+      videoTrack = null;
 
       try {
+        // Request high resolution for better barcode reading
         barcodeStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            focusMode: 'continuous'
+          }
         });
         const video = document.getElementById('barcode-video');
         video.srcObject = barcodeStream;
+
+        // Get track and check capabilities
+        videoTrack = barcodeStream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities?.() || {};
+
+        // Show zoom slider if supported
+        if (capabilities.zoom) {
+          const zoomControl = document.getElementById('barcode-zoom-control');
+          const zoomSlider = document.getElementById('barcode-zoom');
+          zoomControl.style.display = 'block';
+          zoomSlider.min = capabilities.zoom.min || 1;
+          zoomSlider.max = Math.min(capabilities.zoom.max || 5, 5);
+          zoomSlider.value = capabilities.zoom.min || 1;
+          // Default to slight zoom for better barcode focus
+          const defaultZoom = Math.min(2, capabilities.zoom.max || 2);
+          zoomSlider.value = defaultZoom;
+          await applyZoom(defaultZoom);
+        }
+
+        // Show torch button if supported
+        if (capabilities.torch) {
+          document.getElementById('torch-btn').style.display = 'inline-block';
+        }
 
         // Try native BarcodeDetector first
         if ('BarcodeDetector' in window) {
@@ -2596,7 +2705,12 @@
       if (barcodeStream) { barcodeStream.getTracks().forEach(t => t.stop()); barcodeStream = null; }
       if (barcodeAnimFrame) { cancelAnimationFrame(barcodeAnimFrame); barcodeAnimFrame = null; }
       if (typeof Quagga !== 'undefined') { try { Quagga.stop(); } catch(e) {} }
+      videoTrack = null; torchOn = false;
       document.getElementById('barcode-container').style.display = 'none';
+      document.getElementById('barcode-zoom-control').style.display = 'none';
+      document.getElementById('torch-btn').style.display = 'none';
+      document.getElementById('barcode-zoom').value = 1;
+      document.getElementById('barcode-zoom-label').textContent = '1×';
     };
 
     window.closeAddFood = function() {
@@ -2808,6 +2922,9 @@
         // Re-render dashboard when tab becomes visible (canvas needs to be in DOM)
         if (target === 'dashboard') {
           requestAnimationFrame(() => renderDashboard());
+        }
+        if (target === 'einstellungen' && userId) {
+          loadStravaStatus();
         }
       });
     });
@@ -3155,6 +3272,135 @@
       }
     };
     
+
+    window.calcMacroSuggestion = function() {
+      const weight = parseFloat(document.getElementById('settings-weight')?.value) || settings.weight || 75;
+      const tdee = parseInt(document.getElementById('settings-tdee')?.value) || settings.tdee || 2300;
+      const goal = document.getElementById('macro-goal')?.value || 'maintain';
+
+      if (!weight || !tdee) {
+        showToast('Bitte erst Gewicht und TDEE eintragen');
+        return;
+      }
+
+      // Adjust kcal target based on goal
+      const kcalAdj = goal === 'lose' ? -300 : goal === 'gain' ? 200 : 0;
+      const targetKcal = tdee + kcalAdj;
+
+      // Protein: 1.8–2.0g/kg for hybrid athlete (upper range)
+      const proteinFactor = goal === 'gain' ? 2.0 : goal === 'lose' ? 2.2 : 1.8;
+      const protein = Math.round(weight * proteinFactor);
+      const proteinKcal = protein * 4;
+
+      // Fat: minimum 0.9g/kg, rounded to sensible number
+      const fatMin = Math.round(weight * 0.9);
+      const fatKcal = fatMin * 9;
+
+      // Carbs: remaining calories
+      const carbsKcal = targetKcal - proteinKcal - fatKcal;
+      const carbs = Math.max(50, Math.round(carbsKcal / 4));
+
+      // Recalc fat with remaining if carbs went negative (shouldn't happen but safety)
+      const fat = Math.round((targetKcal - protein * 4 - carbs * 4) / 9);
+      const actualKcal = protein * 4 + carbs * 4 + fat * 9;
+
+      // Show explanation
+      const goalLabel = goal === 'lose' ? 'Abnehmen (−300 kcal)' : goal === 'gain' ? 'Aufbauen (+200 kcal)' : 'Gewicht halten';
+      document.getElementById('macro-suggestion').style.display = 'block';
+      document.getElementById('macro-suggestion').innerHTML = `
+        <strong style="color:var(--text);">Ziel: ${goalLabel} → ${fmt(targetKcal)} kcal</strong><br>
+        Protein: <strong>${protein}g</strong> (${fmt(proteinFactor, 1)}g × ${weight}kg = ${fmt(protein * 4)} kcal)<br>
+        Kohlenhydrate: <strong>${carbs}g</strong> (= ${fmt(carbs * 4)} kcal)<br>
+        Fett: <strong>${fat}g</strong> (min. 0,9g/kg = ${fmt(fat * 9)} kcal)<br>
+        <span style="color:var(--primary);">Gesamt: ${fmt(actualKcal)} kcal</span>
+        <br><br>
+        <button onclick="applyMacroSuggestion(${protein},${carbs},${fat})" 
+          style="padding:7px 14px;background:var(--primary);border:none;border-radius:6px;color:white;cursor:pointer;font-size:13px;">
+          Vorschlag übernehmen
+        </button>
+      `;
+    };
+
+    window.applyMacroSuggestion = function(protein, carbs, fat) {
+      document.getElementById('settings-protein').value = protein;
+      document.getElementById('settings-carbs').value = carbs;
+      document.getElementById('settings-fat').value = fat;
+      document.getElementById('macro-suggestion').style.display = 'none';
+      showToast('✓ Makros übernommen – bitte Einstellungen speichern');
+    };
+
+
+    // ── Strava Integration ────────────────────────────────────────────────────
+    const STRAVA_CLIENT_ID = '225049';
+    // Cloud Function URLs – update after deployment
+    const FUNCTIONS_BASE = 'https://us-central1-fitness-tracker-c6f97.cloudfunctions.net';
+
+    async function loadStravaStatus() {
+      try {
+        const stravaDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'strava'));
+        if (stravaDoc.exists()) {
+          const data = stravaDoc.data();
+          document.getElementById('strava-disconnected').style.display = 'none';
+          document.getElementById('strava-connected').style.display = 'block';
+          document.getElementById('strava-athlete-name').textContent = data.athleteName || '';
+          if (data.lastSyncAt) {
+            const d = new Date(data.lastSyncAt * 1000);
+            document.getElementById('strava-last-sync').textContent =
+              `Letzter Sync: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`;
+          }
+        } else {
+          document.getElementById('strava-disconnected').style.display = 'block';
+          document.getElementById('strava-connected').style.display = 'none';
+        }
+      } catch(e) { console.warn('Strava status error:', e); }
+    }
+
+    window.connectStrava = function() {
+      const redirectUri = encodeURIComponent(`${FUNCTIONS_BASE}/stravaCallback`);
+      const scope = 'read,activity:read_all';
+      const url = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=${scope}&state=${userId}`;
+      
+      const popup = window.open(url, 'strava_auth', 'width=600,height=700');
+      
+      // Listen for success message from popup
+      window.addEventListener('message', async function handler(e) {
+        if (e.data?.type === 'strava_connected') {
+          window.removeEventListener('message', handler);
+          popup?.close();
+          await loadStravaStatus();
+          await loadAllData();
+          showToast('✓ Strava verbunden!');
+        }
+      });
+    };
+
+    window.syncStrava = async function(fullSync = false) {
+      showToast('⏳ Strava wird synchronisiert...');
+      try {
+        const syncFn = httpsCallable(functions, 'stravaSync');
+        const result = await syncFn({ fullSync });
+        showToast(`✓ ${result.data.imported} Aktivitäten importiert`);
+        await loadAllData();
+        await loadStravaStatus();
+      } catch(e) {
+        console.error('Strava sync error:', e);
+        showToast('❌ Sync fehlgeschlagen: ' + e.message);
+      }
+    };
+
+    window.disconnectStrava = async function() {
+      if (!confirm('Strava-Verbindung trennen?')) return;
+      try {
+        const disconnectFn = httpsCallable(functions, 'stravaDisconnect');
+        await disconnectFn();
+        document.getElementById('strava-disconnected').style.display = 'block';
+        document.getElementById('strava-connected').style.display = 'none';
+        showToast('✓ Strava getrennt');
+      } catch(e) {
+        showToast('❌ Fehler: ' + e.message);
+      }
+    };
+
     window.confirmDeleteAllData = async function() {
       const confirm1 = prompt('WARNUNG! Alle Daten werden gelöscht!\n\nTippe "LÖSCHEN" um fortzufahren:');
       if (confirm1 !== 'LÖSCHEN') {

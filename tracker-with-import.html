@@ -1319,7 +1319,12 @@
       if (dashView === 'weeks') {
         return Object.entries(weekData)
           .sort(([a],[b]) => a.localeCompare(b))
-          .map(([date, d]) => ({ label: date.slice(5), value: d[variable] ?? null }));
+          .map(([date, d]) => {
+            const week = d.week || '';
+            const [yr, wn] = week.split('-W');
+            const label = wn ? `KW${parseInt(wn)}/${String(yr).slice(2)}` : date.slice(5);
+            return { label, value: d[variable] ?? null };
+          });
       }
 
       // Monthly: group weeks by month
@@ -1371,7 +1376,23 @@
       const data1 = var1 ? aggregateData(days, var1) : [];
       const data2 = var2 ? aggregateData(days, var2) : [];
       const labels = (data1.length ? data1 : data2).map(d => d.label);
-      const hasData = data1.some(d => d.value) || data2.some(d => d.value);
+      // Strip leading and trailing null/zero entries
+      function trimEmpty(arr) {
+        let start = 0, end = arr.length - 1;
+        while (start <= end && !arr[start].value) start++;
+        while (end >= start && !arr[end].value) end--;
+        return arr.slice(start, end + 1);
+      }
+      const trimmed1 = var1 ? trimEmpty(data1) : [];
+      const trimmed2 = var2 ? trimEmpty(data2) : [];
+      // Align both arrays to same labels (union of non-empty range)
+      const allLabelsSet = new Set([...trimmed1.map(d=>d.label), ...trimmed2.map(d=>d.label)]);
+      const alignedLabels = (trimmed1.length >= trimmed2.length ? trimmed1 : trimmed2).map(d => d.label).filter(l => allLabelsSet.has(l));
+      const align = (arr) => alignedLabels.map(l => arr.find(d => d.label === l) || { label: l, value: null });
+      const aligned1 = align(trimmed1);
+      const aligned2 = align(trimmed2);
+
+      const hasData = aligned1.some(d => d.value) || aligned2.some(d => d.value);
 
       document.getElementById('dash-chart').style.display = hasData ? 'block' : 'none';
       document.getElementById('dash-chart-empty').style.display = hasData ? 'none' : 'block';
@@ -1392,21 +1413,22 @@
         const COL1 = '#4a9eff';
         const COL2 = '#e8e8e8';
 
+        const chartLabels = alignedLabels;
         const datasets = [];
-        if (var1 && data1.length) datasets.push({
+        if (var1 && aligned1.length) datasets.push({
           label: VAR_LABELS[var1] || var1,
-          data: data1.map(d => d.value),
+          data: aligned1.map(d => d.value),
           borderColor: COL1,
           backgroundColor: dashChart === 'bar' ? COL1 : 'rgba(74,158,255,0.15)',
-          tension: 0.3, pointRadius: labels.length > 60 ? 0 : 3,
+          tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
           yAxisID: 'y', spanGaps: true
         });
-        if (var2 && data2.length) datasets.push({
+        if (var2 && aligned2.length) datasets.push({
           label: VAR_LABELS[var2] || var2,
-          data: data2.map(d => d.value),
+          data: aligned2.map(d => d.value),
           borderColor: COL2,
           backgroundColor: dashChart === 'bar' ? COL2 : 'rgba(232,232,232,0.15)',
-          tension: 0.3, pointRadius: labels.length > 60 ? 0 : 3,
+          tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
           yAxisID: sameAxis ? 'y' : 'y2', spanGaps: true
         });
 
@@ -1414,7 +1436,7 @@
         const ctx = document.getElementById('dash-chart').getContext('2d');
         dashChartInstance = new Chart(ctx, {
           type: dashChart === 'bar' ? 'bar' : 'line',
-          data: { labels, datasets },
+          data: { labels: chartLabels, datasets },
           options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },

@@ -645,29 +645,28 @@
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
         
-        <!-- Strava Integration -->
+        <!-- Google Fit Integration -->
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-            <div style="background:#fc4c02;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;">🟠</div>
-            <h3>Strava Integration</h3>
+            <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;">❤️</div>
+            <h3>Google Fit Integration</h3>
           </div>
 
-          <div id="strava-disconnected">
-            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Strava um Aktivitäten automatisch zu importieren.</p>
-            <button class="btn" onclick="connectStrava()" style="background:#fc4c02;border-color:#fc4c02;width:100%;">Mit Strava verbinden</button>
+          <div id="gfit-disconnected">
+            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
+            <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
           </div>
 
-          <div id="strava-connected" style="display:none;">
+          <div id="gfit-connected" style="display:none;">
             <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
               <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="strava-athlete-name"></div>
-              <div style="font-size:12px;color:var(--muted);" id="strava-last-sync"></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
             </div>
             <div style="display:flex;gap:10px;">
-              <button class="btn" onclick="syncStrava(false)" style="flex:1;">🔄 Neue Aktivitäten sync</button>
-              <button class="btn" onclick="syncStrava(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
+              <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
+              <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
             </div>
-            <button onclick="disconnectStrava()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Strava trennen</button>
+            <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
           </div>
         </div>
 
@@ -2924,7 +2923,7 @@
           requestAnimationFrame(() => renderDashboard());
         }
         if (target === 'einstellungen' && userId) {
-          loadStravaStatus();
+          loadGoogleFitStatus();
         }
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
@@ -3342,72 +3341,77 @@
     };
 
 
-    // ── Strava Integration ────────────────────────────────────────────────────
-    const STRAVA_CLIENT_ID = '225049';
-    // Cloud Function URLs – update after deployment
+    // ── Google Fit Integration ───────────────────────────────────────────────
     const FUNCTIONS_BASE = 'https://us-central1-fitness-tracker-c6f97.cloudfunctions.net';
+    const GOOGLE_CLIENT_ID = '187864668697-e4mulna75rvbcqsb2igd0r0ubbk1am46.apps.googleusercontent.com';
 
-    async function loadStravaStatus() {
+    async function loadGoogleFitStatus() {
       try {
-        const stravaDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'strava'));
-        if (stravaDoc.exists()) {
-          const data = stravaDoc.data();
-          document.getElementById('strava-disconnected').style.display = 'none';
-          document.getElementById('strava-connected').style.display = 'block';
-          document.getElementById('strava-athlete-name').textContent = data.athleteName || '';
+        const gfitDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
+        if (gfitDoc.exists()) {
+          const data = gfitDoc.data();
+          document.getElementById('gfit-disconnected').style.display = 'none';
+          document.getElementById('gfit-connected').style.display = 'block';
           if (data.lastSyncAt) {
-            const d = new Date(data.lastSyncAt * 1000);
-            document.getElementById('strava-last-sync').textContent =
-              `Letzter Sync: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`;
+            const d = data.lastSyncAt.toDate ? data.lastSyncAt.toDate() : new Date(data.lastSyncAt);
+            document.getElementById('gfit-last-sync').textContent =
+              'Letzter Sync: ' + d.toLocaleDateString('de-DE') + ' ' +
+              d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) +
+              (data.lastSyncSteps ? ' · ' + data.lastSyncSteps + ' Tage Schritte' : '') +
+              (data.lastSyncActivities ? ' · ' + data.lastSyncActivities + ' Aktivitäten' : '');
           }
         } else {
-          document.getElementById('strava-disconnected').style.display = 'block';
-          document.getElementById('strava-connected').style.display = 'none';
+          document.getElementById('gfit-disconnected').style.display = 'block';
+          document.getElementById('gfit-connected').style.display = 'none';
         }
-      } catch(e) { console.warn('Strava status error:', e); }
+      } catch(e) { console.warn('Google Fit status error:', e); }
     }
 
-    window.connectStrava = function() {
-      const redirectUri = encodeURIComponent(`${FUNCTIONS_BASE}/stravaCallback`);
-      const scope = 'read,activity:read_all';
-      const url = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=${scope}&state=${userId}`;
-      
-      const popup = window.open(url, 'strava_auth', 'width=600,height=700');
-      
-      // Listen for success message from popup
+    window.connectGoogleFit = function() {
+      const redirectUri = encodeURIComponent(FUNCTIONS_BASE + '/googleFitCallback');
+      const scope = encodeURIComponent([
+        'https://www.googleapis.com/auth/fitness.activity.read',
+        'https://www.googleapis.com/auth/fitness.body.read',
+        'https://www.googleapis.com/auth/fitness.location.read'
+      ].join(' '));
+      const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + GOOGLE_CLIENT_ID +
+        '&response_type=code&redirect_uri=' + redirectUri +
+        '&scope=' + scope + '&access_type=offline&prompt=consent&state=' + userId;
+
+      const popup = window.open(url, 'gfit_auth', 'width=600,height=700');
       window.addEventListener('message', async function handler(e) {
-        if (e.data?.type === 'strava_connected') {
+        if (e.data?.type === 'googlefit_connected') {
           window.removeEventListener('message', handler);
           popup?.close();
-          await loadStravaStatus();
+          await loadGoogleFitStatus();
           await loadAllData();
-          showToast('✓ Strava verbunden!');
+          showToast('✓ Google Fit verbunden!');
         }
       });
     };
 
-    window.syncStrava = async function(fullSync = false) {
-      showToast('⏳ Strava wird synchronisiert...');
+    window.syncGoogleFit = async function(fullSync = false) {
+      showToast('⏳ Google Fit wird synchronisiert...');
       try {
-        const syncFn = httpsCallable(fbFunctions, 'stravaSync');
+        const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
         const result = await syncFn({ fullSync });
-        showToast(`✓ ${result.data.imported} Aktivitäten importiert`);
+        showToast('✓ ' + (result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert');
         await loadAllData();
-        await loadStravaStatus();
+        await loadGoogleFitStatus();
       } catch(e) {
-        console.error('Strava sync error:', e);
+        console.error('Google Fit sync error:', e);
         showToast('❌ Sync fehlgeschlagen: ' + e.message);
       }
     };
 
-    window.disconnectStrava = async function() {
-      if (!confirm('Strava-Verbindung trennen?')) return;
+    window.disconnectGoogleFit = async function() {
+      if (!confirm('Google Fit Verbindung trennen?')) return;
       try {
-        const disconnectFn = httpsCallable(fbFunctions, 'stravaDisconnect');
+        const disconnectFn = httpsCallable(fbFunctions, 'googleFitDisconnect');
         await disconnectFn();
-        document.getElementById('strava-disconnected').style.display = 'block';
-        document.getElementById('strava-connected').style.display = 'none';
-        showToast('✓ Strava getrennt');
+        document.getElementById('gfit-disconnected').style.display = 'block';
+        document.getElementById('gfit-connected').style.display = 'none';
+        showToast('✓ Google Fit getrennt');
       } catch(e) {
         showToast('❌ Fehler: ' + e.message);
       }

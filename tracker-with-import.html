@@ -3103,7 +3103,7 @@
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
           <div>
             <div style="font-weight:500;margin-bottom:4px;">${title}${sourceBadge}</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets || ''}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}${e.kalorien > 0 ? ` · ${fmt(e.kalorien)} kcal` : ''}</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets || ''}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}${(e.act_kcal_calc > 0 || e.kalorien > 0) ? ` · <span style="color:#f97316;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}</div>
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
           <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>

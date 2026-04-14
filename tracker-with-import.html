@@ -455,7 +455,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
           <div>
             <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 1</div>
-            <select id="dash-var1" onchange="window.renderDashboard()" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+            <select id="dash-var1" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
               <option value="">— keine —</option>
               <optgroup label="Ernährung">
                 <option value="kcal">Kalorien konsumiert</option>
@@ -480,7 +480,7 @@
           </div>
           <div>
             <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 2</div>
-            <select id="dash-var2" onchange="window.renderDashboard()" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+            <select id="dash-var2" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
               <option value="">— keine —</option>
               <optgroup label="Ernährung">
                 <option value="kcal">Kalorien konsumiert</option>
@@ -613,6 +613,16 @@
             </div>
           </div>
 
+          <div style="margin-bottom:20px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Detaildaten laden (Tage)</label>
+            <select id="settings-detail-days" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <option value="31">Letzte 31 Tage</option>
+              <option value="60">Letzte 60 Tage</option>
+              <option value="90">Letzte 90 Tage</option>
+            </select>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Bestimmt wie viele Tage beim Start geladen werden. Mehr = mehr Firebase Reads.</div>
+          </div>
+
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
         
@@ -701,6 +711,14 @@
           </div>
           
           <button id="start-import-btn" class="btn" onclick="startImport()" disabled style="width:100%;">🚀 Import starten</button>
+        </div>
+
+        <!-- Wochendaten aggregieren -->
+        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
+          <h3 style="margin-bottom:10px;">📊 Wochendaten berechnen</h3>
+          <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Aggregiert alle Tagebuch- und Trainingseinträge zu Wochen-Summaries. Einmalig ausführen nach dem ersten Import, danach automatisch.</p>
+          <div id="agg-status" style="font-size:13px;color:var(--muted);margin-bottom:15px;"></div>
+          <button class="btn" onclick="aggregateWeeklyStats()" id="agg-btn">📊 Wochendaten berechnen</button>
           
           <div id="import-progress" style="display:none;margin-top:20px;">
             <div style="background:var(--bg);border-radius:8px;height:30px;overflow:hidden;margin-bottom:10px;">
@@ -926,7 +944,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-    import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, limit } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
     
     // Firebase Config - RICHTIGE DB mit Blaze Plan!
     const firebaseConfig = {
@@ -956,12 +974,17 @@
     window.trainingEntries = trainingEntries;
     window.dayLogs = dayLogs;
     
-    // Collections (alte Struktur!)
+    // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
     const userFoodCol = () => collection(db, 'users', userId, 'foods');
     const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
     const userLogCol = () => collection(db, 'users', userId, 'logEntries');
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
+    const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats');
+
+    // Weekly stats state
+    let weeklyStats = {}; // { 'YYYY-WW': { kcal, protein, carbs, fat, days, act_kcal_calc, act_kcal_garmin, run_km, trainings, weight } }
+    window.weeklyStats = weeklyStats;
     
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
@@ -1021,9 +1044,18 @@
           recipes.push(data);
         });
         window.recipes = recipes;
+
+        // Load settings first (needed for detailDays)
+        await loadSettings();
+
+        // Load Diary – only last N days
+        const detailDays = settings.detailDays || 31;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - detailDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
         
-        // Load Diary
-        const diarySnap = await getDocs(userLogCol());
+        const diaryQ = query(userLogCol(), where('date', '>=', cutoffStr));
+        const diarySnap = await getDocs(diaryQ);
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
@@ -1031,6 +1063,12 @@
           foodLog[entry.date].push(entry);
         });
         window.foodLog = foodLog;
+
+        // Load weekly stats (always all)
+        const weekSnap = await getDocs(userWeeklyCol());
+        weeklyStats = {};
+        weekSnap.forEach(d => { weeklyStats[d.id] = d.data(); });
+        window.weeklyStats = weeklyStats;
         
         // Load Training
         const trainingSnap = await getDocs(userTrainingCol());
@@ -1040,11 +1078,8 @@
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
         
-        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
-        showToast(`✓ ${foodDB.length} Foods, ${recipes.length} Rezepte geladen`);
-        
-        // Load settings
-        await loadSettings();
+        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days (last ${detailDays}d), ${Object.keys(weeklyStats).length} weeks, ${trainingEntries.length} trainings`);
+        showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage, ${Object.keys(weeklyStats).length} Wochen`);
         
         // Render initial
         renderAll();
@@ -1053,6 +1088,72 @@
         console.error('Load error:', err);
         showToast('❌ Fehler beim Laden');
       }
+    }
+
+    // Get ISO week string YYYY-WXX from date string
+    function getISOWeek(dateStr) {
+      const d = new Date(dateStr + 'T12:00:00');
+      const jan4 = new Date(d.getFullYear(), 0, 4);
+      const startOfWeek1 = new Date(jan4);
+      startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+      const weekNum = Math.floor((d - startOfWeek1) / (7 * 24 * 3600 * 1000)) + 1;
+      const year = weekNum >= 52 && d.getMonth() === 0 ? d.getFullYear() - 1
+                 : weekNum === 1 && d.getMonth() === 11 ? d.getFullYear() + 1
+                 : d.getFullYear();
+      return `${year}-W${String(weekNum).padStart(2, '0')}`;
+    }
+
+    // Build/update weeklyStats from foodLog entries for a given date
+    async function updateWeeklyStats(date) {
+      const week = getISOWeek(date);
+      // Gather all entries for this week from foodLog
+      const d = new Date(date + 'T12:00:00');
+      const dayOfWeek = (d.getDay() + 6) % 7; // 0=Mon
+      const weekDates = [];
+      for (let i = 0; i < 7; i++) {
+        const wd = new Date(d);
+        wd.setDate(d.getDate() - dayOfWeek + i);
+        weekDates.push(wd.toISOString().split('T')[0]);
+      }
+      
+      let kcal = 0, protein = 0, carbs = 0, fat = 0, days = 0;
+      let act_kcal_calc = 0, act_kcal_garmin = 0, run_km = 0, trainings = 0;
+      let weights = [];
+
+      weekDates.forEach(wd => {
+        const entries = foodLog[wd] || [];
+        if (entries.length > 0) {
+          days++;
+          entries.forEach(e => {
+            kcal += e.kcal || 0;
+            protein += e.protein || 0;
+            carbs += e.carbs || 0;
+            fat += e.fat || 0;
+          });
+        }
+        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
+        if (dayLog?.weight) weights.push(dayLog.weight);
+        
+        trainingEntries.filter(e => e.source === 'garmin' && e.datum === wd).forEach(e => {
+          act_kcal_calc += calcActivityKcal(e);
+          act_kcal_garmin += e.kalorien || 0;
+          if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
+          trainings++;
+        });
+      });
+
+      const stat = {
+        week, kcal: Math.round(kcal), protein: Math.round(protein),
+        carbs: Math.round(carbs), fat: Math.round(fat), days,
+        act_kcal_calc: Math.round(act_kcal_calc),
+        act_kcal_garmin: Math.round(act_kcal_garmin),
+        run_km: Math.round(run_km * 10) / 10, trainings,
+        weight: weights.length ? Math.round(weights.reduce((s,v) => s+v,0) / weights.length * 10) / 10 : null
+      };
+
+      weeklyStats[week] = stat;
+      window.weeklyStats = weeklyStats;
+      await setDoc(doc(userWeeklyCol(), week), stat);
     }
     
     // Render All
@@ -1070,6 +1171,14 @@
     let dashView = 'days';
     let dashChart = 'line';
     let dashChartInstance = null;
+
+    // Attach select listeners after functions are defined
+    setTimeout(() => {
+      const v1 = document.getElementById('dash-var1');
+      const v2 = document.getElementById('dash-var2');
+      if (v1) v1.addEventListener('change', () => renderDashboard());
+      if (v2) v2.addEventListener('change', () => renderDashboard());
+    }, 500);
 
     window.setDashRange = function(r, el) {
       dashRange = r;
@@ -1093,7 +1202,6 @@
     // ── Build daily data index ─────────────────────────────────────────────
     function buildDayIndex(fromDate, toDate) {
       const days = {};
-      // seed with all dates in range
       let cur = new Date(fromDate + 'T12:00:00');
       const end = new Date(toDate + 'T12:00:00');
       while (cur <= end) {
@@ -1108,7 +1216,7 @@
         cur.setDate(cur.getDate() + 1);
       }
 
-      // Food log
+      // Food log (recent detail data)
       Object.entries(foodLog).forEach(([date, entries]) => {
         if (!days[date]) return;
         entries.forEach(e => {
@@ -1136,18 +1244,47 @@
         days[e.datum].act_kcal_garmin += e.kalorien || 0;
         days[e.datum].trainings++;
         if (e.typ === 'laufen') days[e.datum].run_km += parseFloat(e.distanz) || 0;
-        // Activity steps from Garmin
         const actSteps = parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
         days[e.datum].steps_activity += actSteps;
       });
 
-      // Compute daily steps
       Object.values(days).forEach(d => {
         d.steps_daily = Math.max(0, d.steps_total - d.steps_activity);
         d.run_km = Math.round(d.run_km * 10) / 10;
       });
 
       return days;
+    }
+
+    // ── Build WEEKLY data index from weeklyStats ───────────────────────────
+    function buildWeekIndex(fromDate, toDate) {
+      const weeks = {};
+      Object.entries(weeklyStats).forEach(([week, stat]) => {
+        // Convert week to a representative date (Monday)
+        const [year, wn] = week.split('-W').map(Number);
+        const jan4 = new Date(year, 0, 4);
+        const startW1 = new Date(jan4);
+        startW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+        const weekStart = new Date(startW1);
+        weekStart.setDate(startW1.getDate() + (wn - 1) * 7);
+        const weekDate = weekStart.toISOString().split('T')[0];
+        if (weekDate >= fromDate && weekDate <= toDate) {
+          weeks[weekDate] = {
+            kcal: stat.kcal || 0,
+            protein: stat.protein || 0,
+            carbs: stat.carbs || 0,
+            fat: stat.fat || 0,
+            weight: stat.weight || null,
+            act_kcal_calc: stat.act_kcal_calc || 0,
+            act_kcal_garmin: stat.act_kcal_garmin || 0,
+            run_km: stat.run_km || 0,
+            trainings: stat.trainings || 0,
+            steps_total: 0, steps_activity: 0, steps_daily: 0,
+            kcal_goal: 0, week
+          };
+        }
+      });
+      return weeks;
     }
 
     function getDateRange() {
@@ -1170,37 +1307,37 @@
     }
 
     function aggregateData(days, variable) {
-      const entries = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
-
       if (dashView === 'days') {
+        const entries = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
         return entries.map(([date, d]) => ({ label: date.slice(5), value: d[variable] ?? null }));
       }
 
-      // Weekly / Monthly grouping
-      const groups = {};
-      entries.forEach(([date, d]) => {
-        let key;
-        if (dashView === 'weeks') {
-          const dt = new Date(date + 'T12:00:00');
-          const mon = new Date(dt);
-          mon.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
-          key = mon.toISOString().split('T')[0];
-        } else {
-          key = date.slice(0, 7);
-        }
-        if (!groups[key]) groups[key] = [];
+      // For weeks/months: use weeklyStats directly for better accuracy
+      const { fromDate, toDate } = getDateRange();
+      const weekData = buildWeekIndex(fromDate, toDate);
+
+      if (dashView === 'weeks') {
+        return Object.entries(weekData)
+          .sort(([a],[b]) => a.localeCompare(b))
+          .map(([date, d]) => ({ label: date.slice(5), value: d[variable] ?? null }));
+      }
+
+      // Monthly: group weeks by month
+      const months = {};
+      Object.entries(weekData).forEach(([date, d]) => {
+        const key = date.slice(0, 7);
+        if (!months[key]) months[key] = [];
         const val = d[variable];
-        if (val !== null && val !== undefined) groups[key].push(val);
+        if (val !== null && val !== undefined && val !== 0) months[key].push(val);
       });
 
-      return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
-        if (vals.length === 0) return { label: key.slice(5) || key, value: null };
-        // weight → average, everything else → sum
+      return Object.entries(months).sort(([a],[b]) => a.localeCompare(b)).map(([key, vals]) => {
+        if (vals.length === 0) return { label: key, value: null };
         const isAvg = variable === 'weight';
         const value = isAvg
-          ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10
-          : Math.round(vals.reduce((s, v) => s + v, 0) * 10) / 10;
-        return { label: dashView === 'months' ? key : key.slice(5), value };
+          ? Math.round(vals.reduce((s,v) => s+v,0) / vals.length * 10) / 10
+          : Math.round(vals.reduce((s,v) => s+v,0) * 10) / 10;
+        return { label: key, value };
       });
     }
 
@@ -1220,7 +1357,7 @@
       run_km: '#22d3ee', trainings: '#818cf8'
     };
 
-    function renderDashboard() {
+    window.renderDashboard = function renderDashboard() {
       const canvas = document.getElementById('dash-chart');
       if (!canvas) return;
 
@@ -1819,9 +1956,13 @@
       const distanz = parseFloat(entry.distanz) || 0;
 
       switch (entry.typ) {
-        case 'laufen':
-          // 1,04 kcal × km × kg
-          return distanz > 0 ? Math.round(1.04 * distanz * weight) : 0;
+        case 'laufen': {
+          // Intervalltraining erkennen über Titel → Faktor 1,1 statt 1,04
+          const titel = (entry.notiz || '').toLowerCase();
+          const isIntervall = /intervall|tempo|fartlek|wettkampf|race|sprint/.test(titel);
+          const factor = isIntervall ? 1.1 : 1.04;
+          return distanz > 0 ? Math.round(factor * distanz * weight) : 0;
+        }
 
         case 'gehen':
         case 'wandern':
@@ -2666,6 +2807,8 @@
           document.getElementById('settings-height').value = settings.height || '';
           document.getElementById('settings-weight').value = settings.weight || '';
           document.getElementById('settings-activity').value = settings.activityLevel || 1.55;
+          if (document.getElementById('settings-detail-days'))
+            document.getElementById('settings-detail-days').value = settings.detailDays || 31;
 
           if (latestWeight) {
             document.getElementById('settings-weight-hint').textContent =
@@ -2730,9 +2873,10 @@
       const weight = parseFloat(document.getElementById('settings-weight').value) || null;
       const activityLevel = parseFloat(document.getElementById('settings-activity').value) || 1.55;
       
+      const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel
+        gender, age, height, weight, activityLevel, detailDays
       };
       
       try {
@@ -2794,6 +2938,74 @@
       }
     };
     
+    // ===== AGGREGATION =====
+
+    window.aggregateWeeklyStats = async function() {
+      const btn = document.getElementById('agg-btn');
+      const status = document.getElementById('agg-status');
+      btn.disabled = true;
+      status.textContent = '⏳ Lade alle Tagebucheinträge...';
+
+      try {
+        // Load ALL diary entries from Firebase (not just recent)
+        const allDiarySnap = await getDocs(userLogCol());
+        const allFoodLog = {};
+        allDiarySnap.forEach(d => {
+          const entry = d.data();
+          if (!allFoodLog[entry.date]) allFoodLog[entry.date] = [];
+          allFoodLog[entry.date].push(entry);
+        });
+
+        // Get all unique weeks
+        const allDates = Object.keys(allFoodLog).sort();
+        const weeks = new Set(allDates.map(d => getISOWeek(d)));
+
+        // Also add weeks from training entries
+        trainingEntries.forEach(e => {
+          if (e.datum) weeks.add(getISOWeek(e.datum));
+        });
+
+        status.textContent = `⏳ Berechne ${weeks.size} Wochen...`;
+
+        // Temporarily use full foodLog for calculation
+        const savedFoodLog = foodLog;
+        foodLog = allFoodLog;
+        window.foodLog = foodLog;
+
+        let processed = 0;
+        const weekArr = [...weeks].sort();
+        
+        for (const week of weekArr) {
+          // Find a date in this week
+          const weekDate = allDates.find(d => getISOWeek(d) === week)
+            || trainingEntries.find(e => e.datum && getISOWeek(e.datum) === week)?.datum;
+          if (!weekDate) continue;
+          await updateWeeklyStats(weekDate);
+          processed++;
+          if (processed % 10 === 0) {
+            status.textContent = `⏳ ${processed}/${weekArr.length} Wochen berechnet...`;
+          }
+        }
+
+        // Restore recent foodLog
+        foodLog = savedFoodLog;
+        window.foodLog = foodLog;
+
+        status.innerHTML = `✅ ${processed} Wochen berechnet und gespeichert.`;
+        showToast(`✓ ${processed} Wochendaten gespeichert`);
+        renderDashboard();
+      } catch (err) {
+        console.error('Aggregation error:', err);
+        status.textContent = '❌ Fehler: ' + err.message;
+      }
+      btn.disabled = false;
+    };
+
+    // Auto-update weekly stats when saving a diary entry
+    async function autoUpdateWeekly(date) {
+      try { await updateWeeklyStats(date); } catch(e) { console.warn('Weekly update failed:', e); }
+    }
+
     // ===== IMPORT LOGIC =====
     
     let importFoodDBFile = null;

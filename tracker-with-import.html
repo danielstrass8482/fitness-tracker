@@ -891,11 +891,42 @@
 
         <!-- LEBENSMITTEL MODE -->
         <div id="mode-food">
-          <input type="text" id="food-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:15px;" oninput="searchFood()">
-          <div id="food-search-results" style="max-height:250px;overflow-y:auto;margin-bottom:15px;"></div>
+          <!-- Suchzeile + Buttons -->
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input type="text" id="food-search" placeholder="Lebensmittel suchen..." style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="searchFood()">
+            <button onclick="searchOpenFoodFacts()" title="Open Food Facts durchsuchen" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:18px;white-space:nowrap;">🌍</button>
+            <button onclick="startBarcodeScanner()" title="Barcode scannen" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:18px;">📷</button>
+          </div>
+
+          <!-- Lokale Suchergebnisse -->
+          <div id="food-search-results" style="max-height:200px;overflow-y:auto;margin-bottom:10px;"></div>
+
+          <!-- Open Food Facts Ergebnisse -->
+          <div id="off-results-container" style="display:none;margin-bottom:10px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+              <span>🌍 Open Food Facts Ergebnisse</span>
+              <span id="off-status" style="color:var(--primary);"></span>
+            </div>
+            <div id="off-search-results" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+          </div>
+
+          <!-- Barcode Scanner -->
+          <div id="barcode-container" style="display:none;margin-bottom:10px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;">
+              <span>📷 Barcode scannen</span>
+              <button onclick="stopBarcodeScanner()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕ Schließen</button>
+            </div>
+            <video id="barcode-video" style="width:100%;border-radius:8px;background:#000;max-height:200px;" autoplay playsinline></video>
+            <div id="barcode-status" style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;">Kamera wird gestartet...</div>
+          </div>
+
+          <!-- Ausgewähltes Lebensmittel -->
           <div id="food-form" style="display:none;">
             <div style="background:var(--bg);padding:15px;border-radius:8px;margin-bottom:15px;">
-              <div style="font-weight:600;margin-bottom:10px;" id="selected-food-name"></div>
+              <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">
+                <div style="font-weight:600;" id="selected-food-name"></div>
+                <span id="selected-food-source" style="font-size:10px;background:var(--surface2);padding:2px 7px;border-radius:4px;color:var(--muted);"></span>
+              </div>
               <div style="margin-bottom:10px;">
                 <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Menge (g)</label>
                 <input type="number" id="food-amount" value="100" min="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateNutrition()">
@@ -1090,6 +1121,38 @@
       }
     }
 
+    // Calculate historical kcal goal for a specific date
+    // Uses weight from dayLog on that date, or most recent prior weight
+    function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
+      const s = settings;
+      const age = s.age; const height = s.height; const gender = s.gender || 'male';
+      if (!age || !height) return 0;
+
+      // Find weight on or before this date
+      const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
+        .filter(e => e.weight && e.datum <= date)
+        .sort((a, b) => b.datum.localeCompare(a.datum));
+      const weight = logsWithWeight[0]?.weight || s.weight || 75;
+
+      // Age at that date (approximate)
+      const dateYear = parseInt(date.slice(0, 4));
+      const currentYear = new Date().getFullYear();
+      const ageAtDate = age - (currentYear - dateYear);
+
+      let bmr = gender === 'male'
+        ? (10 * weight) + (6.25 * height) - (5 * ageAtDate) + 5
+        : (10 * weight) + (6.25 * height) - (5 * ageAtDate) - 161;
+
+      const base = Math.round(bmr * 1.375);
+
+      // Add activity kcal for that day
+      const dayActivity = (allTrainingEntries || trainingEntries)
+        .filter(e => e.source === 'garmin' && e.datum === date)
+        .reduce((sum, e) => sum + calcActivityKcal(e), 0);
+
+      return base + Math.round(dayActivity);
+    }
+
     // Get ISO week string YYYY-WXX from date string
     function getISOWeek(dateStr) {
       const d = new Date(dateStr + 'T12:00:00');
@@ -1118,6 +1181,7 @@
       
       let kcal = 0, protein = 0, carbs = 0, fat = 0, days = 0;
       let act_kcal_calc = 0, act_kcal_garmin = 0, run_km = 0, trainings = 0;
+      let kcal_goal = 0;
       let weights = [];
 
       weekDates.forEach(wd => {
@@ -1130,6 +1194,8 @@
             carbs += e.carbs || 0;
             fat += e.fat || 0;
           });
+          // Historical kcal goal for this day
+          kcal_goal += calcHistoricalKcalGoal(wd);
         }
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
@@ -1145,6 +1211,7 @@
       const stat = {
         week, kcal: Math.round(kcal), protein: Math.round(protein),
         carbs: Math.round(carbs), fat: Math.round(fat), days,
+        kcal_goal: Math.round(kcal_goal),
         act_kcal_calc: Math.round(act_kcal_calc),
         act_kcal_garmin: Math.round(act_kcal_garmin),
         run_km: Math.round(run_km * 10) / 10, trainings,
@@ -1226,7 +1293,8 @@
           days[date].fat += e.fat || 0;
         });
         days[date].kcal = Math.round(days[date].kcal);
-        days[date].kcal_goal = calcDailyKcalGoal(date).total;
+        // Use historical goal (weight on that day, age at that date)
+        days[date].kcal_goal = calcHistoricalKcalGoal(date);
       });
 
       // Day logs (weight + steps)
@@ -1280,7 +1348,7 @@
             run_km: stat.run_km || 0,
             trainings: stat.trainings || 0,
             steps_total: 0, steps_activity: 0, steps_daily: 0,
-            kcal_goal: 0, week
+            kcal_goal: stat.kcal_goal || 0, week
           };
         }
       });
@@ -2069,12 +2137,12 @@
       document.getElementById('daily-carbs').textContent = fmt(totalCarbs, 1) + 'g';
       document.getElementById('daily-fat').textContent = fmt(totalFat, 1) + 'g';
       
-      // Dynamisches Kalorienziel: BMR × 1,375 + Aktivität
-      const goalData = calcDailyKcalGoal(currentDate);
-      const kcalGoal = goalData.total;
+      // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
+      const todayGoal = calcHistoricalKcalGoal(currentDate);
+      const goalData = calcDailyKcalGoal(currentDate); // for breakdown display
       const goalText = goalData.activity > 0
-        ? `/ ${fmt(kcalGoal)} kcal (Basis ${fmt(goalData.base)} + ${fmt(goalData.activity)} Aktivität)`
-        : `/ ${fmt(kcalGoal)} kcal`;
+        ? `/ ${fmt(todayGoal)} kcal (Basis ${fmt(goalData.base)} + ${fmt(goalData.activity)} Aktivität)`
+        : `/ ${fmt(todayGoal)} kcal`;
       document.getElementById('daily-kcal-goal').textContent = goalText;
       
       // Makro goals in tiles
@@ -2362,11 +2430,183 @@
       updateMealFromTime();
     };
     
+
+    // ── Open Food Facts + Barcode Scanner ────────────────────────────────────
+    let barcodeStream = null;
+    let barcodeDetector = null;
+    let barcodeAnimFrame = null;
+
+    function foodFromOFF(product) {
+      const nutriments = product.nutriments || {};
+      const name = product.product_name_de || product.product_name || product.product_name_en || 'Unbekannt';
+      const kcal = Math.round(nutriments['energy-kcal_100g'] || nutriments['energy-kcal'] || (nutriments['energy_100g'] || 0) / 4.184 || 0);
+      const protein = Math.round((nutriments['proteins_100g'] || 0) * 10) / 10;
+      const carbs = Math.round((nutriments['carbohydrates_100g'] || 0) * 10) / 10;
+      const fat = Math.round((nutriments['fat_100g'] || 0) * 10) / 10;
+      const id = 'off_' + (product.code || name).toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
+      return { id, name, kcal, protein, carbs, fat, source: 'openfoodfacts' };
+    }
+
+    async function saveOFFFood(food) {
+      // Save to local FoodDB if not already there
+      if (!foodDB.find(f => f.id === food.id)) {
+        try {
+          await setDoc(doc(userFoodCol(), food.id), food);
+          foodDB.push(food);
+          window.foodDB = foodDB;
+          renderDataStats();
+        } catch(e) { console.warn('Save OFF food failed:', e); }
+      }
+      return food;
+    }
+
+    function renderOFFResult(food, container) {
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;';
+      div.innerHTML = `
+        <div>
+          <div style="font-weight:500;font-size:14px;">${food.name}</div>
+          <div style="font-size:11px;color:var(--muted);">${fmt(food.kcal)} kcal · P ${fmt(food.protein,1)}g · K ${fmt(food.carbs,1)}g · F ${fmt(food.fat,1)}g / 100g</div>
+        </div>
+        <span style="font-size:11px;color:var(--success);padding:2px 6px;background:#0a2a1a;border-radius:4px;">OFF</span>
+      `;
+      div.onclick = async () => {
+        const saved = await saveOFFFood(food);
+        selectFood(saved.id);
+        document.getElementById('selected-food-source').textContent = 'Open Food Facts';
+        document.getElementById('off-results-container').style.display = 'none';
+        stopBarcodeScanner();
+      };
+      container.appendChild(div);
+    }
+
+    window.searchOpenFoodFacts = async function() {
+      const query = document.getElementById('food-search').value.trim();
+      if (query.length < 2) { showToast('Bitte erst Suchbegriff eingeben'); return; }
+
+      const container = document.getElementById('off-results-container');
+      const results = document.getElementById('off-search-results');
+      const status = document.getElementById('off-status');
+      container.style.display = 'block';
+      results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">⏳ Suche...</div>';
+      status.textContent = '';
+
+      try {
+        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&lc=de`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        const products = (data.products || []).filter(p => p.product_name && p.nutriments?.['energy-kcal_100g']);
+
+        if (products.length === 0) {
+          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
+          return;
+        }
+
+        status.textContent = `${products.length} Treffer`;
+        results.innerHTML = '';
+        products.forEach(p => renderOFFResult(foodFromOFF(p), results));
+      } catch(e) {
+        results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">❌ Fehler bei der Suche</div>';
+        console.error('OFF search error:', e);
+      }
+    };
+
+    async function lookupBarcode(barcode) {
+      document.getElementById('barcode-status').textContent = `🔍 Suche Barcode ${barcode}...`;
+      try {
+        const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+        const data = await resp.json();
+        if (data.status === 1 && data.product) {
+          const food = foodFromOFF({ ...data.product, code: barcode });
+          stopBarcodeScanner();
+          const saved = await saveOFFFood(food);
+          selectFood(saved.id);
+          document.getElementById('selected-food-source').textContent = 'Open Food Facts';
+          showToast(`✓ ${food.name} gefunden`);
+        } else {
+          document.getElementById('barcode-status').textContent = '❌ Produkt nicht gefunden – weiter scannen...';
+          setTimeout(() => {
+            if (barcodeStream) document.getElementById('barcode-status').textContent = 'Kamera aktiv – Barcode vor die Kamera halten';
+          }, 2000);
+        }
+      } catch(e) {
+        document.getElementById('barcode-status').textContent = '❌ Netzwerkfehler';
+      }
+    }
+
+    window.startBarcodeScanner = async function() {
+      document.getElementById('barcode-container').style.display = 'block';
+      document.getElementById('off-results-container').style.display = 'none';
+      document.getElementById('food-form').style.display = 'none';
+
+      try {
+        barcodeStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        const video = document.getElementById('barcode-video');
+        video.srcObject = barcodeStream;
+
+        // Try native BarcodeDetector first
+        if ('BarcodeDetector' in window) {
+          barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'] });
+          document.getElementById('barcode-status').textContent = 'Kamera aktiv – Barcode vor die Kamera halten';
+          let lastCode = null;
+          const scan = async () => {
+            if (!barcodeStream) return;
+            try {
+              const codes = await barcodeDetector.detect(video);
+              if (codes.length > 0 && codes[0].rawValue !== lastCode) {
+                lastCode = codes[0].rawValue;
+                await lookupBarcode(lastCode);
+              }
+            } catch(e) {}
+            barcodeAnimFrame = requestAnimationFrame(scan);
+          };
+          video.onloadedmetadata = () => { barcodeAnimFrame = requestAnimationFrame(scan); };
+        } else {
+          // Fallback: QuaggaJS
+          document.getElementById('barcode-status').textContent = '⏳ Lade Barcode-Scanner...';
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+            s.onload = resolve; s.onerror = reject;
+            document.head.appendChild(s);
+          });
+          Quagga.init({
+            inputStream: { type: 'LiveStream', target: document.getElementById('barcode-video'),
+              constraints: { facingMode: 'environment' } },
+            decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','code_128_reader'] }
+          }, err => {
+            if (err) { document.getElementById('barcode-status').textContent = '❌ Scanner nicht verfügbar'; return; }
+            Quagga.start();
+            document.getElementById('barcode-status').textContent = 'Kamera aktiv – Barcode vor die Kamera halten';
+          });
+          let quaggaLast = null;
+          Quagga.onDetected(result => {
+            const code = result.codeResult.code;
+            if (code !== quaggaLast) { quaggaLast = code; lookupBarcode(code); }
+          });
+        }
+      } catch(e) {
+        document.getElementById('barcode-status').textContent = '❌ Kamera nicht verfügbar: ' + e.message;
+      }
+    };
+
+    window.stopBarcodeScanner = function() {
+      if (barcodeStream) { barcodeStream.getTracks().forEach(t => t.stop()); barcodeStream = null; }
+      if (barcodeAnimFrame) { cancelAnimationFrame(barcodeAnimFrame); barcodeAnimFrame = null; }
+      if (typeof Quagga !== 'undefined') { try { Quagga.stop(); } catch(e) {} }
+      document.getElementById('barcode-container').style.display = 'none';
+    };
+
     window.closeAddFood = function() {
+      stopBarcodeScanner();
       document.getElementById('add-food-modal').style.display = 'none';
       document.getElementById('food-search').value = '';
       document.getElementById('food-search-results').innerHTML = '';
       document.getElementById('food-form').style.display = 'none';
+      document.getElementById('off-results-container').style.display = 'none';
+      document.getElementById('off-search-results').innerHTML = '';
       document.getElementById('recipe-search-modal').value = '';
       document.getElementById('recipe-search-results').innerHTML = '';
       document.getElementById('recipe-form').style.display = 'none';

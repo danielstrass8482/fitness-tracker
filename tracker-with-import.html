@@ -1047,7 +1047,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const functions = getFunctions(app, 'europe-west1');
+    const fbFunctions = getFunctions(app, 'us-central1');
     
     // Global State
     let userId = null;
@@ -3377,7 +3377,7 @@
     window.syncStrava = async function(fullSync = false) {
       showToast('⏳ Strava wird synchronisiert...');
       try {
-        const syncFn = httpsCallable(functions, 'stravaSync');
+        const syncFn = httpsCallable(fbFunctions, 'stravaSync');
         const result = await syncFn({ fullSync });
         showToast(`✓ ${result.data.imported} Aktivitäten importiert`);
         await loadAllData();
@@ -3391,7 +3391,7 @@
     window.disconnectStrava = async function() {
       if (!confirm('Strava-Verbindung trennen?')) return;
       try {
-        const disconnectFn = httpsCallable(functions, 'stravaDisconnect');
+        const disconnectFn = httpsCallable(fbFunctions, 'stravaDisconnect');
         await disconnectFn();
         document.getElementById('strava-disconnected').style.display = 'block';
         document.getElementById('strava-connected').style.display = 'none';

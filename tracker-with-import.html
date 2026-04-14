@@ -343,26 +343,19 @@
         <!-- Day Log -->
         <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:20px;">Tageslog</h3>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:15px;">Schritte werden automatisch über Google Fit importiert.</p>
           
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
             <input type="date" id="log-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           </div>
           
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
-              <input type="number" id="log-weight" step="0.1" placeholder="75.0" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-            </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Schritte</label>
-              <input type="number" id="log-steps" placeholder="10000" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-            </div>
+          <div style="margin-bottom:15px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
+            <input type="number" id="log-weight" step="0.1" placeholder="75.0" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           </div>
-          
-          <div style="padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);margin-bottom:20px;">
-            <div style="font-size:12px;color:var(--muted);">Weitere Körpermaße (z.B. Bauchumfang, Körperfett) werden in einer zukünftigen Version ergänzt.</div>
-          </div>
+
+          <input type="hidden" id="log-steps" value="">
           
           <button class="btn" onclick="saveDayLog()" style="width:100%;">Tageslog speichern</button>
         </div>
@@ -3102,7 +3095,9 @@
         const isGarmin = e.source === 'garmin';
         const variantLabel = e.variantLabel || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
-        const setsTotal = !isGarmin && e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
+        // Only calculate sets total for manual pullup/pushup entries
+        const isManual = e.typ === 'pullups' || e.typ === 'pushups';
+        const setsTotal = isManual && e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -3396,7 +3391,15 @@
         const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
         const result = await syncFn({ fullSync });
         showToast('✓ ' + (result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert');
-        await loadAllData();
+        // Nur entries neu laden, nicht alles
+        const snap = await getDocs(userTrainingCol());
+        trainingEntries = [];
+        snap.forEach(d => trainingEntries.push(d.data()));
+        dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+        window.trainingEntries = trainingEntries;
+        window.dayLogs = dayLogs;
+        renderTrainingHistory();
+        renderDashboard();
         await loadGoogleFitStatus();
       } catch(e) {
         console.error('Google Fit sync error:', e);

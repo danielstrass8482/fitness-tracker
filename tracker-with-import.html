@@ -2926,6 +2926,18 @@
         if (target === 'einstellungen' && userId) {
           loadStravaStatus();
         }
+        // Reload training entries when switching to training tab
+        if (target === 'training' && userId) {
+          getDocs(userTrainingCol()).then(snap => {
+            trainingEntries = [];
+            snap.forEach(d => trainingEntries.push(d.data()));
+            dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+            window.trainingEntries = trainingEntries;
+            window.dayLogs = dayLogs;
+            renderTrainingHistory();
+            renderDashboard();
+          }).catch(e => console.warn('Training reload error:', e));
+        }
       });
     });
     

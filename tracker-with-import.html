@@ -3422,9 +3422,8 @@
             totalSteps += result.data.steps || 0;
             totalActivities += result.data.activities || 0;
           } catch(e) {
-            console.error('Batch ' + (i+1) + ' error:', e);
-            showToast('❌ Fehler bei Batch ' + (i+1) + ': ' + e.message);
-            return;
+            console.warn('Batch ' + (i+1) + ' übersprungen:', e.message);
+            // Weiter mit nächstem Batch statt abbrechen
           }
         }
         showToast('✓ ' + totalSteps + ' Tage Schritte, ' + totalActivities + ' Aktivitäten importiert');

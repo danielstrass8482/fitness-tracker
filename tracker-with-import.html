@@ -1197,7 +1197,7 @@
 
       // Add activity kcal for that day
       const dayActivity = (allTrainingEntries || trainingEntries)
-        .filter(e => e.source === 'garmin' && e.datum === date)
+        .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date)
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
       return base + Math.round(dayActivity);
@@ -1250,7 +1250,7 @@
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
         
-        trainingEntries.filter(e => e.source === 'garmin' && e.datum === wd).forEach(e => {
+        trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === wd).forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
@@ -1355,7 +1355,7 @@
       });
 
       // Garmin training
-      trainingEntries.filter(e => e.source === 'garmin').forEach(e => {
+      trainingEntries.filter(e => e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava').forEach(e => {
         if (!days[e.datum]) return;
         const calcKcal = calcActivityKcal(e);
         days[e.datum].act_kcal_calc += calcKcal;
@@ -1625,7 +1625,7 @@
           recentContainer.innerHTML = recent.map(e => {
             const calcKcal = calcActivityKcal(e);
             const label = typeLabels[e.typ] || e.typ;
-            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
+            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:#1a2a3a;color:#4285f4;padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
             return `
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
                 <div>
@@ -2130,7 +2130,7 @@
 
     function calcDayActivityKcal(date) {
       return trainingEntries
-        .filter(e => e.datum === date && e.source === 'garmin')
+        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava'))
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
     }
 
@@ -3092,7 +3092,7 @@
       };
       container.innerHTML = sorted.map(e => {
         const typeLabel = typeLabels[e.typ] || e.typ;
-        const isGarmin = e.source === 'garmin';
+        const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
         const variantLabel = e.variantLabel || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
         // Only calculate sets total for manual pullup/pushup entries
@@ -3483,13 +3483,21 @@
           allFoodLog[entry.date].push(entry);
         });
 
-        // Get all unique weeks
+        // Get all unique weeks from food log
         const allDates = Object.keys(allFoodLog).sort();
         const weeks = new Set(allDates.map(d => getISOWeek(d)));
 
-        // Also add weeks from training entries
+        // Add weeks from all training entries (including Google Fit)
         trainingEntries.forEach(e => {
           if (e.datum) weeks.add(getISOWeek(e.datum));
+        });
+
+        // Add tageslog entries (steps) to allFoodLog structure for aggregation
+        // These are in trainingEntries with typ='tageslog'
+        const tageslogByDate = {};
+        trainingEntries.filter(e => e.typ === 'tageslog' && e.datum).forEach(e => {
+          tageslogByDate[e.datum] = e;
+          weeks.add(getISOWeek(e.datum));
         });
 
         status.textContent = `⏳ Berechne ${weeks.size} Wochen...`;

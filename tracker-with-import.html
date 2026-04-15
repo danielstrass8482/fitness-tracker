@@ -1231,7 +1231,7 @@
       
       let kcal = 0, protein = 0, carbs = 0, fat = 0, days = 0;
       let act_kcal_calc = 0, act_kcal_garmin = 0, run_km = 0, trainings = 0;
-      let kcal_goal = 0;
+      let kcal_goal = 0, steps_total = 0, steps_activity = 0;
       let weights = [];
 
       weekDates.forEach(wd => {
@@ -1244,17 +1244,18 @@
             carbs += e.carbs || 0;
             fat += e.fat || 0;
           });
-          // Historical kcal goal for this day
           kcal_goal += calcHistoricalKcalGoal(wd);
         }
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
-        
+        if (dayLog?.steps) steps_total += parseInt(String(dayLog.steps).replace(/\D/g, '')) || 0;
+
         trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === wd).forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
           trainings++;
+          steps_activity += parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
         });
       });
 
@@ -1265,6 +1266,8 @@
         act_kcal_calc: Math.round(act_kcal_calc),
         act_kcal_garmin: Math.round(act_kcal_garmin),
         run_km: Math.round(run_km * 10) / 10, trainings,
+        steps_total, steps_activity,
+        steps_daily: Math.max(0, steps_total - steps_activity),
         weight: weights.length ? Math.round(weights.reduce((s,v) => s+v,0) / weights.length * 10) / 10 : null
       };
 
@@ -1397,7 +1400,9 @@
             act_kcal_garmin: stat.act_kcal_garmin || 0,
             run_km: stat.run_km || 0,
             trainings: stat.trainings || 0,
-            steps_total: 0, steps_activity: 0, steps_daily: 0,
+            steps_total: stat.steps_total || 0,
+            steps_activity: stat.steps_activity || 0,
+            steps_daily: stat.steps_daily || 0,
             kcal_goal: stat.kcal_goal || 0, week
           };
         }
@@ -3386,25 +3391,55 @@
     };
 
     window.syncGoogleFit = async function(fullSync = false) {
-      showToast('⏳ Google Fit wird synchronisiert...');
-      try {
-        const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
-        const result = await syncFn({ fullSync });
-        showToast('✓ ' + (result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert');
-        // Nur entries neu laden, nicht alles
-        const snap = await getDocs(userTrainingCol());
-        trainingEntries = [];
-        snap.forEach(d => trainingEntries.push(d.data()));
-        dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
-        window.trainingEntries = trainingEntries;
-        window.dayLogs = dayLogs;
-        renderTrainingHistory();
-        renderDashboard();
-        await loadGoogleFitStatus();
-      } catch(e) {
-        console.error('Google Fit sync error:', e);
-        showToast('❌ Sync fehlgeschlagen: ' + e.message);
+      const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
+
+      if (!fullSync) {
+        // Neue Daten: letzte 7 Tage
+        showToast('⏳ Google Fit wird synchronisiert...');
+        try {
+          const endMs = Date.now();
+          const startMs = endMs - (7 * 24 * 3600 * 1000);
+          const result = await syncFn({ startMs, endMs });
+          showToast('✓ ' + (result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert');
+        } catch(e) {
+          console.error('Google Fit sync error:', e);
+          showToast('❌ Sync fehlgeschlagen: ' + e.message);
+          return;
+        }
+      } else {
+        // Alles neu laden: 180 Tage in 30-Tage-Batches
+        const BATCH_DAYS = 30;
+        const totalDays = 180;
+        const batches = totalDays / BATCH_DAYS;
+        let totalSteps = 0, totalActivities = 0;
+
+        for (let i = 0; i < batches; i++) {
+          const endMs = Date.now() - (i * BATCH_DAYS * 24 * 3600 * 1000);
+          const startMs = endMs - (BATCH_DAYS * 24 * 3600 * 1000);
+          showToast('⏳ Lade Batch ' + (i + 1) + '/' + batches + '...');
+          try {
+            const result = await syncFn({ startMs, endMs });
+            totalSteps += result.data.steps || 0;
+            totalActivities += result.data.activities || 0;
+          } catch(e) {
+            console.error('Batch ' + (i+1) + ' error:', e);
+            showToast('❌ Fehler bei Batch ' + (i+1) + ': ' + e.message);
+            return;
+          }
+        }
+        showToast('✓ ' + totalSteps + ' Tage Schritte, ' + totalActivities + ' Aktivitäten importiert');
       }
+
+      // Entries neu laden
+      const snap = await getDocs(userTrainingCol());
+      trainingEntries = [];
+      snap.forEach(d => trainingEntries.push(d.data()));
+      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+      window.trainingEntries = trainingEntries;
+      window.dayLogs = dayLogs;
+      renderTrainingHistory();
+      renderDashboard();
+      await loadGoogleFitStatus();
     };
 
     window.disconnectGoogleFit = async function() {

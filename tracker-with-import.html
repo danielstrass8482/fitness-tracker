@@ -1255,7 +1255,9 @@
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
           trainings++;
-          steps_activity += parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
+          // Aktivitätsschritte nur für Laufen (nicht Gehen/Wandern)
+          const isRunAct = ['laufen', 'laufen_intervall', 'trail'].includes(e.typ);
+          steps_activity += isRunAct ? (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0) : 0;
         });
       });
 
@@ -1365,7 +1367,9 @@
         days[e.datum].act_kcal_garmin += e.kalorien || 0;
         days[e.datum].trainings++;
         if (e.typ === 'laufen') days[e.datum].run_km += parseFloat(e.distanz) || 0;
-        const actSteps = parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
+        // Nur Lauf-Aktivitäten zählen als Aktivitätsschritte (nicht Gehen/Wandern)
+        const isRunActivity = ['laufen'].includes(e.typ);
+        const actSteps = isRunActivity ? (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0) : 0;
         days[e.datum].steps_activity += actSteps;
       });
 

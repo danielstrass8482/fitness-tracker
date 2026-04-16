@@ -377,33 +377,48 @@
       </div>
       
       <!-- Daily Summary -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:30px;">
-        <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px;">
+        <div style="background:var(--surface);padding:20px;border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
           <div style="font-size:28px;font-weight:600;margin-bottom:4px;" id="daily-kcal">0</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:10px;" id="daily-kcal-goal">/ 0 kcal</div>
-          <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
-            <div id="bar-kcal" style="height:100%;width:0%;background:var(--primary);border-radius:4px;transition:width 0.4s;"></div>
-          </div>
+          <div style="font-size:13px;color:var(--muted);" id="daily-kcal-goal">/ 0 kcal</div>
         </div>
-        <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
+        <div style="background:var(--surface);padding:20px;border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
           <div style="font-size:28px;font-weight:600;margin-bottom:4px;color:#4a9eff;" id="daily-protein">0g</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:10px;" id="daily-protein-goal">Protein</div>
-          <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
-            <div id="bar-protein" style="height:100%;width:0%;background:#4a9eff;border-radius:4px;transition:width 0.4s;"></div>
-          </div>
+          <div style="font-size:13px;color:var(--muted);" id="daily-protein-goal">Protein</div>
         </div>
-        <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
+        <div style="background:var(--surface);padding:20px;border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
           <div style="font-size:28px;font-weight:600;margin-bottom:4px;color:#ffd93d;" id="daily-carbs">0g</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:10px;" id="daily-carbs-goal">Kohlenhydrate</div>
-          <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
-            <div id="bar-carbs" style="height:100%;width:0%;background:#ffd93d;border-radius:4px;transition:width 0.4s;"></div>
+          <div style="font-size:13px;color:var(--muted);" id="daily-carbs-goal">Kohlenhydrate</div>
+        </div>
+        <div style="background:var(--surface);padding:20px;border-radius:12px 12px 0 0;border:1px solid var(--border);border-bottom:none;">
+          <div style="font-size:28px;font-weight:600;margin-bottom:4px;color:#ff6b9d;" id="daily-fat">0g</div>
+          <div style="font-size:13px;color:var(--muted);" id="daily-fat-goal">Fett</div>
+        </div>
+      </div>
+      <!-- Progress bars spanning full width below tiles -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:30px;">
+        <div style="background:var(--surface);padding:10px 20px 14px;border-radius:0 0 12px 12px;border:1px solid var(--border);border-top:none;">
+          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
+            <div id="bar-kcal" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+            <span id="bar-kcal-label" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:white;text-shadow:0 0 3px #000;">0%</span>
           </div>
         </div>
-        <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:28px;font-weight:600;margin-bottom:4px;color:#ff6b9d;" id="daily-fat">0g</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:10px;" id="daily-fat-goal">Fett</div>
-          <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
-            <div id="bar-fat" style="height:100%;width:0%;background:#ff6b9d;border-radius:4px;transition:width 0.4s;"></div>
+        <div style="background:var(--surface);padding:10px 20px 14px;border-radius:0 0 12px 12px;border:1px solid var(--border);border-top:none;">
+          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
+            <div id="bar-protein" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+            <span id="bar-protein-label" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:white;text-shadow:0 0 3px #000;">0%</span>
+          </div>
+        </div>
+        <div style="background:var(--surface);padding:10px 20px 14px;border-radius:0 0 12px 12px;border:1px solid var(--border);border-top:none;">
+          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
+            <div id="bar-carbs" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+            <span id="bar-carbs-label" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:white;text-shadow:0 0 3px #000;">0%</span>
+          </div>
+        </div>
+        <div style="background:var(--surface);padding:10px 20px 14px;border-radius:0 0 12px 12px;border:1px solid var(--border);border-top:none;">
+          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
+            <div id="bar-fat" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+            <span id="bar-fat-label" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:white;text-shadow:0 0 3px #000;">0%</span>
           </div>
         </div>
       </div>
@@ -2219,34 +2234,42 @@
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
       const todayGoal = calcHistoricalKcalGoal(currentDate);
-      const goalData = calcDailyKcalGoal(currentDate); // for breakdown display
-      const goalText = goalData.activity > 0
-        ? `/ ${fmt(todayGoal)} kcal (Basis ${fmt(goalData.base)} + ${fmt(goalData.activity)} Aktivität)`
-        : `/ ${fmt(todayGoal)} kcal`;
+      const goalData = calcDailyKcalGoal(currentDate);
+      // Alltagsschritte-Kalorien
+      const dayLogEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
+      const totalStepsToday = dayLogEntry?.steps || 0;
+      const actStepsToday = trainingEntries
+        .filter(e => (e.source === 'googlefit' || e.source === 'garmin') && e.datum === currentDate && e.typ === 'laufen')
+        .reduce((s, e) => s + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
+      const dailyStepsKcal = Math.round(Math.max(0, totalStepsToday - actStepsToday) * 0.04);
+      let goalText = `/ ${fmt(todayGoal)} kcal (Basis ${fmt(goalData.base)}`;
+      if (goalData.activity > 0) goalText += ` + ${fmt(goalData.activity)} Aktivität`;
+      if (dailyStepsKcal > 0) goalText += ` + ${fmt(dailyStepsKcal)} Alltag`;
+      goalText += ')';
       document.getElementById('daily-kcal-goal').textContent = goalText;
 
       // Update progress bars
-      const kcalPct = todayGoal > 0 ? Math.min(100, Math.round(totalKcal / todayGoal * 100)) : 0;
+      const kcalPct = todayGoal > 0 ? Math.round(totalKcal / todayGoal * 100) : 0;
       const proteinGoal = settings.proteinGoal || 150;
       const carbsGoal = settings.carbsGoal || 300;
       const fatGoal = settings.fatGoal || 80;
-      const proteinPct = Math.min(100, Math.round(totalProtein / proteinGoal * 100));
-      const carbsPct = Math.min(100, Math.round(totalCarbs / carbsGoal * 100));
-      const fatPct = Math.min(100, Math.round(totalFat / fatGoal * 100));
+      const proteinPct = proteinGoal > 0 ? Math.round(totalProtein / proteinGoal * 100) : 0;
+      const carbsPct = carbsGoal > 0 ? Math.round(totalCarbs / carbsGoal * 100) : 0;
+      const fatPct = fatGoal > 0 ? Math.round(totalFat / fatGoal * 100) : 0;
 
-      // Color: green up to 90%, yellow 90-100%, red >100%
-      const barColor = (pct) => pct > 100 ? '#ef4444' : pct > 90 ? '#f97316' : null;
-      const setBar = (id, pct, defaultColor) => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.style.width = pct + '%';
-          el.style.background = barColor(pct) || defaultColor;
+      const setBar = (id, pct) => {
+        const bar = document.getElementById(id);
+        const label = document.getElementById(id + '-label');
+        if (bar) {
+          bar.style.width = Math.min(100, pct) + '%';
+          bar.style.background = pct > 100 ? '#ef4444' : '#22c55e';
         }
+        if (label) label.textContent = pct + '%';
       };
-      setBar('bar-kcal', kcalPct, 'var(--primary)');
-      setBar('bar-protein', proteinPct, '#4a9eff');
-      setBar('bar-carbs', carbsPct, '#ffd93d');
-      setBar('bar-fat', fatPct, '#ff6b9d');
+      setBar('bar-kcal', kcalPct);
+      setBar('bar-protein', proteinPct);
+      setBar('bar-carbs', carbsPct);
+      setBar('bar-fat', fatPct);
       
       // Makro goals in tiles
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `/ ${fmt(proteinGoal)}g Protein` : 'Protein';
@@ -3141,12 +3164,15 @@
         yoga: '🧘 Yoga', crosstraining: '⚡ Crosstraining', cardio: '❤️ Cardio'
       };
       container.innerHTML = sorted.map(e => {
-        const typeLabel = typeLabels[e.typ] || e.typ;
+        // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
+        const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
+        const typ = e.typ || oldTypeMap[e.type] || e.type || '';
+        const typeLabel = typeLabels[typ] || typ;
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
-        const variantLabel = e.variantLabel || e.variant || '';
+        const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
         // Only calculate sets total for manual pullup/pushup entries
-        const isManual = e.typ === 'pullups' || e.typ === 'pushups';
+        const isManual = typ === 'pullups' || typ === 'pushups';
         const setsTotal = isManual && e.sets ? e.sets.split('-').reduce((s, n) => s + (parseInt(n) || 0), 0) : 0;
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
         return `

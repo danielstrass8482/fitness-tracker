@@ -2932,8 +2932,20 @@
       document.getElementById('add-food-title').textContent = 'Eintrag bearbeiten';
       document.getElementById('add-food-modal').style.display = 'block';
       
-      // Find food
-      selectedFood = foodDB.find(f => String(f.id) === String(entry.foodId));
+      // Find food by ID or name fallback
+      selectedFood = foodDB.find(f => String(f.id) === String(entry.foodId))
+        || foodDB.find(f => f.name === entry.name);
+      if (!selectedFood && entry.name) {
+        // Create temporary food from entry data for editing
+        selectedFood = {
+          id: entry.foodId || entry.name,
+          name: entry.name,
+          kcal: entry.amount > 0 ? Math.round(entry.kcal / entry.amount * 100) : 0,
+          protein: entry.amount > 0 ? Math.round(entry.protein / entry.amount * 1000) / 10 : 0,
+          carbs: entry.amount > 0 ? Math.round(entry.carbs / entry.amount * 1000) / 10 : 0,
+          fat: entry.amount > 0 ? Math.round(entry.fat / entry.amount * 1000) / 10 : 0,
+        };
+      }
       if (selectedFood) {
         document.getElementById('selected-food-name').textContent = selectedFood.name;
         document.getElementById('food-amount').value = entry.amount || 100;
@@ -3712,6 +3724,8 @@
         let localFoodLog = {};
         let localTraining = [];
         let localDayLogs = [];
+        let newFoodsFromDiary = [];
+        let newDiaryEntries = [];
 
         if (needsFoodDB) {
           const foodSnap = await getDocs(userFoodCol());
@@ -4170,8 +4184,11 @@
         
         const [datePart, timePart] = dateTime.split(' ');
         const [day, month, year] = datePart.split('.');
-        const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        const time = timePart || '00:00';
+        // FDDB exports times in UTC – convert to Europe/Berlin local time
+        const utcDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${(timePart || '00:00')}:00Z`;
+        const localDate = new Date(utcDateStr);
+        const date = localDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+        const time = localDate.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
         
         const amountMatch = nameWithAmount.match(/^([\d.,]+)\s*(g|ml)\s+(.+)$/);
         let foodName = nameWithAmount;

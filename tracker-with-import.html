@@ -1669,7 +1669,9 @@
         } else {
           recentContainer.innerHTML = recent.map(e => {
             const calcKcal = calcActivityKcal(e);
-            const label = typeLabels[e.typ] || e.typ;
+            const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
+            const typ = e.typ || oldTypeMap[e.type] || e.type || '';
+            const label = typeLabels[typ] || typ;
             const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:#1a2a3a;color:#4285f4;padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
             return `
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">

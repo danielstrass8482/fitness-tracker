@@ -3798,11 +3798,13 @@
           const text = await importDiaryFile.text();
           const parsed = parseDiary(text);
           
-          // Merge FoodDB from diary
+          // Merge FoodDB from diary - track only NEW foods
           const existingNames = new Set(localFoodDB.map(f => f.name));
+          const newFoodsFromDiary = [];
           parsed.foodDB.forEach(food => {
             if (!existingNames.has(food.name)) {
               localFoodDB.push(food);
+              newFoodsFromDiary.push(food);
               existingNames.add(food.name);
             }
           });
@@ -3814,12 +3816,14 @@
             existingLogKeys.add(`${e.date}|${e.name}|${e.time}|${e.amount}`);
           });
           let newEntryCount = 0;
+          const newDiaryEntries = [];
           Object.entries(parsed.foodLog).forEach(([date, entries]) => {
             if (!localFoodLog[date]) localFoodLog[date] = [];
             entries.forEach(entry => {
               const key = `${entry.date}|${entry.name}|${entry.time}|${entry.amount}`;
               if (!existingLogKeys.has(key)) {
                 localFoodLog[date].push(entry);
+                newDiaryEntries.push(entry);
                 existingLogKeys.add(key);
                 newEntryCount++;
               }
@@ -3857,16 +3861,18 @@
         logImport('💾 Speichere zu Firebase...');
 
         // Nur die Collections hochladen, die auch importiert wurden
-        if (needsFoodDB && localFoodDB.length > 0) {
+        // Only upload foods from explicit FoodDB file OR new foods extracted from diary
+        const foodsToUpload = importFoodDBFile ? localFoodDB : (newFoodsFromDiary || []);
+        if (foodsToUpload.length > 0) {
           let uploadedFoods = 0;
-          for (const food of localFoodDB) {
+          for (const food of foodsToUpload) {
             await setDoc(doc(userFoodCol(), String(food.id)), food);
             uploadedFoods++;
             if (uploadedFoods % 50 === 0) {
-              updateImportProgress(70 + Math.round((uploadedFoods / localFoodDB.length) * 5), `Foods: ${uploadedFoods}/${localFoodDB.length}`);
+              updateImportProgress(70 + Math.round((uploadedFoods / foodsToUpload.length) * 5), `Foods: ${uploadedFoods}/${foodsToUpload.length}`);
             }
           }
-          logImport(`✓ ${localFoodDB.length} Foods gespeichert`, 'success');
+          logImport(`✓ ${foodsToUpload.length} Foods gespeichert`, 'success');
         }
 
         if (needsRecipes && localRecipes.length > 0) {
@@ -3876,24 +3882,25 @@
           logImport(`✓ ${localRecipes.length} Rezepte gespeichert`, 'success');
         }
 
-        if (needsDiary) {
-          const allEntries = Object.values(localFoodLog).flat();
+        if (needsDiary && newDiaryEntries.length > 0) {
           let uploadedEntries = 0;
           const BATCH_SIZE = 500;
-          for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
-            const batch = allEntries.slice(i, i + BATCH_SIZE);
+          for (let i = 0; i < newDiaryEntries.length; i += BATCH_SIZE) {
+            const batch = newDiaryEntries.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(entry => setDoc(doc(userLogCol(), String(entry.id)), entry)));
             uploadedEntries += batch.length;
             updateImportProgress(
-              75 + Math.round((uploadedEntries / allEntries.length) * 20),
-              `Diary: ${uploadedEntries}/${allEntries.length}`
+              75 + Math.round((uploadedEntries / newDiaryEntries.length) * 20),
+              `Diary: ${uploadedEntries}/${newDiaryEntries.length}`
             );
-            logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(allEntries.length / BATCH_SIZE)}: ${fmt(uploadedEntries)} Einträge hochgeladen`);
-            if (i + BATCH_SIZE < allEntries.length) {
+            logImport(`  Batch ${Math.ceil(uploadedEntries / BATCH_SIZE)}/${Math.ceil(newDiaryEntries.length / BATCH_SIZE)}: ${fmt(uploadedEntries)} Einträge hochgeladen`);
+            if (i + BATCH_SIZE < newDiaryEntries.length) {
               await new Promise(r => setTimeout(r, 150));
             }
           }
-          logImport(`✓ ${allEntries.length} Tagebuch-Einträge gespeichert`, 'success');
+          logImport(`✓ ${newDiaryEntries.length} neue Tagebuch-Einträge gespeichert`, 'success');
+        } else if (needsDiary) {
+          logImport('✓ Keine neuen Tagebuch-Einträge (alles bereits vorhanden)', 'success');
         }
 
         if (needsTraining && (localTraining.length > 0 || localDayLogs.length > 0)) {

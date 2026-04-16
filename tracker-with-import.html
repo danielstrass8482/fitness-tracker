@@ -1222,9 +1222,10 @@
 
       const base = Math.round(bmr * 1.375);
 
-      // Aktivitätskalorien aus Sport-Sessions
+      // Aktivitätskalorien aus Sport-Sessions (nicht Gehen/Wandern → die gehen in Alltagskalorien)
       const dayActivity = (allTrainingEntries || trainingEntries)
-        .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date)
+        .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
+          && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
       // Alltagskalorien aus Alltagsschritten (Schritte gesamt - Aktivitätsschritte) × 0,04 kcal
@@ -1286,7 +1287,8 @@
         if (dayLog?.weight) weights.push(dayLog.weight);
         if (dayLog?.steps) steps_total += parseInt(String(dayLog.steps).replace(/\D/g, '')) || 0;
 
-        trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === wd).forEach(e => {
+        trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
+          && e.datum === wd && e.typ !== 'gehen' && e.typ !== 'wandern').forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
@@ -2177,7 +2179,8 @@
 
     function calcDayActivityKcal(date) {
       return trainingEntries
-        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava'))
+        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
+          && e.typ !== 'gehen' && e.typ !== 'wandern') // Gehen/Wandern → Alltagskalorien, nicht Aktivität
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
     }
 

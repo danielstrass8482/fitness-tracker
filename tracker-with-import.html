@@ -2249,9 +2249,6 @@
       setBar('bar-fat', fatPct, '#ff6b9d');
       
       // Makro goals in tiles
-      const proteinGoal = settings.proteinGoal || 0;
-      const carbsGoal = settings.carbsGoal || 0;
-      const fatGoal = settings.fatGoal || 0;
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `/ ${fmt(proteinGoal)}g Protein` : 'Protein';
       document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0 ? `/ ${fmt(carbsGoal)}g Kohlenhydrate` : 'Kohlenhydrate';
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `/ ${fmt(fatGoal)}g Fett` : 'Fett';

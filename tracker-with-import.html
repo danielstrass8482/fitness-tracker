@@ -3817,7 +3817,7 @@
           
           // Merge FoodDB from diary - track only NEW foods
           const existingNames = new Set(localFoodDB.map(f => f.name));
-          const newFoodsFromDiary = [];
+          newFoodsFromDiary = [];
           parsed.foodDB.forEach(food => {
             if (!existingNames.has(food.name)) {
               localFoodDB.push(food);
@@ -3833,7 +3833,7 @@
             existingLogKeys.add(`${e.date}|${e.name}|${e.time}|${e.amount}`);
           });
           let newEntryCount = 0;
-          const newDiaryEntries = [];
+          newDiaryEntries = [];
           Object.entries(parsed.foodLog).forEach(([date, entries]) => {
             if (!localFoodLog[date]) localFoodLog[date] = [];
             entries.forEach(entry => {

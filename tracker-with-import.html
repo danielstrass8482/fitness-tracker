@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Training & Ernährung</title>
+  <title>Fuelofit</title>
+  <meta name="description" content="Dein persönlicher Fitness & Ernährungs-Tracker">
+  <meta name="theme-color" content="#1e3a5f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fuelofit">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3053,6 +3060,27 @@
         if (target === 'daten' && userId) {
           loadGoogleFitStatus();
         }
+        if (target === 'ernaehrung' && userId) {
+          // Silent background sync for last 2 days
+          const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
+          if (gfitSnap.exists()) {
+            try {
+              const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
+              const endMs = Date.now();
+              const startMs = endMs - (2 * 24 * 3600 * 1000);
+              syncFn({ startMs, endMs }).then(async () => {
+                // Reload only training entries (steps)
+                const snap = await getDocs(userTrainingCol());
+                trainingEntries = [];
+                snap.forEach(d => trainingEntries.push(d.data()));
+                dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+                window.trainingEntries = trainingEntries;
+                window.dayLogs = dayLogs;
+                renderFoodLog(); // Refresh kcal goal
+              }).catch(() => {}); // Silent fail
+            } catch(e) {}
+          }
+        }
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
           loadCustomTypes();
@@ -3253,11 +3281,46 @@
             <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${e.sets || ''}${setsTotal > 0 ? ` <span style="color:var(--primary);">(${setsTotal} gesamt)</span>` : ''}${(e.act_kcal_calc > 0 || e.kalorien > 0) ? ` · <span style="color:#f97316;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}</div>
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
-          <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+          <div style="display:flex;gap:6px;">
+            ${!isGarmin ? `<button onclick="editTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:13px;">Ändern</button>` : ''}
+            <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+          </div>
         </div>
       `}).join('');
     }
     
+
+    window.editTraining = function(id) {
+      const entry = trainingEntries.find(e => String(e.id) === String(id));
+      if (!entry) return;
+
+      // Fill form with existing values
+      document.getElementById('training-date').value = entry.datum || '';
+      const typeSelect = document.getElementById('training-type');
+      typeSelect.value = entry.typ || entry.type || '';
+      updateVariantOptions();
+      const variantSelect = document.getElementById('training-variant');
+      variantSelect.value = entry.variant || entry.variante || '';
+      document.getElementById('training-sets').value = entry.sets || '';
+      document.getElementById('training-notiz').value = entry.notiz || '';
+
+      // Change button to update mode
+      const btn = document.querySelector('[onclick="saveTrainingEntry()"]');
+      if (btn) {
+        btn.textContent = 'Training aktualisieren';
+        btn.onclick = async () => {
+          await deleteDoc(doc(userTrainingCol(), String(id)));
+          trainingEntries = trainingEntries.filter(e => String(e.id) !== String(id));
+          btn.textContent = 'Training speichern';
+          btn.onclick = saveTrainingEntry;
+          await saveTrainingEntry();
+        };
+      }
+      // Scroll to form
+      document.getElementById('training-date').scrollIntoView({ behavior: 'smooth' });
+      showToast('Eintrag zum Bearbeiten geladen');
+    };
+
     window.deleteTraining = async function(id) {
       if (!confirm('Training löschen?')) return;
       
@@ -4401,6 +4464,53 @@
       return { foodDB, foodLog };
     }
     
+  </script>
+  <script>
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          console.log('SW registered:', reg.scope);
+        }).catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+
+    // Generate PWA icons from SVG on first load
+    function generateIcons() {
+      const iconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+        <circle cx="96" cy="96" r="90" fill="#1e3a5f"/>
+        <path d="M96 6 A90 90 0 0 1 96 186 A45 45 0 0 1 96 96 A45 45 0 0 0 96 6 Z" fill="#c2410c"/>
+        <circle cx="96" cy="96" r="90" fill="none" stroke="#0a0f1e" stroke-width="3"/>
+        <g transform="translate(78,51)">
+          <rect x="-2" y="-24" width="4" height="12" rx="2" fill="#7c2d12"/>
+          <path d="M2 -21 Q16 -30 12 -14 Q0 -16 2 -21Z" fill="#16a34a"/>
+          <path d="M-20 -7 Q-26 -9 -24 9 Q-19 28 0 34 Q19 28 24 9 Q26 -9 20 -7 Q14 -16 0 -11 Q-14 -16 -20 -7Z" fill="#f97316"/>
+        </g>
+        <g transform="translate(112,141)">
+          <rect x="-44" y="-3" width="88" height="6" rx="3" fill="#bfdbfe"/>
+          <rect x="-34" y="-10" width="7" height="20" rx="2" fill="#93c5fd"/>
+          <rect x="-27" y="-20" width="12" height="40" rx="3" fill="#1d4ed8"/>
+          <rect x="15" y="-20" width="12" height="40" rx="3" fill="#1d4ed8"/>
+          <rect x="27" y="-10" width="7" height="20" rx="2" fill="#93c5fd"/>
+        </g>
+      </svg>`;
+
+      [192, 512].forEach(size => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        const blob = new Blob([iconSVG], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, size, size);
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      });
+    }
+    generateIcons();
   </script>
 </body>
 </html>

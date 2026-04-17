@@ -315,6 +315,7 @@
             <select id="training-type" onchange="updateVariantOptions()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
               <option value="pullups">Pull-ups</option>
               <option value="pushups">Push-ups</option>
+              <option value="lunges">Lunges</option>
             </select>
           </div>
 
@@ -338,6 +339,16 @@
           </div>
           
           <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
+        </div>
+
+        <!-- Eigene Trainingsarten -->
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-top:20px;">
+          <h3 style="margin-bottom:15px;">Eigene Trainingsarten</h3>
+          <div id="custom-types-list" style="margin-bottom:15px;"></div>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <button class="btn" onclick="addCustomType()" style="width:auto;padding:10px 16px;">+ Hinzufügen</button>
+          </div>
         </div>
         
         <!-- Day Log -->
@@ -467,6 +478,15 @@
             <div style="display:flex;gap:4px;">
               <button class="dash-btn active" data-chart="line" onclick="setDashChart('line',this)">Linie</button>
               <button class="dash-btn" data-chart="bar" onclick="setDashChart('bar',this)">Balken</button>
+            </div>
+          </div>
+
+          <!-- Summe / Schnitt -->
+          <div id="dash-agg-control" style="display:none;">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">WERTE</div>
+            <div style="display:flex;gap:4px;">
+              <button class="dash-btn active" id="dash-sum-btn" onclick="setDashAgg('sum',this)">Summe</button>
+              <button class="dash-btn" id="dash-avg-btn" onclick="setDashAgg('avg',this)">Schnitt</button>
             </div>
           </div>
         </div>
@@ -665,30 +685,7 @@
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
         
-        <!-- Google Fit Integration -->
-        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-            <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;">❤️</div>
-            <h3>Google Fit Integration</h3>
-          </div>
 
-          <div id="gfit-disconnected">
-            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
-            <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
-          </div>
-
-          <div id="gfit-connected" style="display:none;">
-            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
-            </div>
-            <div style="display:flex;gap:10px;">
-              <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
-              <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
-            </div>
-            <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
-          </div>
-        </div>
 
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:15px;color:var(--danger);">⚠️ Danger Zone</h3>
@@ -775,6 +772,29 @@
           </div>
           
           <button id="start-import-btn" class="btn" onclick="startImport()" disabled style="width:100%;">🚀 Import starten</button>
+        </div>
+
+        <!-- Google Fit Integration -->
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+            <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
+            <h3 style="margin:0;">Google Fit</h3>
+          </div>
+          <div id="gfit-disconnected">
+            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
+            <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
+          </div>
+          <div id="gfit-connected" style="display:none;">
+            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
+              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
+              <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
+            </div>
+            <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
+          </div>
         </div>
 
         <!-- Wochendaten aggregieren -->
@@ -1084,7 +1104,8 @@
     
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
-    const userFoodCol = () => collection(db, 'users', userId, 'foods');
+    const userFoodCol = () => collection(db, 'foods');           // global shared
+    const globalTrainingTypesCol = () => collection(db, 'trainingTypes'); // global shared
     const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
     const userLogCol = () => collection(db, 'users', userId, 'logEntries');
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
@@ -1330,6 +1351,7 @@
     let dashRange = '1M';
     let dashView = 'days';
     let dashChart = 'line';
+    let dashAgg = 'sum'; // 'sum' or 'avg'
     let dashChartInstance = null;
 
     // Attach select listeners after functions are defined
@@ -1346,8 +1368,18 @@
       el.classList.add('active');
       renderDashboard();
     };
+    window.setDashAgg = function(agg, el) {
+      dashAgg = agg;
+      document.querySelectorAll('#dash-sum-btn, #dash-avg-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      renderDashboard();
+    };
+
     window.setDashView = function(v, el) {
       dashView = v;
+      // Show Summe/Schnitt toggle only for weeks/months
+      const aggControl = document.getElementById('dash-agg-control');
+      if (aggControl) aggControl.style.display = v === 'days' ? 'none' : 'block';
       document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
       el.classList.add('active');
       renderDashboard();
@@ -1482,13 +1514,20 @@
       const weekData = buildWeekIndex(fromDate, toDate);
 
       if (dashView === 'weeks') {
+        // For weeks: if avg mode, divide by number of days in that week that have data
         return Object.entries(weekData)
           .sort(([a],[b]) => a.localeCompare(b))
           .map(([date, d]) => {
             const week = d.week || '';
             const [yr, wn] = week.split('-W');
             const label = wn ? `KW${parseInt(wn)}/${String(yr).slice(2)}` : date.slice(5);
-            return { label, value: d[variable] ?? null };
+            const rawVal = d[variable] ?? null;
+            if (rawVal === null) return { label, value: null };
+            const forceAvg = variable === 'weight';
+            const useAvg = forceAvg || dashAgg === 'avg';
+            const days = d.days || 7;
+            const value = useAvg && days > 0 ? Math.round(rawVal / days * 10) / 10 : rawVal;
+            return { label, value };
           });
       }
 
@@ -1503,8 +1542,9 @@
 
       return Object.entries(months).sort(([a],[b]) => a.localeCompare(b)).map(([key, vals]) => {
         if (vals.length === 0) return { label: key, value: null };
-        const isAvg = variable === 'weight';
-        const value = isAvg
+        const forceAvg = variable === 'weight';
+        const useAvg = forceAvg || dashAgg === 'avg';
+        const value = useAvg
           ? Math.round(vals.reduce((s,v) => s+v,0) / vals.length * 10) / 10
           : Math.round(vals.reduce((s,v) => s+v,0) * 10) / 10;
         return { label: key, value };
@@ -1655,7 +1695,7 @@
 
       // ── Letzte Aktivitäten ─────────────────────────────────────────────
       const typeLabels = {
-        pullups: 'Pull-ups', pushups: 'Push-ups',
+        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
         schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining'
@@ -3006,10 +3046,14 @@
           requestAnimationFrame(() => renderDashboard());
         }
         if (target === 'einstellungen' && userId) {
+          // settings tab opened
+        }
+        if (target === 'daten' && userId) {
           loadGoogleFitStatus();
         }
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
+          loadCustomTypes();
           getDocs(userTrainingCol()).then(snap => {
             trainingEntries = [];
             snap.forEach(d => trainingEntries.push(d.data()));
@@ -3049,6 +3093,13 @@
           <option value="regulaer">Regulär</option>
           <option value="reverse">Reverse</option>
           <option value="hammer">Hammer Grip</option>`;
+      } else if (type === 'lunges') {
+        variantSel.innerHTML = `
+          <option value="normal">Normal</option>
+          <option value="elevated_feet">Elevated Feet</option>
+          <option value="weighted">Mit Gewichten</option>`;
+      } else if (type.startsWith('custom_')) {
+        variantSel.innerHTML = '<option value="">—</option>';
       } else {
         variantSel.innerHTML = `
           <option value="weit">Weit</option>
@@ -3071,7 +3122,8 @@
 
       const variantLabels = {
         regulaer: 'Regulär', reverse: 'Reverse', hammer: 'Hammer Grip',
-        weit: 'Weit', eng: 'Eng', diamond: 'Diamond'
+        weit: 'Weit', eng: 'Eng', diamond: 'Diamond',
+        normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten'
       };
       
       const entry = {
@@ -3174,7 +3226,7 @@
       }
       
       const typeLabels = {
-        pullups: 'Pull-ups', pushups: 'Push-ups',
+        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
         schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining',
@@ -3540,6 +3592,79 @@
       } catch(e) {
         showToast('❌ Fehler: ' + e.message);
       }
+    };
+
+
+    // ── Eigene Trainingsarten ─────────────────────────────────────────────────
+    let customTrainingTypes = [];
+
+    async function loadCustomTypes() {
+      try {
+        const snap = await getDocs(globalTrainingTypesCol());
+        customTrainingTypes = [];
+        snap.forEach(d => customTrainingTypes.push({ id: d.id, ...d.data() }));
+        customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+        renderCustomTypes();
+        updateTrainingTypeSelect();
+      } catch(e) { console.warn('Load custom types error:', e); }
+    }
+
+    function renderCustomTypes() {
+      const container = document.getElementById('custom-types-list');
+      if (!container) return;
+      if (customTrainingTypes.length === 0) {
+        container.innerHTML = '<div style="font-size:13px;color:var(--muted);">Noch keine eigenen Arten</div>';
+        return;
+      }
+      container.innerHTML = customTrainingTypes.map((t, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:14px;">${t.label}</span>
+          <button onclick="removeCustomType(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function updateTrainingTypeSelect() {
+      const select = document.getElementById('training-type');
+      if (!select) return;
+      // Remove old custom options
+      Array.from(select.options).forEach(o => { if (o.dataset.custom) o.remove(); });
+      // Add current custom types
+      if (customTrainingTypes.length > 0) {
+        const group = document.createElement('optgroup');
+        group.label = 'Eigene';
+        customTrainingTypes.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.label;
+          opt.dataset.custom = '1';
+          group.appendChild(opt);
+        });
+        select.appendChild(group);
+      }
+    }
+
+    window.addCustomType = async function() {
+      const input = document.getElementById('custom-type-name');
+      const name = input.value.trim();
+      if (!name) { showToast('Bitte einen Namen eingeben'); return; }
+      const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      if (customTrainingTypes.find(t => t.id === id)) { showToast('Art existiert bereits'); return; }
+      await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
+      customTrainingTypes.push({ id, label: name });
+      customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+      input.value = '';
+      renderCustomTypes();
+      updateTrainingTypeSelect();
+      showToast('✓ ' + name + ' hinzugefügt');
+    };
+
+    window.removeCustomType = async function(index) {
+      const type = customTrainingTypes[index];
+      await deleteDoc(doc(globalTrainingTypesCol(), type.id));
+      customTrainingTypes.splice(index, 1);
+      renderCustomTypes();
+      updateTrainingTypeSelect();
     };
 
     window.confirmDeleteAllData = async function() {

@@ -12,6 +12,12 @@
   <meta name="apple-mobile-web-app-title" content="Fuelofit">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <script>
+    function handleLogin() {
+      // Will be overridden by the main app script
+      setTimeout(handleLogin, 200);
+    }
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3045,7 +3051,7 @@
     
     // Tab Switching
     document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+      tab.addEventListener('click', async () => {
         const target = tab.dataset.tab;
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));

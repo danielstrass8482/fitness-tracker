@@ -4184,11 +4184,17 @@
         
         const [datePart, timePart] = dateTime.split(' ');
         const [day, month, year] = datePart.split('.');
-        // FDDB exports in UTC – subtract 2h for Europe/Berlin (CEST)
-        const utcDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${(timePart || '00:00')}:00Z`;
-        const localDate = new Date(utcDateStr);
-        const date = localDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-        const time = localDate.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+        // FDDB CSV has +2h offset vs local time – subtract 2h via pure arithmetic
+        const rawTime = timePart || '00:00';
+        const [rh, rm] = rawTime.split(':').map(Number);
+        const totalMinutes = rh * 60 + rm - 120; // subtract 2 hours
+        const adjHours = (Math.floor(totalMinutes / 60) % 24 + 24) % 24;
+        const adjMins = ((totalMinutes % 60) + 60) % 60;
+        const dayOffset = totalMinutes < 0 ? -1 : 0;
+        const time = String(adjHours).padStart(2,'0') + ':' + String(adjMins).padStart(2,'0');
+        const rawDate = new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`);
+        rawDate.setDate(rawDate.getDate() + dayOffset);
+        const date = rawDate.toISOString().split('T')[0];
         
         const amountMatch = nameWithAmount.match(/^([\d.,]+)\s*(g|ml)\s+(.+)$/);
         let foodName = nameWithAmount;

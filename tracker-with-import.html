@@ -691,6 +691,8 @@
           <h3 style="margin-bottom:15px;color:var(--danger);">⚠️ Danger Zone</h3>
           <p style="color:var(--muted);margin-bottom:20px;font-size:14px;">Diese Aktionen können nicht rückgängig gemacht werden!</p>
           <button class="btn" onclick="confirmDeleteAllData()" style="background:var(--danger);border:1px solid var(--danger);width:100%;">Alle Daten löschen</button>
+          <button class="btn" onclick="migrateFoodsToGlobal()" style="margin-top:10px;background:#7c3aed;border:1px solid #7c3aed;width:100%;">🔄 Foods zu globaler DB migrieren (einmalig)</button>
+          <div id="migrate-status" style="font-size:13px;color:var(--muted);margin-top:8px;"></div>
         </div>
       </div>
     </div>
@@ -3665,6 +3667,36 @@
       customTrainingTypes.splice(index, 1);
       renderCustomTypes();
       updateTrainingTypeSelect();
+    };
+
+
+    window.migrateFoodsToGlobal = async function() {
+      if (!confirm('Foods von user-Collection in globale DB migrieren? Nur einmalig nötig.')) return;
+      const status = document.getElementById('migrate-status');
+      status.textContent = '⏳ Lade user Foods...';
+      try {
+        // Load from old user collection
+        const oldCol = collection(db, 'users', userId, 'foods');
+        const snap = await getDocs(oldCol);
+        status.textContent = `⏳ Migriere ${snap.size} Foods...`;
+        let count = 0;
+        for (const d of snap.docs) {
+          await setDoc(doc(userFoodCol(), d.id), d.data());
+          count++;
+          if (count % 100 === 0) status.textContent = `⏳ ${count}/${snap.size} migriert...`;
+        }
+        status.textContent = `✅ ${count} Foods erfolgreich migriert!`;
+        showToast(`✓ ${count} Foods in globale DB migriert`);
+        // Reload foodDB
+        const newSnap = await getDocs(userFoodCol());
+        foodDB = [];
+        newSnap.forEach(d => { const data = d.data(); if (!data.id) data.id = d.id; foodDB.push(data); });
+        window.foodDB = foodDB;
+        renderDataStats();
+      } catch(e) {
+        status.textContent = '❌ Fehler: ' + e.message;
+        console.error('Migration error:', e);
+      }
     };
 
     window.confirmDeleteAllData = async function() {

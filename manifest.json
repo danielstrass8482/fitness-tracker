@@ -2,7 +2,7 @@
   "name": "Fuelofit",
   "short_name": "Fuelofit",
   "description": "Dein pers\u00f6nlicher Fitness & Ern\u00e4hrungs-Tracker",
-  "start_url": "/fuelofit.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0f1e",
   "theme_color": "#1e3a5f",

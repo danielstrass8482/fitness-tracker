@@ -2,7 +2,7 @@ const CACHE_NAME = 'fuelofit-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/fuelofit.html'
+  '/index.html'
 ];
 
 self.addEventListener('install', event => {

@@ -851,6 +851,14 @@
             <div style="font-size:12px;color:var(--muted);margin-top:4px;">Bestimmt wie viele Tage beim Start geladen werden. Mehr = mehr Firebase Reads.</div>
           </div>
 
+          <div style="margin-bottom:20px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Rezeptanzeige im Tagebuch</label>
+            <select id="settings-recipe-display" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <option value="block">Als Block (ein Eintrag pro Rezept)</option>
+              <option value="expanded">Aufgeklappt (Zutaten einzeln anzeigen)</option>
+            </select>
+          </div>
+
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
         
@@ -2685,8 +2693,35 @@
       container.innerHTML = '';
       
       mealOrder.forEach(mealName => {
-        const { entries: mealEntries, key } = meals[mealName];
-        
+        const { entries: rawMealEntries, key } = meals[mealName];
+
+        // Expand recipes into individual ingredients if setting is 'expanded'
+        const mealEntries = [];
+        rawMealEntries.forEach(entry => {
+          if (settings.recipeDisplay === 'expanded') {
+            const recipe = recipes.find(r => String(r.id) === String(entry.foodId));
+            if (recipe && recipe.ingredients?.length > 0) {
+              recipe.ingredients.forEach(ing => {
+                const ingFood = foodDB.find(f => String(f.id) === String(ing.foodId));
+                if (!ingFood) return;
+                const factor = (ing.amount || 100) / 100;
+                mealEntries.push({
+                  ...entry,
+                  id: entry.id + '_ing_' + ing.foodId,
+                  name: ingFood.name + ' (' + ing.amount + 'g)',
+                  kcal: Math.round((ingFood.kcal || 0) * factor),
+                  protein: Math.round((ingFood.protein || 0) * factor * 10) / 10,
+                  carbs: Math.round((ingFood.carbs || 0) * factor * 10) / 10,
+                  fat: Math.round((ingFood.fat || 0) * factor * 10) / 10,
+                  _isExpanded: true
+                });
+              });
+              return;
+            }
+          }
+          mealEntries.push(entry);
+        });
+
         mealEntries.sort((a, b) => {
           const timeA = a.time || '00:00';
           const timeB = b.time || '00:00';
@@ -2713,18 +2748,21 @@
             </div>
           </div>
           <div class="meal-entries" style="display:none;">
-            ${mealEntries.length > 0 ? mealEntries.map(e => `
+            ${mealEntries.length > 0 ? mealEntries.map(e => {
+              const isRecipeBlock = settings.recipeDisplay !== 'expanded' && recipes.some(r => String(r.id) === String(e.foodId));
+              const fromRecipeNote = e._fromRecipe ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">(aus: ${e._fromRecipe})</span>` : '';
+              return `
               <div class="meal-entry" onclick="editEntry('${e.id}')">
                 <div>
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
-                  ${e.name}
+                  ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <span>${fmt(e.kcal)} kcal</span>
                   <button onclick="event.stopPropagation();deleteEntry('${e.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">✕</button>
                 </div>
-              </div>
-            `).join('') : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
+              </div>`;
+            }).join('') : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
           </div>
         `;
         
@@ -2874,41 +2912,68 @@
       if (!selectedRecipe) return;
       const time = document.getElementById('food-time').value;
       const meal = document.getElementById('food-meal').value || mealFromHour(parseInt((time || '12:00').split(':')[0]));
-      let kcal, protein, carbs, fat, label;
       const totalWeight = selectedRecipe.totalWeight || 0;
+
+      // Calculate portion factor
+      let portionFactor = 1;
+      let label;
       if (recipeInputMode === 'portions') {
         const portions = parseFloat(document.getElementById('recipe-portions').value) || 1;
         const rp = selectedRecipe.portions || 1;
-        kcal = Math.round((selectedRecipe.kcal || 0) / rp * portions * 10) / 10;
-        protein = Math.round((selectedRecipe.protein || 0) / rp * portions * 10) / 10;
-        carbs = Math.round((selectedRecipe.carbs || 0) / rp * portions * 10) / 10;
-        fat = Math.round((selectedRecipe.fat || 0) / rp * portions * 10) / 10;
+        portionFactor = portions / rp;
         label = selectedRecipe.name + (portions !== 1 ? ` (${portions} Port.)` : '');
       } else {
         const grams = parseFloat(document.getElementById('recipe-grams').value) || 0;
-        const factor = totalWeight > 0 ? grams / totalWeight : 0;
-        kcal = Math.round((selectedRecipe.kcal || 0) * factor * 10) / 10;
-        protein = Math.round((selectedRecipe.protein || 0) * factor * 10) / 10;
-        carbs = Math.round((selectedRecipe.carbs || 0) * factor * 10) / 10;
-        fat = Math.round((selectedRecipe.fat || 0) * factor * 10) / 10;
+        portionFactor = totalWeight > 0 ? grams / totalWeight : 0;
         label = `${selectedRecipe.name} (${grams}g)`;
       }
-      const entry = {
-        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        date: currentDate, time, meal,
-        name: label,
-        foodId: selectedRecipe.id,
-        amount: recipeInputMode === 'grams' ? parseFloat(document.getElementById('recipe-grams').value) || 0 : parseFloat(document.getElementById('recipe-portions').value) || 1,
-        kcal, protein, carbs, fat
-      };
+
       try {
-        await setDoc(doc(userLogCol(), String(entry.id)), entry);
         if (!foodLog[currentDate]) foodLog[currentDate] = [];
-        foodLog[currentDate].push(entry);
+
+        if (settings.recipeDisplay === 'expanded' && selectedRecipe.ingredients?.length > 0) {
+          // Save each ingredient as a separate log entry
+          for (const ing of selectedRecipe.ingredients) {
+            const ingFood = foodDB.find(f => String(f.id) === String(ing.foodId));
+            if (!ingFood) continue;
+            const ingFactor = (ing.amount || 100) / 100 * portionFactor;
+            const ingEntry = {
+              id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              date: currentDate, time, meal,
+              name: ingFood.name,
+              foodId: ingFood.id,
+              amount: Math.round(ing.amount * portionFactor * 10) / 10,
+              kcal: Math.round((ingFood.kcal || 0) * ingFactor * 10) / 10,
+              protein: Math.round((ingFood.protein || 0) * ingFactor * 10) / 10,
+              carbs: Math.round((ingFood.carbs || 0) * ingFactor * 10) / 10,
+              fat: Math.round((ingFood.fat || 0) * ingFactor * 10) / 10,
+              _fromRecipe: selectedRecipe.name
+            };
+            await setDoc(doc(userLogCol(), String(ingEntry.id)), ingEntry);
+            foodLog[currentDate].push(ingEntry);
+          }
+          showToast(`✓ ${selectedRecipe.ingredients.length} Zutaten gespeichert`);
+        } else {
+          // Save as single block entry
+          const kcal = Math.round((selectedRecipe.kcal || 0) * portionFactor * 10) / 10;
+          const protein = Math.round((selectedRecipe.protein || 0) * portionFactor * 10) / 10;
+          const carbs = Math.round((selectedRecipe.carbs || 0) * portionFactor * 10) / 10;
+          const fat = Math.round((selectedRecipe.fat || 0) * portionFactor * 10) / 10;
+          const entry = {
+            id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            date: currentDate, time, meal,
+            name: label, foodId: selectedRecipe.id,
+            amount: recipeInputMode === 'grams' ? parseFloat(document.getElementById('recipe-grams').value) || 0 : parseFloat(document.getElementById('recipe-portions').value) || 1,
+            kcal, protein, carbs, fat
+          };
+          await setDoc(doc(userLogCol(), String(entry.id)), entry);
+          foodLog[currentDate].push(entry);
+          showToast('✓ Rezept gespeichert');
+        }
+
         window.foodLog = foodLog;
         renderFoodLog();
         closeAddFood();
-        showToast('✓ Rezept gespeichert');
       } catch (err) {
         console.error('Save recipe error:', err);
         showToast('❌ Fehler beim Speichern');
@@ -3812,6 +3877,8 @@
           document.getElementById('settings-protein').value = settings.proteinGoal || '';
           document.getElementById('settings-carbs').value = settings.carbsGoal || '';
           document.getElementById('settings-fat').value = settings.fatGoal || '';
+          const rdSel = document.getElementById('settings-recipe-display');
+          if (rdSel) rdSel.value = settings.recipeDisplay || 'block';
           document.getElementById('settings-gender').value = settings.gender || 'male';
           document.getElementById('settings-age').value = settings.age || '';
           document.getElementById('settings-height').value = settings.height || '';
@@ -3884,9 +3951,10 @@
       const activityLevel = parseFloat(document.getElementById('settings-activity').value) || 1.55;
       
       const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
+      const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays
+        gender, age, height, weight, activityLevel, detailDays, recipeDisplay
       };
       
       try {

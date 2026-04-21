@@ -452,9 +452,15 @@
         <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:20px;">Training Loggen</h3>
           
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
-            <input type="date" id="training-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
+              <input type="date" id="training-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
+            <div>
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Uhrzeit</label>
+              <input type="time" id="training-time" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            </div>
           </div>
           
           <div style="margin-bottom:15px;">
@@ -1833,8 +1839,8 @@
       canvas.style.display = 'block';
       emptyDiv.style.display = 'none';
 
-      // Find all variants for this type
-      const variants = [...new Set(entries.map(e => e.variant || e.variante || 'regulaer'))].sort();
+      // Find all variants – normalize old 'variante' field to 'variant'
+      const variants = [...new Set(entries.map(e => (e.variant || e.variante || 'regulaer').toLowerCase().trim()))].sort();
 
       function getBucketKey(datum) {
         if (dashView === 'days') return datum;
@@ -1854,7 +1860,7 @@
       const datasets = variants.map((variant, i) => {
         const data = allBuckets.map(bucket => {
           const total = entries
-            .filter(e => getBucketKey(e.datum) === bucket && (e.variant || e.variante || 'regulaer') === variant)
+            .filter(e => getBucketKey(e.datum) === bucket && (e.variant || e.variante || 'regulaer').toLowerCase().trim() === variant)
             .reduce((sum, e) => sum + (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0), 0);
           return total || null;
         });
@@ -2041,7 +2047,11 @@
       if (recentContainer) {
         const recent = trainingEntries
           .filter(e => e.typ !== 'tageslog')
-          .sort((a, b) => b.datum.localeCompare(a.datum))
+          .sort((a, b) => {
+            const aKey = (a.datum || '') + 'T' + (a.garminTime || a.timestamp?.split('T')[1] || '00:00:00');
+            const bKey = (b.datum || '') + 'T' + (b.garminTime || b.timestamp?.split('T')[1] || '00:00:00');
+            return bKey.localeCompare(aKey);
+          })
           .slice(0, 15);
         if (recent.length === 0) {
           recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivitäten</div>';
@@ -2610,9 +2620,9 @@
       
       // Update display
       document.getElementById('daily-kcal').textContent = fmt(totalKcal);
-      document.getElementById('daily-protein').textContent = fmt(totalProtein, 1) + 'g';
-      document.getElementById('daily-carbs').textContent = fmt(totalCarbs, 1) + 'g';
-      document.getElementById('daily-fat').textContent = fmt(totalFat, 1) + 'g';
+      document.getElementById('daily-protein').textContent = Math.round(totalProtein) + 'g';
+      document.getElementById('daily-carbs').textContent = Math.round(totalCarbs) + 'g';
+      document.getElementById('daily-fat').textContent = Math.round(totalFat) + 'g';
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
       const todayGoal = calcHistoricalKcalGoal(currentDate);
@@ -3405,7 +3415,21 @@
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
           loadCustomTypes();
-          setTimeout(() => initSetsUI(''), 100);
+          setTimeout(() => {
+            initSetsUI('');
+            const now = new Date();
+            const hh = String(now.getHours()).padStart(2,'0');
+            const mm = String(now.getMinutes()).padStart(2,'0');
+            document.getElementById('training-time').value = hh + ':' + mm;
+          }, 100);
+          // Silent 2-day sync
+          getDoc(doc(db, 'users', userId, 'integrations', 'googlefit')).then(gfitSnap => {
+            if (gfitSnap.exists()) {
+              const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
+              const endMs = Date.now();
+              syncFn({ startMs: endMs - (2 * 24 * 3600 * 1000), endMs }).catch(() => {});
+            }
+          }).catch(() => {});
           getDocs(userTrainingCol()).then(snap => {
             trainingEntries = [];
             snap.forEach(d => trainingEntries.push(d.data()));
@@ -3540,6 +3564,7 @@
         normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten'
       };
       
+      const timeVal = document.getElementById('training-time')?.value || '';
       const entry = {
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         datum: date,
@@ -3548,7 +3573,8 @@
         variantLabel: variantLabels[variant] || variant,
         sets: sets,
         notiz: notiz,
-        timestamp: new Date().toISOString()
+        garminTime: timeVal,
+        timestamp: date + 'T' + (timeVal || new Date().toTimeString().slice(0,8))
       };
       
       try {
@@ -3631,7 +3657,11 @@
       
       const sorted = [...trainingEntries]
         .filter(e => e.typ !== 'tageslog')
-        .sort((a, b) => b.datum.localeCompare(a.datum))
+        .sort((a, b) => {
+          const aKey = (a.datum || '') + 'T' + (a.garminTime || a.timestamp?.split('T')[1] || '00:00:00');
+          const bKey = (b.datum || '') + 'T' + (b.garminTime || b.timestamp?.split('T')[1] || '00:00:00');
+          return bKey.localeCompare(aKey);
+        })
         .slice(0, 20);
       
       if (sorted.length === 0) {
@@ -3680,6 +3710,7 @@
 
       // Fill form with existing values
       document.getElementById('training-date').value = entry.datum || '';
+      document.getElementById('training-time').value = entry.garminTime || entry.timestamp?.split('T')[1]?.slice(0,5) || '';
       const typeSelect = document.getElementById('training-type');
       typeSelect.value = entry.typ || entry.type || '';
       updateVariantOptions();

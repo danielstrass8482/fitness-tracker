@@ -3463,7 +3463,7 @@
     // Toast
 
     // ── Custom Confirm Dialog ─────────────────────────────────────────────────
-    let confirmDialogResolve = null;
+    window.confirmDialogResolve = null;
 
     function showConfirm(message, submessage = '', icon = '🗑️', okLabel = 'Löschen', okDanger = true) {
       return new Promise(resolve => {
@@ -3474,7 +3474,7 @@
         okBtn.textContent = okLabel;
         okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--primary)';
         document.getElementById('confirm-dialog').style.display = 'flex';
-        confirmDialogResolve = (result) => {
+        window.confirmDialogResolve = (result) => {
           document.getElementById('confirm-dialog').style.display = 'none';
           resolve(result);
         };

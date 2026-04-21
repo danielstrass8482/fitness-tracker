@@ -1860,8 +1860,21 @@
       canvas.style.display = 'block';
       emptyDiv.style.display = 'none';
 
-      // Find all variants – normalize old 'variante' field to 'variant'
-      const variants = [...new Set(entries.map(e => (e.variant || e.variante || 'regulaer').toLowerCase().trim()))].sort();
+      // Normalize variant labels to keys
+      const variantLabelToKey = {
+        'regulär': 'regulaer', 'regular': 'regulaer', 'regulaer': 'regulaer',
+        'reverse': 'reverse',
+        'hammer grip': 'hammer', 'hammer': 'hammer',
+        'weit': 'weit', 'eng': 'eng', 'diamond': 'diamond',
+        'normal': 'normal',
+        'elevated feet': 'elevated_feet', 'elevated_feet': 'elevated_feet',
+        'mit gewichten': 'weighted', 'weighted': 'weighted'
+      };
+      const normalizeVariant = (e) => {
+        const raw = (e.variant || e.variante || 'regulaer').toLowerCase().trim();
+        return variantLabelToKey[raw] || raw;
+      };
+      const variants = [...new Set(entries.map(normalizeVariant))].sort();
 
       function getBucketKey(datum) {
         if (dashView === 'days') return datum;
@@ -1881,7 +1894,7 @@
       const datasets = variants.map((variant, i) => {
         const data = allBuckets.map(bucket => {
           const total = entries
-            .filter(e => getBucketKey(e.datum) === bucket && (e.variant || e.variante || 'regulaer').toLowerCase().trim() === variant)
+            .filter(e => getBucketKey(e.datum) === bucket && normalizeVariant(e) === variant)
             .reduce((sum, e) => sum + (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0), 0);
           return total || null;
         });

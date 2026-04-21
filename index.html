@@ -698,6 +698,19 @@
         <div id="dash-chart-empty" style="display:none;text-align:center;padding:60px;color:var(--muted);font-size:14px;">Keine Daten für diesen Zeitraum</div>
       </div>
 
+      <!-- ── Workout Auswertung ──────────────────────────────────────────── -->
+      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <h3 style="font-size:15px;margin:0;">💪 Workout</h3>
+          <select id="workout-type-select" onchange="renderWorkoutChart()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+          </select>
+        </div>
+        <div style="position:relative;height:220px;">
+          <canvas id="workout-chart"></canvas>
+        </div>
+        <div id="workout-chart-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px;">Keine Trainingsdaten für diesen Zeitraum</div>
+      </div>
+
       <!-- ── Kacheln ──────────────────────────────────────────────────── -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:20px;" id="dash-tiles"></div>
 
@@ -707,33 +720,7 @@
         <div id="recent-activity" style="max-height:280px;overflow-y:auto;"></div>
       </div>
 
-      <!-- ── Workout Auswertung ──────────────────────────────────────────── -->
-      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);">
-        <h3 style="margin-bottom:16px;font-size:15px;">💪 Workout Auswertung</h3>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;align-items:flex-end;">
-          <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ZEITRAUM</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" data-wrange="1M" onclick="setWorkoutRange('1M',this)">1M</button>
-              <button class="dash-btn" data-wrange="3M" onclick="setWorkoutRange('3M',this)">3M</button>
-              <button class="dash-btn" data-wrange="6M" onclick="setWorkoutRange('6M',this)">6M</button>
-              <button class="dash-btn" data-wrange="12M" onclick="setWorkoutRange('12M',this)">12M</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ANSICHT</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" data-wview="days" onclick="setWorkoutView('days',this)">Tage</button>
-              <button class="dash-btn" data-wview="weeks" onclick="setWorkoutView('weeks',this)">Wochen</button>
-              <button class="dash-btn" data-wview="months" onclick="setWorkoutView('months',this)">Monate</button>
-            </div>
-          </div>
-        </div>
-        <div style="position:relative;height:280px;">
-          <canvas id="workout-chart"></canvas>
-        </div>
-        <div id="workout-chart-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px;">Keine Trainingsdaten für diesen Zeitraum</div>
-      </div>
+
 
 
     </div>
@@ -1558,6 +1545,7 @@
       // Show Summe/Schnitt toggle only for weeks/months
       const aggControl = document.getElementById('dash-agg-control');
       if (aggControl) aggControl.style.display = v === 'days' ? 'none' : 'block';
+      renderWorkoutChart();
       document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
       el.classList.add('active');
       renderDashboard();
@@ -1784,9 +1772,7 @@
     };
 
 
-    // ── Workout Auswertung – alle Typen+Varianten automatisch ──────────────
-    let workoutRange = '1M';
-    let workoutView = 'days';
+    // ── Workout Auswertung ────────────────────────────────────────────────────
     let workoutChartInstance = null;
 
     const VARIANT_LABELS = {
@@ -1794,45 +1780,49 @@
       weit: 'Weit', eng: 'Eng', diamond: 'Diamond',
       normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten'
     };
-    const TYPE_LABELS = {
+    const TYPE_LABELS_W = {
       pullups: 'Pull-ups', pushups: 'Push-ups', lunges: 'Lunges'
     };
     const WORKOUT_COLORS = ['#4a9eff','#f97316','#22c55e','#a78bfa','#ffd93d','#ff6b9d','#10b981','#f43f5e','#06b6d4'];
 
-    window.setWorkoutRange = function(r, el) {
-      workoutRange = r;
-      document.querySelectorAll('[data-wrange]').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      renderWorkoutChart();
-    };
-
-    window.setWorkoutView = function(v, el) {
-      workoutView = v;
-      document.querySelectorAll('[data-wview]').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      renderWorkoutChart();
-    };
+    function populateWorkoutTypeSelect() {
+      const sel = document.getElementById('workout-type-select');
+      if (!sel) return;
+      const baseTypes = [
+        { id: 'pullups', label: 'Pull-ups' },
+        { id: 'pushups', label: 'Push-ups' },
+        { id: 'lunges', label: 'Lunges' }
+      ];
+      const allTypes = [...baseTypes, ...customTrainingTypes];
+      // Only show types that have data
+      const typesWithData = allTypes.filter(t =>
+        trainingEntries.some(e => {
+          const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
+          return eTyp === t.id;
+        })
+      );
+      const currentVal = sel.value;
+      sel.innerHTML = typesWithData.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+      if (currentVal && typesWithData.find(t => t.id === currentVal)) sel.value = currentVal;
+    }
 
     window.renderWorkoutChart = function() {
       const canvas = document.getElementById('workout-chart');
       const emptyDiv = document.getElementById('workout-chart-empty');
       if (!canvas) return;
 
-      // Date range
-      const now = new Date();
-      let fromDate;
-      if (workoutRange === '1M') fromDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-      else if (workoutRange === '3M') fromDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-      else if (workoutRange === '6M') fromDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
-      else fromDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-      const fromStr = fromDate.toISOString().split('T')[0];
-      const toStr = now.toISOString().split('T')[0];
+      const selectedType = document.getElementById('workout-type-select')?.value;
+      if (!selectedType) { canvas.style.display = 'none'; emptyDiv.style.display = 'block'; return; }
 
-      // Get all manual training entries in range
+      // Use same range/view as main dashboard
+      const { fromDate, toDate } = getDateRange();
+      const fromStr = fromDate.toISOString ? fromDate.toISOString().split('T')[0] : fromDate;
+      const toStr = toDate.toISOString ? toDate.toISOString().split('T')[0] : toDate;
+
+      // Filter entries for selected type in range
       const entries = trainingEntries.filter(e => {
         const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
-        const isManual = !e.source || e.source === 'manual';
-        return isManual && eTyp && eTyp !== 'tageslog' && e.datum >= fromStr && e.datum <= toStr;
+        return eTyp === selectedType && e.datum >= fromStr && e.datum <= toStr;
       });
 
       if (entries.length === 0) {
@@ -1843,21 +1833,12 @@
       canvas.style.display = 'block';
       emptyDiv.style.display = 'none';
 
-      // Find all unique type+variant combos that appear in range
-      const combos = {};
-      entries.forEach(e => {
-        const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
-        const eVariant = e.variant || e.variante || '';
-        const key = eVariant ? eTyp + '_' + eVariant : eTyp;
-        const typLabel = TYPE_LABELS[eTyp] || (customTrainingTypes.find(t => t.id === eTyp)?.label) || eTyp;
-        const label = eVariant ? typLabel + ' · ' + (VARIANT_LABELS[eVariant] || eVariant) : typLabel;
-        if (!combos[key]) combos[key] = { key, label, entries: [] };
-        combos[key].entries.push(e);
-      });
+      // Find all variants for this type
+      const variants = [...new Set(entries.map(e => e.variant || e.variante || 'regulaer'))].sort();
 
       function getBucketKey(datum) {
-        if (workoutView === 'days') return datum;
-        if (workoutView === 'weeks') {
+        if (dashView === 'days') return datum;
+        if (dashView === 'weeks') {
           const d = new Date(datum + 'T12:00:00');
           const jan4 = new Date(d.getFullYear(), 0, 4);
           const startOfWeek1 = new Date(jan4);
@@ -1870,17 +1851,16 @@
 
       const allBuckets = [...new Set(entries.map(e => getBucketKey(e.datum)))].sort();
 
-      const datasets = Object.values(combos).map((combo, i) => {
+      const datasets = variants.map((variant, i) => {
         const data = allBuckets.map(bucket => {
-          const bucketEntries = combo.entries.filter(e => getBucketKey(e.datum) === bucket);
-          const total = bucketEntries.reduce((sum, e) => {
-            return sum + (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0);
-          }, 0);
+          const total = entries
+            .filter(e => getBucketKey(e.datum) === bucket && (e.variant || e.variante || 'regulaer') === variant)
+            .reduce((sum, e) => sum + (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0), 0);
           return total || null;
         });
         const color = WORKOUT_COLORS[i % WORKOUT_COLORS.length];
         return {
-          label: combo.label,
+          label: VARIANT_LABELS[variant] || variant,
           data,
           backgroundColor: color + 'cc',
           borderColor: color,
@@ -1890,8 +1870,8 @@
       });
 
       const labels = allBuckets.map(b => {
-        if (workoutView === 'weeks') { const [yr, wn] = b.split('-W'); return 'KW' + parseInt(wn) + '/' + String(yr).slice(2); }
-        if (workoutView === 'months') return b;
+        if (dashView === 'weeks') { const [yr, wn] = b.split('-W'); return 'KW' + parseInt(wn) + '/' + String(yr).slice(2); }
+        if (dashView === 'months') return b;
         return b.slice(5);
       });
 
@@ -1907,62 +1887,12 @@
           },
           scales: {
             x: { ticks: { color: '#888', maxRotation: 45 }, grid: { color: '#2a2a2a' } },
-            y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' }, title: { display: true, text: 'Wiederholungen', color: '#888' }, beginAtZero: true }
+            y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' }, beginAtZero: true,
+                 title: { display: true, text: 'Wiederholungen', color: '#888' } }
           }
         }
       });
     };
-
-
-    // ── Workout Variablen für Dashboard ──────────────────────────────────────
-    function populateWorkoutVarOptions() {
-      const baseTypes = [
-        { id: 'pullups', label: 'Pull-ups' },
-        { id: 'pushups', label: 'Push-ups' },
-        { id: 'lunges', label: 'Lunges' }
-      ];
-      const allTypes = [...baseTypes, ...customTrainingTypes];
-
-      const variantLabels = {
-        regulaer: 'Regulär', reverse: 'Reverse', hammer: 'Hammer Grip',
-        weit: 'Weit', eng: 'Eng', diamond: 'Diamond',
-        normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten'
-      };
-
-      // Build options: for each type, find which variants exist in data
-      let options = '';
-      allTypes.forEach(t => {
-        const entries = trainingEntries.filter(e => {
-          const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
-          return eTyp === t.id;
-        });
-        if (entries.length === 0) return;
-        const variants = [...new Set(entries.map(e => e.variant || e.variante || 'regulaer'))];
-        variants.forEach(v => {
-          const key = 'workout_' + t.id + '_' + v;
-          const label = t.label + ' · ' + (variantLabels[v] || v);
-          options += `<option value="${key}">${label}</option>`;
-        });
-      });
-
-      ['workout-optgroup-1', 'workout-optgroup-2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = options;
-      });
-    }
-
-    function getWorkoutDayData(trainingEntries, typ, variant) {
-      // Returns { date: totalReps } for a given type+variant
-      const result = {};
-      trainingEntries.forEach(e => {
-        const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
-        const eVariant = e.variant || e.variante || 'regulaer';
-        if (eTyp !== typ || eVariant !== variant) return;
-        const reps = (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0);
-        if (reps > 0) result[e.datum] = (result[e.datum] || 0) + reps;
-      });
-      return result;
-    }
 
     window.renderDashboard = function renderDashboard() {
       const canvas = document.getElementById('dash-chart');
@@ -3441,6 +3371,7 @@
         if (target === 'dashboard') {
           requestAnimationFrame(() => {
             renderDashboard();
+            populateWorkoutTypeSelect();
             renderWorkoutChart();
           });
         }

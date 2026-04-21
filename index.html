@@ -1028,6 +1028,19 @@
   
   <!-- Toast -->
   <div id="toast" class="toast"></div>
+
+  <!-- Custom Confirm Dialog -->
+  <div id="confirm-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <div id="confirm-icon" style="font-size:32px;text-align:center;margin-bottom:12px;">🗑️</div>
+      <div id="confirm-message" style="font-size:16px;font-weight:500;text-align:center;margin-bottom:8px;color:var(--text);">Löschen?</div>
+      <div id="confirm-submessage" style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button id="confirm-cancel" onclick="confirmDialogResolve(false)" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;cursor:pointer;">Abbrechen</button>
+        <button id="confirm-ok" onclick="confirmDialogResolve(true)" style="flex:1;padding:12px;background:var(--danger);border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer;">Löschen</button>
+      </div>
+    </div>
+  </div>
   
 
   <!-- Recipe Edit Modal -->
@@ -1323,7 +1336,7 @@
     };
     
     window.handleLogout = async function() {
-      if (confirm('Wirklich abmelden?')) {
+      if (await showConfirm('Abmelden?', '', '👋', 'Abmelden', false)) {
         await signOut(auth);
       }
     };
@@ -2214,7 +2227,7 @@
     };
     
     window.deleteFoodDB = async function(id) {
-      if (!confirm('Lebensmittel löschen?')) return;
+      if (!await showConfirm('Lebensmittel löschen?', 'Dieser Eintrag wird dauerhaft aus der Datenbank entfernt.')) return;
       
       try {
         await deleteDoc(doc(userFoodCol(), String(id)));
@@ -2494,7 +2507,7 @@
     };
     
     window.deleteRecipe = async function(id) {
-      if (!confirm('Rezept löschen?')) return;
+      if (!await showConfirm('Rezept löschen?', 'Das Rezept wird dauerhaft gelöscht.')) return;
       
       try {
         await deleteDoc(doc(userRecipeCol(), String(id)));
@@ -2741,9 +2754,9 @@
           <div class="meal-header" onclick="toggleMeal(this)">
             <div class="meal-title">▶ ${mealName}</div>
             <div style="display:flex;gap:12px;font-size:12px;">
-              <span style="color:#4a9eff;">P ${fmt(mealProtein,1)}g</span>
-              <span style="color:#ffd93d;">K ${fmt(mealCarbs,1)}g</span>
-              <span style="color:#ff6b9d;">F ${fmt(mealFat,1)}g</span>
+              <span style="color:#4a9eff;">P ${Math.round(mealProtein)}g</span>
+              <span style="color:#ffd93d;">K ${Math.round(mealCarbs)}g</span>
+              <span style="color:#ff6b9d;">F ${Math.round(mealFat)}g</span>
               <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
             </div>
           </div>
@@ -3368,11 +3381,33 @@
         showToast('❌ Eintrag nicht gefunden');
         return;
       }
-      
+
       editingEntryId = id;
       document.getElementById('add-food-title').textContent = 'Eintrag bearbeiten';
       document.getElementById('add-food-modal').style.display = 'block';
-      
+
+      // Check if this is a recipe block entry
+      const recipeEntry = recipes.find(r => String(r.id) === String(entry.foodId));
+      if (recipeEntry) {
+        setAddFoodMode('recipe');
+        selectedRecipe = recipeEntry;
+        document.getElementById('selected-recipe-name').textContent = recipeEntry.name;
+        const tw = recipeEntry.totalWeight || 0;
+        document.getElementById('selected-recipe-info').textContent =
+          `${recipeEntry.portions || 1} Portion(en)${tw > 0 ? ' · ' + fmt(tw) + 'g gesamt' : ''} · ${fmt(recipeEntry.kcal || 0)} kcal gesamt`;
+        document.getElementById('recipe-portions').value = entry.amount || 1;
+        document.getElementById('recipe-form').style.display = 'block';
+        document.getElementById('recipe-search-results').innerHTML = '';
+        setRecipeInputMode('portions');
+        const entryTime = entry.time || '12:00';
+        document.getElementById('food-time').value = entryTime;
+        const entryHour = parseInt(entryTime.split(':')[0]);
+        const entryMeal = entry.meal || mealFromHour(entryHour);
+        document.getElementById('food-meal').value = entryMeal;
+        document.getElementById('food-meal-display').textContent = mealLabels[entryMeal] || entryMeal;
+        return;
+      }
+
       // Find food by ID or name fallback
       selectedFood = foodDB.find(f => String(f.id) === String(entry.foodId))
         || foodDB.find(f => f.name === entry.name);
@@ -3405,7 +3440,7 @@
     };
     
     window.deleteEntry = async function(id) {
-      if (!confirm('Eintrag löschen?')) return;
+      if (!await showConfirm('Eintrag löschen?', 'Der Tagebucheintrag wird entfernt.')) return;
       
       try {
         await deleteDoc(doc(userLogCol(), String(id)));
@@ -3426,6 +3461,26 @@
     };
     
     // Toast
+
+    // ── Custom Confirm Dialog ─────────────────────────────────────────────────
+    let confirmDialogResolve = null;
+
+    function showConfirm(message, submessage = '', icon = '🗑️', okLabel = 'Löschen', okDanger = true) {
+      return new Promise(resolve => {
+        document.getElementById('confirm-icon').textContent = icon;
+        document.getElementById('confirm-message').textContent = message;
+        document.getElementById('confirm-submessage').textContent = submessage;
+        const okBtn = document.getElementById('confirm-ok');
+        okBtn.textContent = okLabel;
+        okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--primary)';
+        document.getElementById('confirm-dialog').style.display = 'flex';
+        confirmDialogResolve = (result) => {
+          document.getElementById('confirm-dialog').style.display = 'none';
+          resolve(result);
+        };
+      });
+    }
+
     function showToast(msg) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
@@ -3802,7 +3857,7 @@
     };
 
     window.deleteTraining = async function(id) {
-      if (!confirm('Training löschen?')) return;
+      if (!await showConfirm('Training löschen?', 'Der Trainingseintrag wird entfernt.')) return;
       
       try {
         await deleteDoc(doc(userTrainingCol(), String(id)));
@@ -4130,7 +4185,7 @@
     };
 
     window.disconnectGoogleFit = async function() {
-      if (!confirm('Google Fit Verbindung trennen?')) return;
+      if (!await showConfirm('Google Fit trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', '🔌', 'Trennen')) return;
       try {
         const disconnectFn = httpsCallable(fbFunctions, 'googleFitDisconnect');
         await disconnectFn();
@@ -4217,7 +4272,7 @@
 
 
     window.migrateFoodsToGlobal = async function() {
-      if (!confirm('Foods von user-Collection in globale DB migrieren? Nur einmalig nötig.')) return;
+      if (!await showConfirm('Foods migrieren?', 'Foods von user-Collection in globale DB migrieren. Nur einmalig nötig.', '🔄', 'Migrieren', false)) return;
       const status = document.getElementById('migrate-status');
       status.textContent = '⏳ Lade user Foods...';
       try {
@@ -4246,17 +4301,19 @@
     };
 
     window.confirmDeleteAllData = async function() {
-      const confirm1 = prompt('WARNUNG! Alle Daten werden gelöscht!\n\nTippe "LÖSCHEN" um fortzufahren:');
-      if (confirm1 !== 'LÖSCHEN') {
-        showToast('Abgebrochen');
-        return;
-      }
-      
-      const confirm2 = prompt('Bist du SICHER? Dies kann NICHT rückgängig gemacht werden!\n\nTippe "JA LÖSCHEN" um alle Daten zu löschen:');
-      if (confirm2 !== 'JA LÖSCHEN') {
-        showToast('Abgebrochen');
-        return;
-      }
+      const ok = await showConfirm(
+        'Alle Daten löschen?',
+        '⚠️ Diese Aktion kann NICHT rückgängig gemacht werden! Alle Foods, Rezepte, Tagebucheinträge und Trainings werden dauerhaft gelöscht.',
+        '☠️', 'Alles löschen'
+      );
+      if (!ok) return;
+      // Second confirmation
+      const ok2 = await showConfirm(
+        'Wirklich sicher?',
+        'Letzte Chance – alle deine Daten werden unwiderruflich gelöscht.',
+        '⚠️', 'Ja, alles löschen'
+      );
+      if (!ok2) return;
       
       try {
         showToast('⏳ Lösche alle Daten...');

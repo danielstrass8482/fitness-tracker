@@ -3759,7 +3759,7 @@
           <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i+1}</span>
           <input type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." 
             style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;"
-            oninput="updateHiddenSets()">
+            oninput="updateHiddenSets()" onchange="updateHiddenSets()">
         `;
         container.appendChild(div);
       }
@@ -3831,6 +3831,8 @@
     };
 
     window.saveTrainingEntry = async function() {
+      // Immer aktuell aus den Inputs lesen, unabhängig von oninput-Events
+      updateHiddenSets();
       const date = document.getElementById('training-date').value;
       const type = document.getElementById('training-type').value;
       const variant = document.getElementById('training-variant').value;

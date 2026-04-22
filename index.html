@@ -2085,7 +2085,7 @@
                 callbacks: {
                   footer: (items) => {
                     const total = items.reduce((s, i) => s + (i.parsed.y || 0), 0);
-                    return `Gesamt: ${Math.round(total)} kcal`;
+                    return `Gesamt: ${fmt(Math.round(total))} kcal`;
                   }
                 }
               }

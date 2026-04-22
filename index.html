@@ -623,15 +623,6 @@
             </div>
           </div>
 
-          <!-- Charttyp -->
-          <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">CHARTTYP</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" data-chart="line" onclick="setDashChart('line',this)">Linie</button>
-              <button class="dash-btn" data-chart="bar" onclick="setDashChart('bar',this)">Balken</button>
-            </div>
-          </div>
-
           <!-- Summe / Schnitt -->
           <div id="dash-agg-control" style="display:none;">
             <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">WERTE</div>
@@ -670,8 +661,11 @@
               <optgroup label="Kalorienziel">
                 <option value="kcal_breakdown">Kalorienziel Aufschlüsselung (Stacked)</option>
               </optgroup>
-
             </select>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button id="dash-type1-bar" onclick="setDashType1('bar',this)" style="flex:1;padding:5px;font-size:12px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer;">▋ Balken</button>
+              <button id="dash-type1-line" onclick="setDashType1('line',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">╱ Linie</button>
+            </div>
           </div>
           <div>
             <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 2</div>
@@ -696,8 +690,12 @@
                 <option value="run_km">Laufkilometer</option>
                 <option value="trainings">Trainingseinheiten</option>
               </optgroup>
-
             </select>
+            <div id="dash-var2-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:5px;">Nicht verfügbar bei Aufschlüsselung</div>
+            <div id="dash-type2-btns" style="display:flex;gap:6px;margin-top:6px;">
+              <button id="dash-type2-bar" onclick="setDashType2('bar',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">▋ Balken</button>
+              <button id="dash-type2-line" onclick="setDashType2('line',this)" style="flex:1;padding:5px;font-size:12px;background:#e8e8e8;color:#111;border:none;border-radius:6px;cursor:pointer;">╱ Linie</button>
+            </div>
           </div>
         </div>
 
@@ -710,10 +708,14 @@
 
       <!-- ── Workout Auswertung ──────────────────────────────────────────── -->
       <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
           <h3 style="font-size:15px;margin:0;">💪 Workout</h3>
           <select id="workout-type-select" onchange="renderWorkoutChart()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
           </select>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:14px;">
+          <button id="workout-metric-total" onclick="setWorkoutMetric('total',this)" style="padding:5px 12px;font-size:12px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer;">Σ Gesamt</button>
+          <button id="workout-metric-max" onclick="setWorkoutMetric('max',this)" style="padding:5px 12px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">↑ Max/Set</button>
         </div>
         <div style="position:relative;height:220px;">
           <canvas id="workout-chart"></canvas>
@@ -1595,15 +1597,65 @@
     // ── Dashboard State ────────────────────────────────────────────────────
     let dashRange = '1M';
     let dashView = 'days';
-    let dashChart = 'line';
+    let dashChart = 'line'; // legacy, kept for kcal_breakdown
+    let dashChart1 = 'bar'; // Charttyp Variable 1
+    let dashChart2 = 'line'; // Charttyp Variable 2
     let dashAgg = 'sum'; // 'sum' or 'avg'
+    let workoutMetric = 'total'; // 'total' oder 'max'
     let dashChartInstance = null;
+
+    window.setWorkoutMetric = function(metric, el) {
+      workoutMetric = metric;
+      document.getElementById('workout-metric-total').style.background = metric === 'total' ? '#4a9eff' : 'var(--bg)';
+      document.getElementById('workout-metric-total').style.color = metric === 'total' ? '#fff' : 'var(--muted)';
+      document.getElementById('workout-metric-total').style.border = metric === 'total' ? 'none' : '1px solid var(--border)';
+      document.getElementById('workout-metric-max').style.background = metric === 'max' ? '#4a9eff' : 'var(--bg)';
+      document.getElementById('workout-metric-max').style.color = metric === 'max' ? '#fff' : 'var(--muted)';
+      document.getElementById('workout-metric-max').style.border = metric === 'max' ? 'none' : '1px solid var(--border)';
+      renderWorkoutChart();
+    };
+
+    window.setDashType1 = function(type, el) {
+      dashChart1 = type;
+      document.getElementById('dash-type1-bar').style.background = type === 'bar' ? '#4a9eff' : 'var(--bg)';
+      document.getElementById('dash-type1-bar').style.color = type === 'bar' ? '#fff' : 'var(--muted)';
+      document.getElementById('dash-type1-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
+      document.getElementById('dash-type1-line').style.background = type === 'line' ? '#4a9eff' : 'var(--bg)';
+      document.getElementById('dash-type1-line').style.color = type === 'line' ? '#fff' : 'var(--muted)';
+      document.getElementById('dash-type1-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
+      renderDashboard();
+    };
+    window.setDashType2 = function(type, el) {
+      dashChart2 = type;
+      document.getElementById('dash-type2-bar').style.background = type === 'bar' ? '#e8e8e8' : 'var(--bg)';
+      document.getElementById('dash-type2-bar').style.color = type === 'bar' ? '#111' : 'var(--muted)';
+      document.getElementById('dash-type2-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
+      document.getElementById('dash-type2-line').style.background = type === 'line' ? '#e8e8e8' : 'var(--bg)';
+      document.getElementById('dash-type2-line').style.color = type === 'line' ? '#111' : 'var(--muted)';
+      document.getElementById('dash-type2-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
+      renderDashboard();
+    };
 
     // Attach select listeners after functions are defined
     setTimeout(() => {
       const v1 = document.getElementById('dash-var1');
       const v2 = document.getElementById('dash-var2');
-      if (v1) v1.addEventListener('change', () => renderDashboard());
+      if (v1) v1.addEventListener('change', () => {
+        const isBreakdown = v1.value === 'kcal_breakdown';
+        const v2El = document.getElementById('dash-var2');
+        const v2Hint = document.getElementById('dash-var2-hint');
+        if (isBreakdown) {
+          v2El.value = '';
+          v2El.disabled = true;
+          v2El.style.opacity = '0.4';
+          if (v2Hint) v2Hint.style.display = 'block';
+        } else {
+          v2El.disabled = false;
+          v2El.style.opacity = '1';
+          if (v2Hint) v2Hint.style.display = 'none';
+        }
+        renderDashboard();
+      });
       if (v2) v2.addEventListener('change', () => renderDashboard());
     }, 500);
 
@@ -1630,13 +1682,6 @@
       el.classList.add('active');
       renderDashboard();
     };
-    window.setDashChart = function(c, el) {
-      dashChart = c;
-      document.querySelectorAll('[data-chart]').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      renderDashboard();
-    };
-
     // ── Build daily data index ─────────────────────────────────────────────
     function buildDayIndex(fromDate, toDate) {
       const days = {};
@@ -1793,37 +1838,42 @@
         return entries.map(([date, d]) => ({ label: date.slice(5), value: d[variable] ?? null }));
       }
 
-      // For weeks/months: use weeklyStats directly for better accuracy
-      const { fromDate, toDate } = getDateRange();
-      const weekData = buildWeekIndex(fromDate, toDate);
+      // Für Wochen/Monate: wenn weeklyStats leer, direkt aus days aggregieren
+      const useWeeklyStats = Object.keys(weeklyStats).length > 0;
 
       if (dashView === 'weeks') {
-        // For weeks: if avg mode, divide by number of days in that week that have data
-        return Object.entries(weekData)
-          .sort(([a],[b]) => a.localeCompare(b))
-          .map(([date, d]) => {
-            const week = d.week || '';
-            const [yr, wn] = week.split('-W');
-            const label = wn ? `KW${parseInt(wn)}/${String(yr).slice(2)}` : date.slice(5);
-            const rawVal = d[variable] ?? null;
-            if (rawVal === null) return { label, value: null };
-            const forceAvg = variable === 'weight';
-            const useAvg = forceAvg || dashAgg === 'avg';
-            const days = d.days || 7;
-            const value = useAvg && days > 0 ? Math.round(rawVal / days * 10) / 10 : rawVal;
-            return { label, value };
-          });
+        // Tage nach KW gruppieren
+        const buckets = {};
+        Object.entries(days).forEach(([date, d]) => {
+          const dt = new Date(date + 'T12:00:00');
+          const jan4 = new Date(dt.getFullYear(), 0, 4);
+          const startW1 = new Date(jan4);
+          startW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+          const wn = Math.ceil(((dt - startW1) / 86400000 + 1) / 7);
+          const key = dt.getFullYear() + '-W' + String(wn).padStart(2, '0');
+          if (!buckets[key]) buckets[key] = { days: [], label: 'KW' + wn + '/' + String(dt.getFullYear()).slice(2) };
+          buckets[key].days.push(d);
+        });
+        return Object.entries(buckets).sort(([a],[b]) => a.localeCompare(b)).map(([key, bucket]) => {
+          const vals = bucket.days.map(d => d[variable]).filter(v => v !== null && v !== undefined && v !== 0);
+          if (vals.length === 0) return { label: bucket.label, value: null };
+          const forceAvg = variable === 'weight';
+          const useAvg = forceAvg || dashAgg === 'avg';
+          const value = useAvg
+            ? Math.round(vals.reduce((s,v) => s+v,0) / vals.length * 10) / 10
+            : Math.round(vals.reduce((s,v) => s+v,0) * 10) / 10;
+          return { label: bucket.label, value };
+        });
       }
 
-      // Monthly: group weeks by month
+      // Monthly: Tage nach Monat gruppieren
       const months = {};
-      Object.entries(weekData).forEach(([date, d]) => {
+      Object.entries(days).forEach(([date, d]) => {
         const key = date.slice(0, 7);
         if (!months[key]) months[key] = [];
         const val = d[variable];
         if (val !== null && val !== undefined && val !== 0) months[key].push(val);
       });
-
       return Object.entries(months).sort(([a],[b]) => a.localeCompare(b)).map(([key, vals]) => {
         if (vals.length === 0) return { label: key, value: null };
         const forceAvg = variable === 'weight';
@@ -1894,32 +1944,24 @@
       const selectedType = document.getElementById('workout-type-select')?.value;
       if (!selectedType) { canvas.style.display = 'none'; emptyDiv.style.display = 'block'; return; }
 
-      // Use same range/view as main dashboard
       const { fromDate, toDate } = getDateRange();
       const fromStr = fromDate.toISOString ? fromDate.toISOString().split('T')[0] : fromDate;
       const toStr = toDate.toISOString ? toDate.toISOString().split('T')[0] : toDate;
 
-      // Filter entries for selected type in range
       const entries = trainingEntries.filter(e => {
         const eTyp = e.typ || (e.type === 'pull' ? 'pullups' : e.type === 'push' ? 'pushups' : e.type);
         return eTyp === selectedType && e.datum >= fromStr && e.datum <= toStr;
       });
 
       if (entries.length === 0) {
-        canvas.style.display = 'none';
-        emptyDiv.style.display = 'block';
-        return;
+        canvas.style.display = 'none'; emptyDiv.style.display = 'block'; return;
       }
-      canvas.style.display = 'block';
-      emptyDiv.style.display = 'none';
+      canvas.style.display = 'block'; emptyDiv.style.display = 'none';
 
-      // Normalize variant labels to keys
       const variantLabelToKey = {
         'regulär': 'regulaer', 'regular': 'regulaer', 'regulaer': 'regulaer',
-        'reverse': 'reverse',
-        'hammer grip': 'hammer', 'hammer': 'hammer',
-        'weit': 'weit', 'eng': 'eng', 'diamond': 'diamond',
-        'normal': 'normal',
+        'reverse': 'reverse', 'hammer grip': 'hammer', 'hammer': 'hammer',
+        'weit': 'weit', 'eng': 'eng', 'diamond': 'diamond', 'normal': 'normal',
         'elevated feet': 'elevated_feet', 'elevated_feet': 'elevated_feet',
         'mit gewichten': 'weighted', 'weighted': 'weighted'
       };
@@ -1929,6 +1971,7 @@
       };
       const variants = [...new Set(entries.map(normalizeVariant))].sort();
 
+      // Bucket-Berechnung direkt aus entries (unabhängig von weeklyStats)
       function getBucketKey(datum) {
         if (dashView === 'days') return datum;
         if (dashView === 'weeks') {
@@ -1942,23 +1985,34 @@
         return datum.slice(0, 7);
       }
 
+      // Metrik pro Eintrag berechnen
+      function entryValue(e) {
+        const nums = (e.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
+        if (nums.length === 0) return 0;
+        if (workoutMetric === 'max') return Math.max(...nums);
+        return nums.reduce((s, n) => s + n, 0); // total
+      }
+
       const allBuckets = [...new Set(entries.map(e => getBucketKey(e.datum)))].sort();
 
       const datasets = variants.map((variant, i) => {
         const data = allBuckets.map(bucket => {
-          const total = entries
-            .filter(e => getBucketKey(e.datum) === bucket && normalizeVariant(e) === variant)
-            .reduce((sum, e) => sum + (e.sets || '').split('-').reduce((s, n) => s + (parseInt(n) || 0), 0), 0);
-          return total || null;
+          const bucketEntries = entries.filter(e =>
+            getBucketKey(e.datum) === bucket && normalizeVariant(e) === variant
+          );
+          if (bucketEntries.length === 0) return null;
+          if (workoutMetric === 'max') {
+            // Max des besten Sets über alle Einträge im Bucket
+            return Math.max(...bucketEntries.map(entryValue));
+          }
+          // Summe aller Wiederholungen im Bucket
+          return bucketEntries.reduce((sum, e) => sum + entryValue(e), 0) || null;
         });
         const color = WORKOUT_COLORS[i % WORKOUT_COLORS.length];
         return {
           label: VARIANT_LABELS[variant] || variant,
-          data,
-          backgroundColor: color + 'cc',
-          borderColor: color,
-          borderWidth: 2,
-          borderRadius: 4
+          data, backgroundColor: color + 'cc', borderColor: color,
+          borderWidth: 2, borderRadius: 4
         };
       });
 
@@ -1967,6 +2021,8 @@
         if (dashView === 'months') return b;
         return b.slice(5);
       });
+
+      const yLabel = workoutMetric === 'max' ? 'Max Wdh. (bester Set)' : 'Wiederholungen gesamt';
 
       if (workoutChartInstance) workoutChartInstance.destroy();
       workoutChartInstance = new Chart(canvas, {
@@ -1981,7 +2037,7 @@
           scales: {
             x: { ticks: { color: '#888', maxRotation: 45 }, grid: { color: '#2a2a2a' } },
             y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' }, beginAtZero: true,
-                 title: { display: true, text: 'Wiederholungen', color: '#888' } }
+                 title: { display: true, text: yLabel, color: '#888' } }
           }
         }
       });
@@ -2132,26 +2188,28 @@
           return VAR_LABELS[v] || v;
         };
         if (var1 && aligned1.length) datasets.push({
+          type: dashChart1,
           label: getVarLabel(var1),
           data: aligned1.map(d => d.value),
           borderColor: COL1,
-          backgroundColor: dashChart === 'bar' ? COL1 : 'rgba(74,158,255,0.15)',
+          backgroundColor: dashChart1 === 'bar' ? COL1 : 'rgba(74,158,255,0.15)',
           tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
-          yAxisID: 'y', spanGaps: true
+          yAxisID: 'y', spanGaps: true, order: dashChart1 === 'line' ? 0 : 1
         });
         if (var2 && aligned2.length) datasets.push({
+          type: dashChart2,
           label: getVarLabel(var2),
           data: aligned2.map(d => d.value),
           borderColor: COL2,
-          backgroundColor: dashChart === 'bar' ? COL2 : 'rgba(232,232,232,0.15)',
+          backgroundColor: dashChart2 === 'bar' ? COL2 : 'rgba(232,232,232,0.15)',
           tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
-          yAxisID: sameAxis ? 'y' : 'y2', spanGaps: true
+          yAxisID: sameAxis ? 'y' : 'y2', spanGaps: true, order: dashChart2 === 'line' ? 0 : 1
         });
 
         if (dashChartInstance) dashChartInstance.destroy();
         const ctx = document.getElementById('dash-chart').getContext('2d');
         dashChartInstance = new Chart(ctx, {
-          type: dashChart === 'bar' ? 'bar' : 'line',
+          type: 'bar', // Mixed charts: individuelle types per dataset
           data: { labels: chartLabels, datasets },
           options: {
             responsive: true, maintainAspectRatio: false,

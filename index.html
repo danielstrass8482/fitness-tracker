@@ -2047,7 +2047,9 @@
           const actKcal = trainingEntries
             .filter(e => (e.source === 'garmin' || e.source === 'googlefit') && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
             .reduce((sum, e) => sum + (e.act_kcal_calc || 0), 0);
-          basisArr.push(d.kcal_goal ? Math.max(0, d.kcal_goal - actKcal - dailyKcal) : null);
+          // Compute basis directly from calcHistoricalKcalGoal for this date
+          const basisKcal = calcHistoricalKcalGoal(date);
+          basisArr.push(basisKcal > 0 ? Math.max(0, basisKcal - actKcal - dailyKcal) : null);
           actArr.push(actKcal || null);
           dailyArr.push(dailyKcal || null);
         });
@@ -3756,7 +3758,7 @@
       const reps = [];
       for (let i = 0; i < setsCount; i++) {
         const val = parseInt(document.getElementById('set-reps-' + i)?.value) || 0;
-        reps.push(val);
+        if (val > 0) reps.push(val);
       }
       const hidden = document.getElementById('training-sets');
       if (hidden) hidden.value = reps.join('-');

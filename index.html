@@ -1028,10 +1028,18 @@
           <!-- Google Drive Auto-Backup -->
           <div style="background:var(--bg);padding:20px;border-radius:12px;border:1px solid var(--border);">
             <h3 style="margin-bottom:8px;font-size:15px;">☁️ Google Drive Backup</h3>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische wöchentliche Sicherung in deinen Google Drive.</p>
-            <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
-            <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;">☁️ Jetzt in Google Drive sichern</button>
-            <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
+            <!-- Disconnected State -->
+            <div id="gdrive-disconnected">
+              <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:#4285f4;border-color:#4285f4;">Mit Google Drive verbinden</button>
+            </div>
+            <!-- Connected State -->
+            <div id="gdrive-connected" style="display:none;">
+              <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
+              <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;">☁️ Jetzt in Google Drive sichern</button>
+              <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
+              <button onclick="disconnectGoogleDrive()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Drive trennen</button>
+            </div>
           </div>
 
         </div>
@@ -3656,6 +3664,7 @@
         }
         if (target === 'daten' && userId) {
           loadGoogleFitStatus();
+          loadDriveStatus();
         }
         if (target === 'ernaehrung' && userId) {
           // Silent background sync for last 2 days
@@ -3682,12 +3691,15 @@
         if (target === 'training' && userId) {
           loadCustomTypes();
           setTimeout(() => {
-            initSetsUI('');
+            // Nur initSetsUI aufrufen wenn noch keine Werte eingegeben wurden
+            const hasValues = Array.from({length: setsCount}, (_, i) => document.getElementById('set-reps-' + i))
+              .some(el => el && el.value && parseInt(el.value) > 0);
+            if (!hasValues) initSetsUI('');
             const now = new Date();
             const hh = String(now.getHours()).padStart(2,'0');
             const mm = String(now.getMinutes()).padStart(2,'0');
             const timeEl = document.getElementById('training-time');
-            if (timeEl) timeEl.value = hh + ':' + mm;
+            if (timeEl && !timeEl.value) timeEl.value = hh + ':' + mm;
           }, 50);
           // Silent 2-day sync
           getDoc(doc(db, 'users', userId, 'integrations', 'googlefit')).then(gfitSnap => {
@@ -3723,7 +3735,7 @@
         document.getElementById(target + '-subtab').classList.add('active');
 
         if (target === 'export') {
-          loadBackupStatus();
+          loadDriveStatus();
         }
       }
     });
@@ -3934,7 +3946,7 @@
           const bKey = (b.datum || '') + 'T' + (b.garminTime || b.timestamp?.split('T')[1] || '00:00:00');
           return bKey.localeCompare(aKey);
         })
-        .slice(0, 20);
+        .slice(0, 50);
       
       if (sorted.length === 0) {
         container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Einträge</div>';
@@ -3957,12 +3969,17 @@
         const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
         const isManual = !isGarmin;
-        // Parse sets string "11-10-7" or compute from reps
-        const setsArr = (e.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
-        const setsTotal = setsArr.reduce((s, n) => s + n, 0);
-        const setsDisplay = setsArr.length > 0
-          ? setsArr.map((r, i) => `<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">S${i+1}: ${r}</span>`).join(' ')
-          : (e.sets || '');
+        // Parse sets string "11-10-7" only for manual entries; Garmin/GFit use sets as plain info text
+        let setsArr = [], setsTotal = 0, setsDisplay = '';
+        if (isManual) {
+          setsArr = (e.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
+          setsTotal = setsArr.reduce((s, n) => s + n, 0);
+          setsDisplay = setsArr.length > 0
+            ? setsArr.map((r, i) => `<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">S${i+1}: ${r}</span>`).join(' ')
+            : (e.sets || '');
+        } else {
+          setsDisplay = `<span style="font-size:12px;color:var(--muted);">${e.sets || ''}</span>`;
+        }
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
@@ -4525,12 +4542,70 @@
       }, null, 2);
     }
 
+    // ── Google Drive Integration ─────────────────────────────────────────────
+    const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+    async function getValidDriveToken() {
+      const snap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
+      if (!snap.exists() || !snap.data().refreshToken) throw new Error('Google Drive nicht verbunden');
+      const data = snap.data();
+      if (data.expiresAt > Date.now() + 60000) return data.accessToken;
+      // Refresh via Cloud Function – kein Client Secret im Frontend
+      const refreshFn = httpsCallable(fbFunctions, 'googleDriveRefresh');
+      const result = await refreshFn();
+      if (!result.data?.accessToken) throw new Error('Drive token refresh fehlgeschlagen');
+      return result.data.accessToken;
+    }
+
+    window.connectGoogleDrive = function() {
+      const redirectUri = encodeURIComponent('https://us-central1-fitness-tracker-c6f97.cloudfunctions.net/googleDriveCallback');
+      const scope = encodeURIComponent(DRIVE_SCOPE);
+      const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + GOOGLE_CLIENT_ID +
+        '&response_type=code&redirect_uri=' + redirectUri +
+        '&scope=' + scope + '&access_type=offline&prompt=consent&state=' + userId;
+      const popup = window.open(url, 'gdrive_auth', 'width=600,height=700');
+      window.addEventListener('message', async function handler(e) {
+        if (e.data?.type === 'googledrive_connected') {
+          window.removeEventListener('message', handler);
+          popup?.close();
+          await loadDriveStatus();
+          showToast('✓ Google Drive verbunden!');
+        }
+      });
+    };
+
+    window.disconnectGoogleDrive = async function() {
+      if (!await showConfirm('Google Drive trennen?', 'Die Verbindung wird getrennt. Gesicherte Dateien bleiben in Drive erhalten.', '🔌', 'Trennen')) return;
+      try {
+        const token = await getValidDriveToken();
+        await fetch('https://oauth2.googleapis.com/revoke?token=' + token, { method: 'POST' }).catch(() => {});
+      } catch(e) {}
+      await deleteDoc(doc(db, 'users', userId, 'integrations', 'googledrive')).catch(() => {});
+      document.getElementById('gdrive-connected').style.display = 'none';
+      document.getElementById('gdrive-disconnected').style.display = 'block';
+      showToast('✓ Google Drive getrennt');
+    };
+
+    async function loadDriveStatus() {
+      try {
+        const snap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
+        if (snap.exists() && snap.data().refreshToken) {
+          document.getElementById('gdrive-disconnected').style.display = 'none';
+          document.getElementById('gdrive-connected').style.display = 'block';
+          await loadBackupStatus();
+        } else {
+          document.getElementById('gdrive-disconnected').style.display = 'block';
+          document.getElementById('gdrive-connected').style.display = 'none';
+          const statusEl = document.getElementById('gdrive-backup-status');
+          if (statusEl) statusEl.textContent = 'Noch kein Google Drive Backup erstellt.';
+        }
+      } catch(e) { console.warn('Drive status error:', e); }
+    }
+
     async function uploadToDrive(token, json, existingFileId) {
       const filename = 'fuelofit-backup.json';
       const blob = new Blob([json], { type: 'application/json' });
-
       if (existingFileId) {
-        // Update existing file (overwrite)
         const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`, {
           method: 'PATCH',
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -4539,7 +4614,6 @@
         if (!res.ok) throw new Error((await res.json()).error?.message || 'Upload failed');
         return existingFileId;
       } else {
-        // Create new file
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
         form.append('file', blob);
@@ -4558,32 +4632,18 @@
       const statusEl = document.getElementById('gdrive-backup-status');
       if (statusEl && !silent) statusEl.textContent = '⏳ Erstelle Backup...';
       try {
-        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-        if (!gfitSnap.exists()) {
-          if (statusEl) statusEl.textContent = '❌ Google Fit nicht verbunden.';
-          return;
-        }
-        const token = gfitSnap.data().accessToken;
-
-        // Get existing file ID if any
+        const token = await getValidDriveToken();
         const backupMeta = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
         const existingFileId = backupMeta.exists() ? backupMeta.data().lastDriveFileId : null;
-
         const json = await buildBackupJson();
         const fileId = await uploadToDrive(token, json, existingFileId);
-
         const now = new Date().toISOString();
         await setDoc(doc(db, 'users', userId, 'settings', 'backup'), {
-          lastDriveBackup: now,
-          lastDriveFileId: fileId,
-          lastDriveFileName: 'fuelofit-backup.json'
+          lastDriveBackup: now, lastDriveFileId: fileId, lastDriveFileName: 'fuelofit-backup.json'
         }, { merge: true });
-
-        if (statusEl) {
-          statusEl.textContent = `✅ Gesichert: fuelofit-backup.json`;
-          const el = document.getElementById('last-backup-time');
-          if (el) el.textContent = new Date().toLocaleString('de-DE');
-        }
+        if (statusEl) statusEl.textContent = `✅ Gesichert: fuelofit-backup.json`;
+        const el = document.getElementById('last-backup-time');
+        if (el) el.textContent = new Date().toLocaleString('de-DE');
         if (!silent) showToast('✓ Google Drive Backup erfolgreich');
         console.log('Drive backup done', now);
       } catch(e) {
@@ -4610,8 +4670,8 @@
     // Auto-backup on app start: if last backup > 24h ago, run silently
     async function checkAutoBackup() {
       try {
-        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-        if (!gfitSnap.exists()) return; // No Google connected
+        const driveSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
+        if (!driveSnap.exists() || !driveSnap.data().refreshToken) return; // Drive not connected
         const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
         if (snap.exists() && snap.data().lastDriveBackup) {
           const hoursSince = (Date.now() - new Date(snap.data().lastDriveBackup).getTime()) / 3600000;

@@ -3531,7 +3531,7 @@
         </div>`;
     }
 
-    function showFoodSuggestions() {
+    window.showFoodSuggestions = function showFoodSuggestions() {
       const results = document.getElementById('food-search-results');
       if (!results) return;
       // Wenn Suchfeld bereits befüllt, normale Suche zeigen

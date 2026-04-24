@@ -13,11 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script>
-    function handleLogin() {
-      // Will be overridden by the main app script - wait for it
-      if (window._handleLoginReady) { window._handleLoginReady(); }
-      else { setTimeout(handleLogin, 300); }
-    }
+    // Placeholder - wird vom Haupt-Script überschrieben
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
@@ -425,7 +421,7 @@
     <div class="login-box">
       <h1>🏋️ Training & Ernährung</h1>
       <p>Deine Daten werden sicher in Firebase gespeichert</p>
-      <button class="btn" onclick="if(typeof handleLogin==='function')handleLogin();else setTimeout(handleLogin,500)">Mit Google anmelden</button>
+      <button class="btn" onclick="window.handleLogin()">Mit Google anmelden</button>
     </div>
   </div>
   

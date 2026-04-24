@@ -1298,7 +1298,7 @@
               </div>
               <div id="recipe-input-grams" style="display:none;">
                 <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Gramm</label>
-                <input type="number" id="recipe-grams" value="100" min="1" step="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateRecipeNutrition()">
+                <input type="number" id="recipe-grams" value="100" min="1" step="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateRecipeNutrition()" onfocus="this.select()">
               </div>
               <div style="font-size:13px;color:var(--muted);margin-top:10px;">
                 <span id="recipe-calc-kcal">0</span> kcal · P <span id="recipe-calc-protein">0</span>g · K <span id="recipe-calc-carbs">0</span>g · F <span id="recipe-calc-fat">0</span>g
@@ -2633,7 +2633,7 @@
           <div style="display:flex;align-items:center;gap:8px;">
             <input type="number" value="${ing.amount}" min="1" step="1"
               style="width:70px;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:right;"
-              oninput="updateIngredientAmount(${idx}, this.value)">
+              oninput="updateIngredientAmount(${idx}, this.value)" onfocus="this.select()">
             <span style="font-size:12px;color:var(--muted);">g</span>
             <button onclick="removeIngredient(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;padding:2px 6px;">✕</button>
           </div>
@@ -2994,7 +2994,12 @@
                 <div>
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
                   ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}
-                  ${e.amount ? `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${e.amount}g</span>` : ''}
+                  ${(() => {
+                    if (!e.amount) return '';
+                    // Nicht doppelt anzeigen wenn Gramm schon im Namen steht
+                    const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
+                    return alreadyInName ? '' : `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${e.amount}g</span>`;
+                  })()}
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <span>${fmt(e.kcal)} kcal</span>
@@ -3516,26 +3521,34 @@
       const typeLabel = isRecipe
         ? `<span style="font-size:10px;color:#a78bfa;background:#1e1a3a;padding:1px 5px;border-radius:4px;margin-right:4px;">Rezept</span>`
         : '';
-      const macroLine = isRecipe
-        ? `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`
-        : `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
+      const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const macroLine = `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
 
       return `
-        <div onclick="${isRecipe ? `selectRecipeAsFood('${f.id}')` : `selectFood('${f.id}')`}"
+        <div class="food-suggestion-item" data-id="${f.id}" data-isrecipe="${isRecipe}"
           style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div style="flex:1;min-width:0;">
+          <div style="flex:1;min-width:0;pointer-events:none;">
             <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${typeLabel}${f.name}${countBadge}
+              ${typeLabel}${safeName}${countBadge}
             </div>
             <div style="font-size:11px;color:var(--muted);">${macroLine}${isRecipe ? '' : ' / 100g'}</div>
           </div>
-          <button onclick="toggleFavorite('${key}', event)"
+          <button class="fav-btn" data-favkey="${key}"
             style="background:none;border:none;cursor:pointer;font-size:18px;color:${starColor};padding:4px;flex-shrink:0;">★</button>
         </div>`;
     }
 
     function showFoodSuggestions() {
       const results = document.getElementById('food-search-results');
+      if (!results) return;
+      // Wenn Suchfeld bereits befüllt, normale Suche zeigen
+      const query = document.getElementById('food-search')?.value?.trim();
+      if (query && query.length >= 2) { searchFood(); return; }
+      // Guard: DB noch nicht geladen
+      if (!foodDB || foodDB.length === 0) {
+        results.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Lade Lebensmittel…</div>';
+        return;
+      }
       const counts = getFoodUsageCount();
 
       // Favoriten zuerst (Foods + Rezepte)
@@ -3569,6 +3582,25 @@
 
       results.innerHTML = html;
     }
+
+    // Event-Delegation für Vorschläge/Suchergebnisse
+    document.addEventListener('click', function(e) {
+      // Stern-Button
+      const favBtn = e.target.closest('.fav-btn');
+      if (favBtn) {
+        e.stopPropagation();
+        toggleFavorite(favBtn.dataset.favkey, e);
+        return;
+      }
+      // Lebensmittel/Rezept-Item
+      const item = e.target.closest('.food-suggestion-item');
+      if (item) {
+        const id = item.dataset.id;
+        const isRecipe = item.dataset.isrecipe === 'true';
+        if (isRecipe) selectRecipeAsFood(id);
+        else selectFood(id);
+      }
+    });
 
     window.selectRecipeAsFood = function(id) {
       window.selectRecipe(String(id));
@@ -3928,7 +3960,7 @@
           <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i+1}</span>
           <input type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." 
             style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;"
-            oninput="updateHiddenSets()" onchange="updateHiddenSets()">
+            oninput="updateHiddenSets()" onchange="updateHiddenSets()" onfocus="this.select()">
         `;
         container.appendChild(div);
       }

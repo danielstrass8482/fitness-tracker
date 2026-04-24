@@ -2888,13 +2888,12 @@
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `/ ${fmt(fatGoal)}g Fett` : 'Fett';
       
       // Group by meal
-      const mealOrder = ['Morgens (6-12h)', 'Mittags (12-14h)', 'Nachmittags (14-17h)', 'Abends (17-21h)', 'Nachts (21-6h)'];
+      const mealOrder = ['Morgens (0-11h)', 'Mittags (11-14h)', 'Abends (14-21h)', 'Nachts (21-24h)'];
       const mealKeys = {
-        'Morgens (6-12h)': 'Morgens',
-        'Mittags (12-14h)': 'Mittags',
-        'Nachmittags (14-17h)': 'Nachmittags',
-        'Abends (17-21h)': 'Abends',
-        'Nachts (21-6h)': 'Nachts'
+        'Morgens (0-11h)': 'Morgens',
+        'Mittags (11-14h)': 'Mittags',
+        'Abends (14-21h)': 'Abends',
+        'Nachts (21-24h)': 'Nachts'
       };
       
       const meals = {};
@@ -3009,15 +3008,14 @@
 
     // ── Meal from hour helper ────────────────────────────────────────────────
     function mealFromHour(hour) {
-      if (hour >= 6 && hour < 12) return 'Morgens';
-      if (hour >= 12 && hour < 14) return 'Mittags';
-      if (hour >= 14 && hour < 17) return 'Nachmittags';
-      if (hour >= 17 && hour < 21) return 'Abends';
+      if (hour >= 0 && hour < 11) return 'Morgens';
+      if (hour >= 11 && hour < 14) return 'Mittags';
+      if (hour >= 14 && hour < 21) return 'Abends';
       return 'Nachts';
     }
     const mealLabels = {
-      Morgens: 'Morgens (6–12h)', Mittags: 'Mittags (12–14h)',
-      Nachmittags: 'Nachmittags (14–17h)', Abends: 'Abends (17–21h)', Nachts: 'Nachts (21–6h)'
+      Morgens: 'Morgens (0–11h)', Mittags: 'Mittags (11–14h)',
+      Abends: 'Abends (14–21h)', Nachts: 'Nachts (21–24h)'
     };
 
     window.updateMealFromTime = function() {
@@ -5423,10 +5421,9 @@
         
         const hour = parseInt(time.split(':')[0]);
         let meal = 'Nachts';
-        if (hour >= 6 && hour < 12) meal = 'Morgens';
-        else if (hour >= 12 && hour < 14) meal = 'Mittags';
-        else if (hour >= 14 && hour < 17) meal = 'Nachmittags';
-        else if (hour >= 17 && hour < 21) meal = 'Abends';
+        if (hour >= 0 && hour < 11) meal = 'Morgens';
+        else if (hour >= 11 && hour < 14) meal = 'Mittags';
+        else if (hour >= 14 && hour < 21) meal = 'Abends';
         
         const entryId = Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i;
         const entry = {

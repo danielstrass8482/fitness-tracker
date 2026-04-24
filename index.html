@@ -3598,6 +3598,8 @@
     window.selectRecipeAsFood = function(id) {
       window.selectRecipe(String(id));
     };
+
+    window.searchFood = function() {
       const query = document.getElementById('food-search').value.toLowerCase().trim();
       const results = document.getElementById('food-search-results');
 

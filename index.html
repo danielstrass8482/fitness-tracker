@@ -421,7 +421,7 @@
     <div class="login-box">
       <h1>🏋️ Training & Ernährung</h1>
       <p>Deine Daten werden sicher in Firebase gespeichert</p>
-      <button id="login-btn" class="btn" disabled onclick="(window.handleLogin ? window.handleLogin() : setTimeout(()=>window.handleLogin?.(),500))">Mit Google anmelden</button>
+      <button id="login-btn" class="btn" onclick="window.handleLogin ? window.handleLogin() : setTimeout(()=>window.handleLogin && window.handleLogin(), 300)">Mit Google anmelden</button>
     </div>
   </div>
   
@@ -1386,10 +1386,6 @@
         showToast('❌ Login fehlgeschlagen');
       }
     };
-    // Login-Button jetzt aktivieren
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) loginBtn.disabled = false;
-    
     window.handleLogout = async function() {
       if (await showConfirm('Abmelden?', '', '👋', 'Abmelden', false)) {
         await signOut(auth);

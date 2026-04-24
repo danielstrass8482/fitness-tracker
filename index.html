@@ -1222,7 +1222,7 @@
         <div id="mode-food">
           <!-- Suchzeile + Buttons -->
           <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <input type="text" id="food-search" placeholder="Lebensmittel suchen..." style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="searchFood()">
+            <input type="text" id="food-search" placeholder="Lebensmittel suchen..." style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="searchFood()" onfocus="showFoodSuggestions()">
             <button onclick="searchOpenFoodFacts()" title="Open Food Facts durchsuchen" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:18px;white-space:nowrap;">🌍</button>
             <button onclick="startBarcodeScanner()" title="Barcode scannen" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:18px;">📷</button>
           </div>
@@ -1269,7 +1269,7 @@
               </div>
               <div style="margin-bottom:10px;">
                 <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Menge (g)</label>
-                <input type="number" id="food-amount" value="100" min="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateNutrition()">
+                <input type="number" id="food-amount" value="100" min="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateNutrition()" onfocus="this.select()">
               </div>
               <div style="font-size:13px;color:var(--muted);">
                 <span id="calc-kcal">0</span> kcal · P <span id="calc-protein">0</span>g · K <span id="calc-carbs">0</span>g · F <span id="calc-fat">0</span>g
@@ -1337,6 +1337,9 @@
     let userId = null;
     let foodDB = [];
     let recipes = [];
+    let foodLog = {};
+    let trainingEntries = [];
+    let favorites = new Set(); // Set von IDs: 'food_123' oder 'recipe_456'
     let foodLog = {};
     let trainingEntries = [];
     let dayLogs = [];
@@ -1451,7 +1454,13 @@
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
-        
+
+        // Load Favorites
+        const favSnap = await getDoc(doc(db, 'users', userId, 'settings', 'favorites'));
+        if (favSnap.exists()) {
+          favorites = new Set(favSnap.data().ids || []);
+        }
+
         console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days (last ${detailDays}d), ${Object.keys(weeklyStats).length} weeks, ${trainingEntries.length} trainings`);
         showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage, ${Object.keys(weeklyStats).length} Wochen`);
         
@@ -2350,20 +2359,24 @@
         return;
       }
       
-      list.innerHTML = filtered.slice(0, 100).map(f => `
+      list.innerHTML = filtered.slice(0, 100).map(f => {
+        const key = 'food_' + f.id;
+        const isFav = favorites.has(key);
+        return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-          <div>
+          <div style="flex:1;">
             <div style="font-weight:500;margin-bottom:4px;">${f.name}</div>
             <div style="font-size:12px;color:var(--muted);">
               ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g
             </div>
           </div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? '#FFD93D' : 'var(--muted)'};padding:4px;">★</button>
             <button onclick="editFoodDB('${f.id}')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;">Bearbeiten</button>
             <button onclick="deleteFoodDB('${f.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
           </div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
       
       if (filtered.length > 100) {
         list.innerHTML += `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">...und ${filtered.length - 100} weitere</div>`;
@@ -2502,7 +2515,11 @@
                 ${per100 ? ` | 100g: ${fmt(per100.kcal)} kcal` : ''}
               </div>
             </div>
-            <button onclick="event.stopPropagation();deleteRecipe('${r.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:12px;">Löschen</button>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:12px;">
+              <button onclick="event.stopPropagation();toggleFavorite('recipe_${r.id}', event)"
+                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? '#FFD93D' : 'var(--muted)'};padding:4px;">★</button>
+              <button onclick="event.stopPropagation();deleteRecipe('${r.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+            </div>
           </div>
         `;
       }).join('');
@@ -2977,6 +2994,7 @@
                 <div>
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
                   ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}
+                  ${e.amount ? `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${e.amount}g</span>` : ''}
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <span>${fmt(e.kcal)} kcal</span>
@@ -3460,36 +3478,131 @@
       editingEntryId = null;
     };
     
-    window.searchFood = function() {
+    // ── Favoriten ─────────────────────────────────────────────────────────────
+    window.toggleFavorite = async function(id, event) {
+      event?.stopPropagation();
+      if (favorites.has(id)) favorites.delete(id);
+      else favorites.add(id);
+      await setDoc(doc(db, 'users', userId, 'settings', 'favorites'), {
+        ids: [...favorites]
+      });
+      // Re-render je nach Kontext
+      const query = document.getElementById('food-search')?.value?.trim();
+      if (query && query.length >= 2) searchFood();
+      else showFoodSuggestions();
+      // Auch FoodDB und Rezepte-Liste aktualisieren (Stern sofort umschalten)
+      renderFoodDB();
+      renderRecipes();
+    };
+
+    function getFoodUsageCount() {
+      // Zählt wie oft jedes Lebensmittel/Rezept im foodLog vorkommt
+      const counts = {};
+      Object.values(foodLog).forEach(dayEntries => {
+        dayEntries.forEach(e => {
+          if (!e.foodId) return;
+          const key = e.isRecipe ? 'recipe_' + e.foodId : 'food_' + e.foodId;
+          counts[key] = (counts[key] || 0) + 1;
+        });
+      });
+      return counts;
+    }
+
+    function renderFoodItem(f, isRecipe = false, usageCount = 0) {
+      const key = isRecipe ? 'recipe_' + f.id : 'food_' + f.id;
+      const isFav = favorites.has(key);
+      const starColor = isFav ? '#FFD93D' : 'var(--muted)';
+      const countBadge = usageCount > 0 ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">×${usageCount}</span>` : '';
+      const typeLabel = isRecipe
+        ? `<span style="font-size:10px;color:#a78bfa;background:#1e1a3a;padding:1px 5px;border-radius:4px;margin-right:4px;">Rezept</span>`
+        : '';
+      const macroLine = isRecipe
+        ? `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`
+        : `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
+
+      return `
+        <div onclick="${isRecipe ? `selectRecipeAsFood('${f.id}')` : `selectFood('${f.id}')`}"
+          style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${typeLabel}${f.name}${countBadge}
+            </div>
+            <div style="font-size:11px;color:var(--muted);">${macroLine}${isRecipe ? '' : ' / 100g'}</div>
+          </div>
+          <button onclick="toggleFavorite('${key}', event)"
+            style="background:none;border:none;cursor:pointer;font-size:18px;color:${starColor};padding:4px;flex-shrink:0;">★</button>
+        </div>`;
+    }
+
+    function showFoodSuggestions() {
+      const results = document.getElementById('food-search-results');
+      const counts = getFoodUsageCount();
+
+      // Favoriten zuerst (Foods + Rezepte)
+      const favFoods = foodDB.filter(f => favorites.has('food_' + f.id));
+      const favRecipes = recipes.filter(r => favorites.has('recipe_' + r.id));
+
+      // Häufig genutzt (Top 5, nicht bereits in Favoriten)
+      const frequent = [
+        ...foodDB.filter(f => !favorites.has('food_' + f.id) && counts['food_' + f.id])
+          .map(f => ({ ...f, _count: counts['food_' + f.id], _isRecipe: false })),
+        ...recipes.filter(r => !favorites.has('recipe_' + r.id) && counts['recipe_' + r.id])
+          .map(r => ({ ...r, _count: counts['recipe_' + r.id], _isRecipe: true }))
+      ].sort((a, b) => b._count - a._count).slice(0, 5);
+
+      let html = '';
+
+      if (favFoods.length > 0 || favRecipes.length > 0) {
+        html += `<div style="padding:6px 12px;font-size:11px;color:#FFD93D;font-weight:600;background:var(--bg);">★ Favoriten</div>`;
+        favFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
+        favRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
+      }
+
+      if (frequent.length > 0) {
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">🕐 Häufig genutzt</div>`;
+        frequent.forEach(f => { html += renderFoodItem(f, f._isRecipe, f._count); });
+      }
+
+      if (!html) {
+        html = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Einträge – suche nach Lebensmitteln oben</div>';
+      }
+
+      results.innerHTML = html;
+    }
+
+    window.selectRecipeAsFood = function(id) {
+      window.selectRecipe(String(id));
+    };
       const query = document.getElementById('food-search').value.toLowerCase().trim();
       const results = document.getElementById('food-search-results');
-      
+
       if (query.length < 2) {
-        results.innerHTML = '';
+        showFoodSuggestions();
         return;
       }
-      
-      // Search in foodDB
-      const matches = foodDB.filter(f => 
-        f.name.toLowerCase().includes(query)
-      ).slice(0, 20);
-      
-      if (matches.length === 0) {
+
+      const counts = getFoodUsageCount();
+
+      // Lebensmittel suchen
+      const foodMatches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 15);
+      // Rezepte suchen
+      const recipeMatches = recipes.filter(r => r.name.toLowerCase().includes(query)).slice(0, 5);
+
+      if (foodMatches.length === 0 && recipeMatches.length === 0) {
         results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
         return;
       }
-      
-      results.innerHTML = matches.map(f => `
-        <div onclick="selectFood('${f.id}')" style="padding:12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-weight:500;">${f.name}</div>
-            <div style="font-size:11px;color:var(--muted);">
-              ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g
-            </div>
-          </div>
-          <div style="font-size:11px;color:var(--muted);">pro 100g</div>
-        </div>
-      `).join('');
+
+      let html = '';
+      if (recipeMatches.length > 0) {
+        html += `<div style="padding:6px 12px;font-size:11px;color:#a78bfa;font-weight:600;background:var(--bg);">📋 Rezepte</div>`;
+        recipeMatches.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
+      }
+      if (foodMatches.length > 0) {
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">🥗 Lebensmittel</div>`;
+        foodMatches.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
+      }
+      results.innerHTML = html;
     };
     
     window.selectFood = function(id) {

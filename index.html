@@ -1256,25 +1256,25 @@
             <div id="off-search-results" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
           </div>
 
-          <!-- Barcode Scanner (eingebettet) -->
-          <div id="barcode-container" style="display:none;margin-bottom:10px;">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-              <span>📷 Barcode scannen</span>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:none;border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:13px;padding:3px 8px;border-radius:5px;">🔦</button>
-                <button onclick="stopBarcodeScanner()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕ Schließen</button>
+          <!-- Barcode Scanner Vollbild -->
+          <div id="barcode-container" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#000;">
+            <video id="barcode-video" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline></video>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:130px;border:2px solid rgba(255,255,255,0.8);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,0.5);pointer-events:none;"></div>
+            <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);">
+              <span style="color:#fff;font-size:15px;font-weight:600;">📷 Barcode scannen</span>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
+                <button onclick="stopBarcodeScanner()" style="background:rgba(220,38,38,0.8);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
               </div>
             </div>
-            <video id="barcode-video" style="width:100%;border-radius:8px;background:#000;max-height:220px;object-fit:cover;" autoplay playsinline></video>
-            <div id="barcode-zoom-control" style="display:none;margin-top:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:12px;color:var(--muted);">🔍</span>
-                <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1"
-                  style="flex:1;accent-color:var(--primary);" oninput="applyZoom(this.value)">
-                <span id="barcode-zoom-label" style="font-size:12px;color:var(--muted);min-width:30px;">1×</span>
+            <div id="barcode-zoom-control" style="display:none;position:absolute;bottom:70px;left:20px;right:20px;">
+              <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.6);padding:10px 16px;border-radius:10px;">
+                <span style="color:#fff;font-size:14px;">🔍</span>
+                <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:#4a9eff;" oninput="applyZoom(this.value)">
+                <span id="barcode-zoom-label" style="color:#fff;font-size:13px;min-width:30px;">1×</span>
               </div>
             </div>
-            <div id="barcode-status" style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;">Kamera wird gestartet...</div>
+            <div id="barcode-status" style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:8px;background:rgba(0,0,0,0.5);">Kamera wird gestartet...</div>
           </div>
         </div>
 

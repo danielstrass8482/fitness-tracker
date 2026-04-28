@@ -1377,6 +1377,14 @@
     
     // Login/Logout
     window.handleLogin = async function() {
+      // In nativer Android App: nativen Login triggern
+      if (navigator.userAgent.includes('FuelofitApp')) {
+        if (window.AndroidTokenBridge) {
+          // Native App soll Login-Screen öffnen
+          window.AndroidTokenBridge.startNativeLogin();
+        }
+        return;
+      }
       try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);

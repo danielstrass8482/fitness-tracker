@@ -1384,6 +1384,7 @@
         showToast('❌ Login fehlgeschlagen');
       }
     };
+
     window.handleLogout = async function() {
       if (await showConfirm('Abmelden?', '', '👋', 'Abmelden', false)) {
         await signOut(auth);

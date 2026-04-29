@@ -1368,8 +1368,10 @@
     window.handleLogin = async function() {
       // In nativer Android App: nativen Login triggern
       if (navigator.userAgent.includes('FuelofitApp')) {
-        if (window.AndroidTokenBridge && window.AndroidTokenBridge.startNativeLogin) {
-          window.AndroidTokenBridge.startNativeLogin();
+        try {
+          AndroidTokenBridge.startNativeLogin();
+        } catch(e) {
+          console.warn('AndroidTokenBridge nicht verfügbar:', e);
         }
         return;
       }

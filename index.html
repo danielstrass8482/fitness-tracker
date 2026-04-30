@@ -1483,17 +1483,15 @@
       const s = settings;
       const height = s.height;
       const gender = s.gender || 'male';
-      if (!height) return 0;
+      if (!height) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-      // Gewicht: letzter bekannter Wert vor diesem Datum
       const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
         .filter(e => e.weight && e.datum <= date)
         .sort((a, b) => b.datum.localeCompare(a.datum));
       const weight = logsWithWeight[0]?.weight || s.weight || 75;
 
-      // Alter exakt aus Geburtsdatum berechnen (Rückwärtskompatibilität: falls kein birthday, age verwenden)
       const age = s.birthday ? calcAgeAtDate(s.birthday, date) : s.age;
-      if (!age) return 0;
+      if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
 
       let bmr = gender === 'male'
         ? (10 * weight) + (6.25 * height) - (5 * age) + 5
@@ -1513,8 +1511,9 @@
         .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
       const dailySteps = Math.max(0, totalSteps - activitySteps);
       const dailyKcal = Math.round(dailySteps * 0.04);
+      const activity = Math.round(dayActivity);
 
-      return base + Math.round(dayActivity) + dailyKcal;
+      return { base, activity, daily: dailyKcal, total: base + activity + dailyKcal };
     }
 
     // Get ISO week string YYYY-WXX from date string
@@ -1558,7 +1557,7 @@
             carbs += e.carbs || 0;
             fat += e.fat || 0;
           });
-          kcal_goal += calcHistoricalKcalGoal(wd);
+          kcal_goal += calcHistoricalKcalGoal(wd).total;
         }
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
@@ -1708,7 +1707,7 @@
         cur.setDate(cur.getDate() + 1);
       }
 
-      // Food log (recent detail data)
+      // Food log
       Object.entries(foodLog).forEach(([date, entries]) => {
         if (!days[date]) return;
         entries.forEach(e => {
@@ -1718,8 +1717,11 @@
           days[date].fat += e.fat || 0;
         });
         days[date].kcal = Math.round(days[date].kcal);
-        // Use historical goal (weight on that day, age at that date)
-        days[date].kcal_goal = calcHistoricalKcalGoal(date);
+      });
+
+      // kcal_goal für alle Tage berechnen
+      Object.keys(days).forEach(date => {
+        days[date].kcal_goal = calcHistoricalKcalGoal(date).total;
       });
 
       // Day logs (weight + steps)
@@ -2108,21 +2110,13 @@
           dailyData.push(daily);
         });
 
-        // Fallback: compute from calcHistoricalKcalGoal fields
+        // Direkt aus days-Daten plotten - keine Neuberechnung nötig
         const basisArr = [], actArr = [], dailyArr = [];
         Object.entries(bDays).sort(([a],[b]) => a.localeCompare(b)).forEach(([date, d]) => {
-          const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-          const totalSteps = dayLog?.steps || 0;
-          const actSteps = trainingEntries
-            .filter(e => (e.source === 'googlefit' || e.source === 'garmin') && e.datum === date && e.typ === 'laufen')
-            .reduce((s, e) => s + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
-          const dailyKcal = Math.round(Math.max(0, totalSteps - actSteps) * 0.04);
-          const actKcal = trainingEntries
-            .filter(e => (e.source === 'garmin' || e.source === 'googlefit') && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
-            .reduce((sum, e) => sum + (e.act_kcal_calc || 0), 0);
-          // Compute basis directly from calcHistoricalKcalGoal for this date
-          const basisKcal = calcHistoricalKcalGoal(date);
-          basisArr.push(basisKcal > 0 ? Math.max(0, basisKcal - actKcal - dailyKcal) : null);
+          const actKcal = d.act_kcal_calc || 0;
+          const dailyKcal = Math.round((d.steps_daily || 0) * 0.04);
+          const base = Math.max(0, (d.kcal_goal || 0) - actKcal - dailyKcal);
+          basisArr.push(base || null);
           actArr.push(actKcal || null);
           dailyArr.push(dailyKcal || null);
         });
@@ -2886,7 +2880,7 @@
       document.getElementById('daily-fat').textContent = Math.round(totalFat) + 'g';
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
-      const todayGoal = calcHistoricalKcalGoal(currentDate);
+      const todayGoal = calcHistoricalKcalGoal(currentDate).total;
       const goalText = todayGoal > 0 ? `/ ${fmt(todayGoal)} kcal` : '/ — kcal';
       document.getElementById('daily-kcal-goal').textContent = goalText;
 

@@ -748,8 +748,8 @@
               </select>
             </div>
             <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Alter (Jahre)</label>
-              <input type="number" id="settings-age" placeholder="30" min="10" max="100" oninput="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Geburtsdatum</label>
+              <input type="date" id="settings-birthday" oninput="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
             </div>
           </div>
 
@@ -1481,33 +1481,31 @@
     // Uses weight from dayLog on that date, or most recent prior weight
     function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       const s = settings;
-      const age = s.age; const height = s.height; const gender = s.gender || 'male';
-      if (!age || !height) return 0;
+      const height = s.height;
+      const gender = s.gender || 'male';
+      if (!height) return 0;
 
-      // Find weight on or before this date
+      // Gewicht: letzter bekannter Wert vor diesem Datum
       const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
         .filter(e => e.weight && e.datum <= date)
         .sort((a, b) => b.datum.localeCompare(a.datum));
       const weight = logsWithWeight[0]?.weight || s.weight || 75;
 
-      // Age at that date (approximate)
-      const dateYear = parseInt(date.slice(0, 4));
-      const currentYear = new Date().getFullYear();
-      const ageAtDate = age - (currentYear - dateYear);
+      // Alter exakt aus Geburtsdatum berechnen (Rückwärtskompatibilität: falls kein birthday, age verwenden)
+      const age = s.birthday ? calcAgeAtDate(s.birthday, date) : s.age;
+      if (!age) return 0;
 
       let bmr = gender === 'male'
-        ? (10 * weight) + (6.25 * height) - (5 * ageAtDate) + 5
-        : (10 * weight) + (6.25 * height) - (5 * ageAtDate) - 161;
+        ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+        : (10 * weight) + (6.25 * height) - (5 * age) - 161;
 
       const base = Math.round(bmr * 1.375);
 
-      // Aktivitätskalorien aus Sport-Sessions (nicht Gehen/Wandern → die gehen in Alltagskalorien)
       const dayActivity = (allTrainingEntries || trainingEntries)
         .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
           && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
-      // Alltagskalorien aus Alltagsschritten (Schritte gesamt - Aktivitätsschritte) × 0,04 kcal
       const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
       const totalSteps = dayLog?.steps || 0;
       const activitySteps = (allTrainingEntries || trainingEntries)
@@ -2823,12 +2821,24 @@
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
     }
 
+    // Alter aus Geburtsdatum berechnen (für ein bestimmtes Datum)
+    function calcAgeAtDate(birthday, atDate) {
+      if (!birthday) return null;
+      const birth = new Date(birthday + 'T00:00:00');
+      const at = new Date((atDate || new Date().toISOString().split('T')[0]) + 'T00:00:00');
+      let age = at.getFullYear() - birth.getFullYear();
+      const monthDiff = at.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && at.getDate() < birth.getDate())) age--;
+      return age;
+    }
+
     function calcDailyKcalGoal(date) {
-      // BMR × 1,375 (Basis) + Aktivitätskalorien des Tages
-      const age = settings.age;
+      const birthday = settings.birthday;
       const height = settings.height;
       const weight = settings.weight;
       const gender = settings.gender || 'male';
+      // Rückwärtskompatibilität: falls kein birthday, age verwenden
+      const age = birthday ? calcAgeAtDate(birthday, date) : settings.age;
 
       if (age && height && weight) {
         let bmr = gender === 'male'
@@ -2838,7 +2848,6 @@
         const activity = calcDayActivityKcal(date);
         return { base, activity, total: base + activity };
       }
-      // Fallback: manueller TDEE
       return { base: settings.tdee || 2700, activity: 0, total: settings.tdee || 2700 };
     }
 
@@ -4348,7 +4357,7 @@
           const rdSel = document.getElementById('settings-recipe-display');
           if (rdSel) rdSel.value = settings.recipeDisplay || 'block';
           document.getElementById('settings-gender').value = settings.gender || 'male';
-          document.getElementById('settings-age').value = settings.age || '';
+          document.getElementById('settings-birthday').value = settings.birthday || '';
           document.getElementById('settings-height').value = settings.height || '';
           document.getElementById('settings-weight').value = settings.weight || '';
           document.getElementById('settings-activity').value = settings.activityLevel || 1.55;
@@ -4378,10 +4387,11 @@
 
     window.calcTDEE = function() {
       const gender = document.getElementById('settings-gender')?.value;
-      const age = parseFloat(document.getElementById('settings-age')?.value);
+      const birthday = document.getElementById('settings-birthday')?.value;
       const height = parseFloat(document.getElementById('settings-height')?.value);
       const weight = parseFloat(document.getElementById('settings-weight')?.value);
       const activity = parseFloat(document.getElementById('settings-activity')?.value) || 1.55;
+      const age = birthday ? calcAgeAtDate(birthday) : null;
 
       if (!gender || !age || !height || !weight) {
         document.getElementById('tdee-result').style.display = 'none';
@@ -4413,7 +4423,7 @@
       const carbs = parseInt(document.getElementById('settings-carbs').value) || 325;
       const fat = parseInt(document.getElementById('settings-fat').value) || 95;
       const gender = document.getElementById('settings-gender').value;
-      const age = parseInt(document.getElementById('settings-age').value) || null;
+      const birthday = document.getElementById('settings-birthday').value || null;
       const height = parseFloat(document.getElementById('settings-height').value) || null;
       const weight = parseFloat(document.getElementById('settings-weight').value) || null;
       const activityLevel = parseFloat(document.getElementById('settings-activity').value) || 1.55;
@@ -4422,7 +4432,7 @@
       const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays, recipeDisplay
+        gender, birthday, height, weight, activityLevel, detailDays, recipeDisplay
       };
       
       try {

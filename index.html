@@ -2110,15 +2110,13 @@
           dailyData.push(daily);
         });
 
-        // Direkt aus days-Daten plotten - keine Neuberechnung nötig
+        // Direkt plotten: Basis = BMR×1.375, Aktivität, Alltag
         const basisArr = [], actArr = [], dailyArr = [];
         Object.entries(bDays).sort(([a],[b]) => a.localeCompare(b)).forEach(([date, d]) => {
-          const actKcal = d.act_kcal_calc || 0;
-          const dailyKcal = Math.round((d.steps_daily || 0) * 0.04);
-          const base = Math.max(0, (d.kcal_goal || 0) - actKcal - dailyKcal);
-          basisArr.push(base || null);
-          actArr.push(actKcal || null);
-          dailyArr.push(dailyKcal || null);
+          const breakdown = calcHistoricalKcalGoal(date);
+          basisArr.push(breakdown.base || null);
+          actArr.push(breakdown.activity || null);
+          dailyArr.push(breakdown.daily || null);
         });
 
         const bLabels = Object.keys(bDays).sort().map(d => dashView === 'days' ? d.slice(5) : d);

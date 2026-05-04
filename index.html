@@ -1376,6 +1376,57 @@
     });
     
     // Login/Logout
+    // Health Connect Bridge - empfängt Daten von Android App
+    window.onHealthConnectStepsAndActivities = async function(stepsJson, activitiesJson) {
+      if (!userId) return;
+      try {
+        const steps = JSON.parse(stepsJson);
+        const activities = JSON.parse(activitiesJson);
+
+        // Schritte in Firestore speichern
+        for (const s of steps) {
+          if (!s.date || !s.steps) continue;
+          const logId = 'log_' + s.date.replace(/-/g, '');
+          await setDoc(doc(db, 'users', userId, 'entries', logId), {
+            id: logId, datum: s.date, typ: 'tageslog',
+            steps: s.steps, source_steps: 'healthconnect'
+          }, { merge: true });
+          // Lokales trainingEntries aktualisieren
+          const existing = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === s.date);
+          if (existing) existing.steps = s.steps;
+          else trainingEntries.push({ id: logId, datum: s.date, typ: 'tageslog', steps: s.steps, source_steps: 'healthconnect' });
+        }
+
+        // Aktivitäten in Firestore speichern
+        const HC_TYPE_MAP = {
+          56: 'laufen', 8: 'rad', 4: 'rad', 75: 'laufen',
+          80: 'schwimmen', 97: 'kraft', 99: 'yoga',
+          2: 'cardio', 10: 'cardio', 59: 'cardio'
+        };
+        const weight = settings.weight || 75;
+        for (const a of activities) {
+          if (!a.date || !a.hours) continue;
+          const typ = HC_TYPE_MAP[a.type] || 'cardio';
+          const entryId = 'hc_' + a.startTime.replace(/[^0-9]/g, '');
+          const fakeEntry = { typ, zeit: '', distanz: 0, dauer: a.hours * 60 };
+          // Kalorienschätzung mit MET 6 für unbekannte Typen
+          const met = typ === 'laufen' ? 8 : typ === 'rad' ? 6 : 6;
+          const kcal = Math.round(met * weight * a.hours);
+          await setDoc(doc(db, 'users', userId, 'entries', entryId), {
+            id: entryId, datum: a.date, typ, source: 'healthconnect',
+            act_kcal_calc: kcal, kalorien: 0,
+            zeit: new Date(a.hours * 3600000).toISOString().slice(11, 19),
+            sets: '', schritte: null, hf: null, notiz: ''
+          }, { merge: true });
+        }
+
+        await loadAllData();
+        showToast('✅ Health Connect Daten synchronisiert');
+      } catch(err) {
+        console.error('Health Connect sync error:', err);
+      }
+    };
+
     window.handleLogin = async function() {
       // In nativer Android App: nativen Login triggern
       if (navigator.userAgent.includes('FuelofitApp')) {

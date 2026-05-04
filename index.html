@@ -1571,7 +1571,7 @@
             carbs += e.carbs || 0;
             fat += e.fat || 0;
           });
-          kcal_goal += calcHistoricalKcalGoal(wd);
+          kcal_goal += calcHistoricalKcalGoal(wd).total || 0;
         }
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
@@ -1732,7 +1732,7 @@
         });
         days[date].kcal = Math.round(days[date].kcal);
         // Use historical goal (weight on that day, age at that date)
-        days[date].kcal_goal = calcHistoricalKcalGoal(date);
+        days[date].kcal_goal = calcHistoricalKcalGoal(date).total || 0;
       });
 
       // Day logs (weight + steps)

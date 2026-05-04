@@ -2121,23 +2121,13 @@
           dailyData.push(daily);
         });
 
-        // Fallback: compute from calcHistoricalKcalGoal fields
+        // Direkt plotten: base/activity/daily aus calcHistoricalKcalGoal
         const basisArr = [], actArr = [], dailyArr = [];
         Object.entries(bDays).sort(([a],[b]) => a.localeCompare(b)).forEach(([date, d]) => {
-          const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-          const totalSteps = dayLog?.steps || 0;
-          const actSteps = trainingEntries
-            .filter(e => (e.source === 'googlefit' || e.source === 'garmin') && e.datum === date && e.typ === 'laufen')
-            .reduce((s, e) => s + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
-          const dailyKcal = Math.round(Math.max(0, totalSteps - actSteps) * 0.04);
-          const actKcal = trainingEntries
-            .filter(e => (e.source === 'garmin' || e.source === 'googlefit') && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
-            .reduce((sum, e) => sum + (e.act_kcal_calc || 0), 0);
-          // Compute basis directly from calcHistoricalKcalGoal for this date
-          const basisKcal = calcHistoricalKcalGoal(date);
-          basisArr.push(basisKcal > 0 ? Math.max(0, basisKcal - actKcal - dailyKcal) : null);
-          actArr.push(actKcal || null);
-          dailyArr.push(dailyKcal || null);
+          const breakdown = calcHistoricalKcalGoal(date);
+          basisArr.push(breakdown.base || null);
+          actArr.push(breakdown.activity || null);
+          dailyArr.push(breakdown.daily || null);
         });
 
         const bLabels = Object.keys(bDays).sort().map(d => dashView === 'days' ? d.slice(5) : d);
@@ -2819,11 +2809,25 @@
         }
 
         case 'rad_ebike':
-          // MET 2,5 × kg × h
           return hours > 0 ? Math.round(2.5 * weight * hours) : 0;
 
+        case 'cardio':
+        case 'crosstraining': {
+          // Ergometer/Heimtrainer: MET je nach Geschwindigkeit, Fallback MET 6
+          if (distanz > 0 && hours > 0) {
+            const kmh = distanz / hours;
+            let met = 6.0;
+            if (kmh >= 22) met = 10.0;
+            else if (kmh >= 19) met = 8.0;
+            else if (kmh >= 16) met = 6.0;
+            return Math.round(met * weight * hours);
+          }
+          return hours > 0 ? Math.round(6.0 * weight * hours) : 0;
+        }
+
         default:
-          return 0;
+          // Fallback für unbekannte Typen mit Zeit: MET 5
+          return hours > 0 ? Math.round(5.0 * weight * hours) : 0;
       }
     }
 
@@ -2889,7 +2893,7 @@
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
       const todayGoalObj = calcHistoricalKcalGoal(currentDate);
-      const todayGoal = todayGoalObj?.total || todayGoalObj || 0;
+      const todayGoal = todayGoalObj?.total || 0;
       const goalText = todayGoal > 0 ? `/ ${fmt(todayGoal)} kcal` : '/ — kcal';
       document.getElementById('daily-kcal-goal').textContent = goalText;
 

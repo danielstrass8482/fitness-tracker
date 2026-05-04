@@ -1481,33 +1481,29 @@
     // Uses weight from dayLog on that date, or most recent prior weight
     function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       const s = settings;
-      const age = s.age; const height = s.height; const gender = s.gender || 'male';
-      if (!age || !height) return 0;
+      const height = s.height;
+      const gender = s.gender || 'male';
+      if (!height) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-      // Find weight on or before this date
       const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
         .filter(e => e.weight && e.datum <= date)
         .sort((a, b) => b.datum.localeCompare(a.datum));
       const weight = logsWithWeight[0]?.weight || s.weight || 75;
 
-      // Age at that date (approximate)
-      const dateYear = parseInt(date.slice(0, 4));
-      const currentYear = new Date().getFullYear();
-      const ageAtDate = age - (currentYear - dateYear);
+      const age = s.birthday ? calcAgeAtDate(s.birthday, date) : s.age;
+      if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
 
       let bmr = gender === 'male'
-        ? (10 * weight) + (6.25 * height) - (5 * ageAtDate) + 5
-        : (10 * weight) + (6.25 * height) - (5 * ageAtDate) - 161;
+        ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+        : (10 * weight) + (6.25 * height) - (5 * age) - 161;
 
       const base = Math.round(bmr * 1.375);
 
-      // Aktivitätskalorien aus Sport-Sessions (nicht Gehen/Wandern → die gehen in Alltagskalorien)
       const dayActivity = (allTrainingEntries || trainingEntries)
         .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
           && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
-      // Alltagskalorien aus Alltagsschritten (Schritte gesamt - Aktivitätsschritte) × 0,04 kcal
       const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
       const totalSteps = dayLog?.steps || 0;
       const activitySteps = (allTrainingEntries || trainingEntries)
@@ -1515,8 +1511,9 @@
         .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
       const dailySteps = Math.max(0, totalSteps - activitySteps);
       const dailyKcal = Math.round(dailySteps * 0.04);
+      const activity = Math.round(dayActivity);
 
-      return base + Math.round(dayActivity) + dailyKcal;
+      return { base, activity, daily: dailyKcal, total: base + activity + dailyKcal };
     }
 
     // Get ISO week string YYYY-WXX from date string
@@ -2877,11 +2874,12 @@
       document.getElementById('daily-fat').textContent = Math.round(totalFat) + 'g';
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
-      const todayGoal = calcHistoricalKcalGoal(currentDate);
+      const todayGoalObj = calcHistoricalKcalGoal(currentDate);
+      const todayGoal = todayGoalObj?.total || todayGoalObj || 0;
       const goalText = todayGoal > 0 ? `/ ${fmt(todayGoal)} kcal` : '/ — kcal';
       document.getElementById('daily-kcal-goal').textContent = goalText;
 
-      // Widget-Daten via Android Bridge aktualisieren
+      // Widget-Daten via Android Bridge aktualisieren (heute + letzte 7 Tage)
       try {
         if (window.AndroidTokenBridge && typeof AndroidTokenBridge.updateWidgetData === 'function') {
           const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
@@ -2891,10 +2889,30 @@
             Math.round(totalProtein * 10) / 10,
             Math.round(totalCarbs * 10) / 10,
             Math.round(totalFat * 10) / 10,
-            todayGoal || 0,
+            (todayGoal || 0),
             steps,
             currentDate
           );
+
+          // Letzte 7 Tage cachen
+          if (typeof AndroidTokenBridge.updateWidgetHistory === 'function') {
+            const history = [];
+            for (let i = 1; i <= 7; i++) {
+              const d = new Date();
+              d.setDate(d.getDate() - i);
+              const dateStr = d.toISOString().split('T')[0];
+              const dayEntries = foodLog[dateStr] || [];
+              const dayKcal = dayEntries.reduce((s, e) => s + (e.kcal || 0), 0);
+              const dayProtein = dayEntries.reduce((s, e) => s + (e.protein || 0), 0);
+              const dayCarbs = dayEntries.reduce((s, e) => s + (e.carbs || 0), 0);
+              const dayFat = dayEntries.reduce((s, e) => s + (e.fat || 0), 0);
+              const dayLogEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === dateStr);
+              const daySteps = dayLogEntry?.steps || 0;
+              const dayGoal = calcHistoricalKcalGoal(dateStr)?.total || 0;
+              history.push(`${dateStr}|${Math.round(dayKcal)}|${Math.round(dayProtein*10)/10}|${Math.round(dayCarbs*10)/10}|${Math.round(dayFat*10)/10}|${dayGoal}|${daySteps}`);
+            }
+            AndroidTokenBridge.updateWidgetHistory(history.join(';'));
+          }
         }
       } catch(e) {}
 

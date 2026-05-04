@@ -1490,40 +1490,44 @@
     }
 
     function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
-      const s = settings;
-      const height = s.height;
-      const gender = s.gender || 'male';
-      if (!height) return { base: 0, activity: 0, daily: 0, total: 0 };
+      try {
+        const s = settings;
+        const height = s?.height;
+        const gender = s?.gender || 'male';
+        if (!height) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-      const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
-        .filter(e => e.weight && e.datum <= date)
-        .sort((a, b) => b.datum.localeCompare(a.datum));
-      const weight = logsWithWeight[0]?.weight || s.weight || 75;
+        const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
+          .filter(e => e.weight && e.datum <= date)
+          .sort((a, b) => b.datum.localeCompare(a.datum));
+        const weight = logsWithWeight[0]?.weight || s?.weight || 75;
 
-      const age = s.birthday ? calcAgeAtDate(s.birthday, date) : s.age;
-      if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
+        const age = s?.birthday ? calcAgeAtDate(s.birthday, date) : s?.age;
+        if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-      let bmr = gender === 'male'
-        ? (10 * weight) + (6.25 * height) - (5 * age) + 5
-        : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+        let bmr = gender === 'male'
+          ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+          : (10 * weight) + (6.25 * height) - (5 * age) - 161;
 
-      const base = Math.round(bmr * 1.375);
+        const base = Math.round(bmr * 1.375);
 
-      const dayActivity = (allTrainingEntries || trainingEntries)
-        .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-          && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
-        .reduce((sum, e) => sum + calcActivityKcal(e), 0);
+        const dayActivity = (allTrainingEntries || trainingEntries)
+          .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
+            && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
+          .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
-      const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-      const totalSteps = dayLog?.steps || 0;
-      const activitySteps = (allTrainingEntries || trainingEntries)
-        .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
-        .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
-      const dailySteps = Math.max(0, totalSteps - activitySteps);
-      const dailyKcal = Math.round(dailySteps * 0.04);
-      const activity = Math.round(dayActivity);
+        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+        const totalSteps = dayLog?.steps || 0;
+        const activitySteps = (allTrainingEntries || trainingEntries)
+          .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
+          .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
+        const dailySteps = Math.max(0, totalSteps - activitySteps);
+        const dailyKcal = Math.round(dailySteps * 0.04);
+        const activity = Math.round(dayActivity);
 
-      return { base, activity, daily: dailyKcal, total: base + activity + dailyKcal };
+        return { base, activity, daily: dailyKcal, total: base + activity + dailyKcal };
+      } catch(e) {
+        return { base: 0, activity: 0, daily: 0, total: 0 };
+      }
     }
 
     // Get ISO week string YYYY-WXX from date string

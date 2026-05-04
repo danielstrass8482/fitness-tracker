@@ -1479,6 +1479,16 @@
 
     // Calculate historical kcal goal for a specific date
     // Uses weight from dayLog on that date, or most recent prior weight
+    function calcAgeAtDate(birthday, atDate) {
+      if (!birthday) return null;
+      const birth = new Date(birthday + 'T00:00:00');
+      const at = new Date((atDate || new Date().toISOString().split('T')[0]) + 'T00:00:00');
+      let age = at.getFullYear() - birth.getFullYear();
+      const monthDiff = at.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && at.getDate() < birth.getDate())) age--;
+      return age;
+    }
+
     function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       const s = settings;
       const height = s.height;

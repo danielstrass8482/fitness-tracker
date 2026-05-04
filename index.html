@@ -2812,18 +2812,9 @@
           return hours > 0 ? Math.round(2.5 * weight * hours) : 0;
 
         case 'cardio':
-        case 'crosstraining': {
-          // Ergometer/Heimtrainer: MET je nach Geschwindigkeit, Fallback MET 6
-          if (distanz > 0 && hours > 0) {
-            const kmh = distanz / hours;
-            let met = 6.0;
-            if (kmh >= 22) met = 10.0;
-            else if (kmh >= 19) met = 8.0;
-            else if (kmh >= 16) met = 6.0;
-            return Math.round(met * weight * hours);
-          }
+        case 'crosstraining':
+          // Ergometer: Distanz ist virtuell, daher immer MET 6 (moderat)
           return hours > 0 ? Math.round(6.0 * weight * hours) : 0;
-        }
 
         default:
           // Fallback für unbekannte Typen mit Zeit: MET 5

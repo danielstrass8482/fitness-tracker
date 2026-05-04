@@ -977,6 +977,17 @@
           </div>
         </div>
 
+        <!-- Health Connect Integration -->
+        <div id="health-connect-section" style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;display:none;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+            <div style="background:linear-gradient(135deg,#e8f5e9,#a5d6a7);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💚</div>
+            <h3 style="margin:0;">Health Connect</h3>
+          </div>
+          <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Importiert Schritte und Aktivitäten direkt aus Health Connect (Garmin, Samsung Health, etc.).</p>
+          <div id="hc-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
+          <button class="btn" onclick="syncHealthConnect()" id="hc-sync-btn" style="width:100%;background:#34a853;border-color:#34a853;">💚 Health Connect synchronisieren</button>
+        </div>
+
         <!-- Wochendaten aggregieren -->
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:10px;">📊 Wochendaten berechnen</h3>
@@ -1376,8 +1387,81 @@
     });
     
     // Login/Logout
-    // Health Connect Bridge - empfängt Daten von Android App
+    // Health Connect Integration
+    window.syncHealthConnect = function() {
+      if (!window.AndroidTokenBridge) {
+        showToast('❌ Nur in der App verfügbar');
+        return;
+      }
+      const btn = document.getElementById('hc-sync-btn');
+      const status = document.getElementById('hc-status');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Synchronisiere...'; }
+      if (status) status.textContent = 'Verbinde mit Health Connect...';
+      try {
+        AndroidTokenBridge.requestHealthConnectSync();
+      } catch(e) {
+        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+        showToast('❌ Health Connect nicht verfügbar');
+      }
+    };
+
     window.onHealthConnectStepsAndActivities = async function(stepsJson, activitiesJson) {
+      const btn = document.getElementById('hc-sync-btn');
+      const status = document.getElementById('hc-status');
+      if (!userId) {
+        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+        return;
+      }
+      try {
+        const steps = JSON.parse(stepsJson);
+        const activities = JSON.parse(activitiesJson);
+        if (status) status.textContent = `Importiere ${steps.length} Tage Schritte, ${activities.length} Aktivitäten...`;
+
+        // Schritte speichern
+        for (const s of steps) {
+          if (!s.date || !s.steps) continue;
+          const logId = 'log_' + s.date.replace(/-/g, '');
+          await setDoc(doc(db, 'users', userId, 'entries', logId), {
+            id: logId, datum: s.date, typ: 'tageslog',
+            steps: Number(s.steps), source_steps: 'healthconnect'
+          }, { merge: true });
+          const existing = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === s.date);
+          if (existing) existing.steps = Number(s.steps);
+          else trainingEntries.push({ id: logId, datum: s.date, typ: 'tageslog', steps: Number(s.steps), source_steps: 'healthconnect' });
+        }
+
+        // Aktivitäten speichern
+        const HC_TYPE_MAP = {
+          56: 'laufen', 8: 'rad', 4: 'rad', 75: 'laufen',
+          80: 'schwimmen', 97: 'kraft', 99: 'yoga',
+          2: 'cardio', 10: 'cardio', 59: 'cardio', 13: 'rad'
+        };
+        const weight = settings.weight || 75;
+        for (const a of activities) {
+          if (!a.date || !a.hours || a.hours < 0.05) continue;
+          const typ = HC_TYPE_MAP[a.type] || 'cardio';
+          const entryId = 'hc_' + String(a.startTime).replace(/[^0-9]/g, '').slice(0, 20);
+          const met = typ === 'laufen' ? 8 : typ === 'rad' ? 6 : 6;
+          const kcal = Math.round(met * weight * a.hours);
+          const zeitStr = new Date(Math.round(a.hours * 3600000)).toISOString().slice(11, 19);
+          await setDoc(doc(db, 'users', userId, 'entries', entryId), {
+            id: entryId, datum: a.date, typ, source: 'healthconnect',
+            act_kcal_calc: kcal, kalorien: 0, zeit: zeitStr,
+            distanz: 0, sets: '', schritte: null, hf: null, notiz: ''
+          }, { merge: true });
+        }
+
+        await loadAllData();
+        const lastSync = new Date().toLocaleString('de-DE');
+        if (status) status.textContent = `✓ Zuletzt synchronisiert: ${lastSync}`;
+        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+        showToast('✅ Health Connect synchronisiert');
+      } catch(err) {
+        console.error('Health Connect sync error:', err);
+        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+        showToast('❌ Sync-Fehler: ' + err.message);
+      }
+    };
       if (!userId) return;
       try {
         const steps = JSON.parse(stepsJson);
@@ -3992,6 +4076,9 @@
         }
         if (target === 'daten' && userId) {
           loadGoogleFitStatus();
+          // Health Connect Section nur in App anzeigen
+          const hcSection = document.getElementById('health-connect-section');
+          if (hcSection) hcSection.style.display = window.AndroidTokenBridge ? 'block' : 'none';
           loadDriveStatus();
         }
         if (target === 'ernaehrung' && userId) {

@@ -1375,17 +1375,21 @@
     // Login/Logout
     // Health Connect Integration
     window.syncHealthConnect = function() {
-      if (!window.AndroidTokenBridge) {
-        showToast('❌ Nur in der App verfügbar');
-        return;
-      }
       const btn = document.getElementById('hc-sync-btn');
       const status = document.getElementById('hc-status');
+
+      if (!window.AndroidTokenBridge) {
+        // Im Browser: App per Intent öffnen
+        if (status) status.textContent = '📱 Öffne App für Health Connect Sync...';
+        window.location.href = 'fuelofit://healthconnect-sync';
+        return;
+      }
+
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Synchronisiere...'; }
       if (status) status.textContent = '📡 Verbinde mit Health Connect...';
+
       try {
         AndroidTokenBridge.requestHealthConnectSync();
-        // Timeout falls keine Antwort kommt
         setTimeout(() => {
           if (btn && btn.disabled) {
             btn.disabled = false;
@@ -1396,7 +1400,6 @@
       } catch(e) {
         if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
         if (status) status.textContent = '❌ Bridge-Fehler: ' + e.message;
-        showToast('❌ Health Connect nicht verfügbar');
       }
     };
 
@@ -4044,7 +4047,7 @@
           loadGoogleFitStatus();
           // Health Connect Section nur in App anzeigen
           const hcSection = document.getElementById('health-connect-section');
-          if (hcSection) hcSection.style.display = window.AndroidTokenBridge ? 'block' : 'none';
+          if (hcSection) hcSection.style.display = 'block';
           loadDriveStatus();
         }
         if (target === 'ernaehrung' && userId) {

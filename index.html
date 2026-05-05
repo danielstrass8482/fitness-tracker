@@ -1382,13 +1382,29 @@
       const btn = document.getElementById('hc-sync-btn');
       const status = document.getElementById('hc-status');
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Synchronisiere...'; }
-      if (status) status.textContent = 'Verbinde mit Health Connect...';
+      if (status) status.textContent = '📡 Verbinde mit Health Connect...';
       try {
         AndroidTokenBridge.requestHealthConnectSync();
+        // Timeout falls keine Antwort kommt
+        setTimeout(() => {
+          if (btn && btn.disabled) {
+            btn.disabled = false;
+            btn.textContent = '💚 Health Connect synchronisieren';
+            if (status) status.textContent = '⚠️ Keine Antwort – Permission möglicherweise verweigert oder HC nicht verfügbar';
+          }
+        }, 10000);
       } catch(e) {
         if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+        if (status) status.textContent = '❌ Bridge-Fehler: ' + e.message;
         showToast('❌ Health Connect nicht verfügbar');
       }
+    };
+
+    window.onHealthConnectPermissionDenied = function() {
+      const btn = document.getElementById('hc-sync-btn');
+      const status = document.getElementById('hc-status');
+      if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
+      if (status) status.textContent = '❌ Permission verweigert – bitte in Health Connect App freigeben';
     };
 
     window.onHealthConnectStepsAndActivities = async function(stepsJson, activitiesJson) {

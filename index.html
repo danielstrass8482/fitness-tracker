@@ -1270,25 +1270,7 @@
           </div>
 
           <!-- Barcode Scanner Vollbild -->
-          <div id="barcode-container" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#000;">
-            <video id="barcode-video" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline></video>
-            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:130px;border:2px solid rgba(255,255,255,0.8);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,0.5);pointer-events:none;"></div>
-            <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);">
-              <span style="color:#fff;font-size:15px;font-weight:600;">📷 Barcode scannen</span>
-              <div style="display:flex;gap:10px;align-items:center;">
-                <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
-                <button onclick="stopBarcodeScanner()" style="background:rgba(220,38,38,0.8);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
-              </div>
-            </div>
-            <div id="barcode-zoom-control" style="display:none;position:absolute;bottom:70px;left:20px;right:20px;">
-              <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.6);padding:10px 16px;border-radius:10px;">
-                <span style="color:#fff;font-size:14px;">🔍</span>
-                <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:#4a9eff;" oninput="applyZoom(this.value)">
-                <span id="barcode-zoom-label" style="color:#fff;font-size:13px;min-width:30px;">1×</span>
-              </div>
-            </div>
-            <div id="barcode-status" style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:8px;background:rgba(0,0,0,0.5);">Kamera wird gestartet...</div>
-          </div>
+          <div id="barcode-placeholder"></div>
         </div>
 
         <!-- REZEPTE MODE -->
@@ -3510,8 +3492,10 @@
     window.startBarcodeScanner = async function(context = 'food') {
       barcodeContext = context;
       document.getElementById('barcode-container').style.display = 'block';
-      document.getElementById('off-results-container').style.display = 'none';
-      document.getElementById('food-form').style.display = 'none';
+      const offResults = document.getElementById('off-results-container');
+      const foodForm = document.getElementById('food-form');
+      if (offResults) offResults.style.display = 'none';
+      if (foodForm) foodForm.style.display = 'none';
       torchOn = false;
       videoTrack = null;
 
@@ -5816,5 +5800,26 @@
     }
     generateIcons();
   </script>
+  <!-- Barcode Scanner - global, außerhalb aller Modals -->
+  <div id="barcode-container" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#000;">
+    <video id="barcode-video" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline></video>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:130px;border:2px solid rgba(255,255,255,0.8);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,0.5);pointer-events:none;"></div>
+    <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);">
+      <span style="color:#fff;font-size:15px;font-weight:600;">📷 Barcode scannen</span>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
+        <button onclick="stopBarcodeScanner()" style="background:rgba(220,38,38,0.8);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
+      </div>
+    </div>
+    <div id="barcode-zoom-control" style="display:none;position:absolute;bottom:70px;left:20px;right:20px;">
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.6);padding:10px 16px;border-radius:10px;">
+        <span style="color:#fff;font-size:14px;">🔍</span>
+        <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:#4a9eff;" oninput="applyZoom(this.value)">
+        <span id="barcode-zoom-label" style="color:#fff;font-size:13px;min-width:30px;">1×</span>
+      </div>
+    </div>
+    <div id="barcode-status" style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px;padding:8px;background:rgba(0,0,0,0.5);">Kamera wird gestartet...</div>
+  </div>
+
 </body>
 </html>

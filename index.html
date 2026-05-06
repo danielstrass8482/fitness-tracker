@@ -1160,9 +1160,9 @@
     </div>
   </div>
   <!-- Consolidate Modal -->
-  <div id="consolidate-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;">
-    <div style="max-width:600px;margin:20px auto;background:var(--surface);border-radius:12px;padding:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <div id="consolidate-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
+    <div style="max-width:700px;margin:0 auto;padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;">
         <h3 style="margin:0;">🔀 Duplikate zusammenführen</h3>
         <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;">✕</button>
       </div>
@@ -1170,11 +1170,11 @@
         Ähnliche Einträge werden gruppiert. Wähle pro Gruppe den <strong>Master-Eintrag</strong> – alle anderen werden gelöscht und Tagebuch-Einträge werden auf den Master umgeschrieben.
       </div>
       <div id="consolidate-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
-      <div id="consolidate-groups"></div>
-      <div style="margin-top:16px;display:flex;gap:10px;">
+      <div style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;margin-bottom:12px;">
         <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="flex:1;display:none;">✓ Zusammenführen ausführen</button>
         <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
       </div>
+      <div id="consolidate-groups"></div>
     </div>
   </div>
 
@@ -2644,14 +2644,14 @@
         document.getElementById('consolidate-apply-btn').style.display = 'block';
 
         groupsDiv.innerHTML = consolidateGroups.map((group, gi) => `
-          <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;border:1px solid var(--border);">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Gruppe ${gi + 1} – wähle Master:</div>
+          <div style="background:var(--surface);border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600;">GRUPPE ${gi + 1}</div>
             ${group.map((f, fi) => `
-              <label style="display:flex;align-items:flex-start;gap:10px;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;background:${fi === 0 ? 'var(--surface2)' : 'none'};">
-                <input type="radio" name="group_${gi}" value="${f.id}" ${fi === 0 ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;">
-                <div style="flex:1;min-width:0;">
-                  <div style="font-weight:500;font-size:13px;">${f.name}</div>
-                  <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
+              <label style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:6px;cursor:pointer;margin-bottom:6px;background:${fi === 0 ? 'rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.3)' : 'var(--bg);border:1px solid var(--border)'};">
+                <input type="radio" name="group_${gi}" value="${f.id}" ${fi === 0 ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">
+                <div style="flex:1;">
+                  <div style="font-weight:500;font-size:14px;margin-bottom:2px;">${f.name}</div>
+                  <div style="font-size:12px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
                 </div>
               </label>
             `).join('')}

@@ -1172,6 +1172,7 @@
       <div id="consolidate-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
       <div style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;margin-bottom:12px;">
         <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="flex:1;display:none;">✓ Zusammenführen ausführen</button>
+        <button id="consolidate-export-btn" onclick="exportConsolidateGroups()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;display:none;">📥 Gruppen exportieren</button>
         <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
       </div>
       <div id="consolidate-groups"></div>
@@ -2605,6 +2606,36 @@
       return common / Math.max(wa.size, wb.size);
     }
 
+    window.exportConsolidateGroups = function() {
+      // Format: gruppe_nr;master(1=ja);id;name;kcal;protein;carbs;fat
+      const rows = [['gruppe_nr', 'master', 'id', 'name', 'kcal', 'protein', 'carbs', 'fat']];
+      consolidateGroups.forEach((group, gi) => {
+        group.forEach((f, fi) => {
+          rows.push([
+            gi + 1,
+            fi === 0 ? 1 : 0,  // Erster Eintrag = vorgeschlagener Master
+            f.id,
+            '"' + (f.name || '').replace(/"/g, '""') + '"',
+            f.kcal || 0,
+            f.protein || 0,
+            f.carbs || 0,
+            f.fat || 0
+          ]);
+        });
+        // Leerzeile zwischen Gruppen
+        rows.push(['', '', '', '', '', '', '', '']);
+      });
+      const csv = rows.map(r => r.join(';')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fuelofit_duplikate.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`✓ ${consolidateGroups.length} Gruppen exportiert`);
+    };
+
     window.openConsolidateTool = function() {
       const modal = document.getElementById('consolidate-modal');
       const status = document.getElementById('consolidate-status');
@@ -2642,6 +2673,7 @@
 
         status.textContent = `${consolidateGroups.length} Gruppen mit möglichen Duplikaten gefunden`;
         document.getElementById('consolidate-apply-btn').style.display = 'block';
+        document.getElementById('consolidate-export-btn').style.display = 'block';
 
         groupsDiv.innerHTML = consolidateGroups.map((group, gi) => `
           <div style="background:var(--surface);border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">

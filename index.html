@@ -3437,38 +3437,51 @@
       status.textContent = '';
 
       try {
-        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&lc=de`;
-        const resp = await fetch(url);
+        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&lc=de`;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
         const data = await resp.json();
-        const products = (data.products || []).filter(p => p.product_name && p.nutriments?.['energy-kcal_100g']);
+
+        // Robuster Filter – akzeptiert verschiedene Energie-Felder
+        const products = (data.products || []).filter(p => {
+          if (!p.product_name) return false;
+          const n = p.nutriments || {};
+          return n['energy-kcal_100g'] || n['energy-kcal'] || 
+                 (n['energy_100g'] && n['energy_100g'] < 4000); // kJ Fallback
+        });
 
         if (products.length === 0) {
-          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
+          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse gefunden</div>';
           return;
         }
 
         status.textContent = `${products.length} Treffer`;
         results.innerHTML = '';
-        products.forEach(p => renderOFFResult(foodFromOFF(p), results));
+        products.slice(0, 10).forEach(p => renderOFFResult(foodFromOFF(p), results));
       } catch(e) {
-        results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">❌ Fehler bei der Suche</div>';
+        if (e.name === 'TimeoutError') {
+          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">⏱ Zeitüberschreitung – bitte nochmal versuchen</div>';
+        } else {
+          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">❌ Fehler bei der Suche</div>';
+        }
         console.error('OFF search error:', e);
       }
     };
 
     let barcodeContext = 'food'; // 'food' oder 'recipe'
 
-    async function lookupBarcode(barcode) {
-      document.getElementById('barcode-status').textContent = `🔍 Suche Barcode ${barcode}...`;
+    async function lookupBarcode(barcode, attempt = 1) {
+      document.getElementById('barcode-status').textContent = `🔍 Suche Barcode ${barcode}${attempt > 1 ? ` (Versuch ${attempt})` : ''}...`;
       try {
-        const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+        const resp = await fetch(
+          `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
+          { signal: AbortSignal.timeout(8000) }
+        );
         const data = await resp.json();
         if (data.status === 1 && data.product) {
           const food = foodFromOFF({ ...data.product, code: barcode });
           stopBarcodeScanner();
           const saved = await saveOFFFood(food);
           if (barcodeContext === 'recipe') {
-            // Direkt ins Rezept-Suchfeld übernehmen
             document.getElementById('recipe-ingred-search').value = saved.name;
             searchRecipeIngredient();
             showToast(`✓ ${food.name} gefunden`);
@@ -3484,7 +3497,13 @@
           }, 2000);
         }
       } catch(e) {
-        document.getElementById('barcode-status').textContent = '❌ Netzwerkfehler';
+        if (attempt < 3) {
+          // Automatisch nochmal versuchen
+          document.getElementById('barcode-status').textContent = `⚠️ Fehler – retry in 2s...`;
+          setTimeout(() => lookupBarcode(barcode, attempt + 1), 2000);
+        } else {
+          document.getElementById('barcode-status').textContent = '❌ Netzwerkfehler – bitte manuell suchen';
+        }
       }
     }
 

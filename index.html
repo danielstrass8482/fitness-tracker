@@ -896,6 +896,7 @@
               <input type="file" accept=".csv" style="display:none;" onchange="importFoodDBCsv(this)">
             </label>
           </div>
+          <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
         </div>
         
         <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
@@ -1158,6 +1159,25 @@
       </div>
     </div>
   </div>
+  <!-- Consolidate Modal -->
+  <div id="consolidate-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;">
+    <div style="max-width:600px;margin:20px auto;background:var(--surface);border-radius:12px;padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;">🔀 Duplikate zusammenführen</h3>
+        <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+        Ähnliche Einträge werden gruppiert. Wähle pro Gruppe den <strong>Master-Eintrag</strong> – alle anderen werden gelöscht und Tagebuch-Einträge werden auf den Master umgeschrieben.
+      </div>
+      <div id="consolidate-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
+      <div id="consolidate-groups"></div>
+      <div style="margin-top:16px;display:flex;gap:10px;">
+        <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="flex:1;display:none;">✓ Zusammenführen ausführen</button>
+        <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FoodDB Edit Modal -->
   <div id="edit-fooddb-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:10000;align-items:center;justify-content:center;padding:20px;">
     <div style="max-width:500px;width:100%;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
@@ -2557,6 +2577,137 @@
       renderDataStats();
       input.value = '';
       showToast(`✓ ${imported} importiert, ${skipped} übersprungen`);
+    };
+
+    // Konsolidierungs-Tool
+    let consolidateGroups = [];
+
+    function normalizeFood(name) {
+      return name.toLowerCase()
+        .replace(/portion\s*/gi, '')
+        .replace(/\b(kl|gr|g|ml|stk|stück|kleine?|große?|medium|ca)\b\.?/gi, '')
+        .replace(/\d+/g, '')
+        .replace(/[^a-zäöüß\s]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function similarity(a, b) {
+      const na = normalizeFood(a);
+      const nb = normalizeFood(b);
+      if (na === nb) return 1.0;
+      // Gemeinsame Wörter
+      const wa = new Set(na.split(' ').filter(w => w.length > 2));
+      const wb = new Set(nb.split(' ').filter(w => w.length > 2));
+      if (wa.size === 0 || wb.size === 0) return 0;
+      let common = 0;
+      wa.forEach(w => { if (wb.has(w)) common++; });
+      return common / Math.max(wa.size, wb.size);
+    }
+
+    window.openConsolidateTool = function() {
+      const modal = document.getElementById('consolidate-modal');
+      const status = document.getElementById('consolidate-status');
+      const groupsDiv = document.getElementById('consolidate-groups');
+      modal.style.display = 'block';
+      status.textContent = '⏳ Analysiere ' + foodDB.length + ' Einträge...';
+      groupsDiv.innerHTML = '';
+      document.getElementById('consolidate-apply-btn').style.display = 'none';
+
+      setTimeout(() => {
+        // Gruppen berechnen
+        const used = new Set();
+        consolidateGroups = [];
+
+        for (let i = 0; i < foodDB.length; i++) {
+          if (used.has(foodDB[i].id)) continue;
+          const group = [foodDB[i]];
+          used.add(foodDB[i].id);
+
+          for (let j = i + 1; j < foodDB.length; j++) {
+            if (used.has(foodDB[j].id)) continue;
+            if (similarity(foodDB[i].name, foodDB[j].name) >= 0.6) {
+              group.push(foodDB[j]);
+              used.add(foodDB[j].id);
+            }
+          }
+
+          if (group.length > 1) consolidateGroups.push(group);
+        }
+
+        if (consolidateGroups.length === 0) {
+          status.textContent = '✓ Keine Duplikate gefunden';
+          return;
+        }
+
+        status.textContent = `${consolidateGroups.length} Gruppen mit möglichen Duplikaten gefunden`;
+        document.getElementById('consolidate-apply-btn').style.display = 'block';
+
+        groupsDiv.innerHTML = consolidateGroups.map((group, gi) => `
+          <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;border:1px solid var(--border);">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Gruppe ${gi + 1} – wähle Master:</div>
+            ${group.map((f, fi) => `
+              <label style="display:flex;align-items:flex-start;gap:10px;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;background:${fi === 0 ? 'var(--surface2)' : 'none'};">
+                <input type="radio" name="group_${gi}" value="${f.id}" ${fi === 0 ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:500;font-size:13px;">${f.name}</div>
+                  <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+        `).join('');
+      }, 50);
+    };
+
+    window.applyConsolidation = async function() {
+      const btn = document.getElementById('consolidate-apply-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Führe zusammen...';
+
+      let merged = 0, deleted = 0;
+
+      for (let gi = 0; gi < consolidateGroups.length; gi++) {
+        const group = consolidateGroups[gi];
+        const selected = document.querySelector(`input[name="group_${gi}"]:checked`);
+        if (!selected) continue;
+        const masterId = selected.value;
+
+        for (const f of group) {
+          if (String(f.id) === String(masterId)) continue;
+          // Tagebuch-Einträge auf Master umschreiben
+          try {
+            const snap = await getDocs(query(userLogCol(), where('foodId', '==', f.id)));
+            for (const d of snap.docs) {
+              const master = foodDB.find(m => String(m.id) === String(masterId));
+              if (!master) continue;
+              const entry = d.data();
+              const factor = entry.amount / 100;
+              await setDoc(doc(userLogCol(), d.id), {
+                ...entry,
+                foodId: masterId,
+                name: master.name,
+                kcal: Math.round(master.kcal * factor * 10) / 10,
+                protein: Math.round(master.protein * factor * 10) / 10,
+                carbs: Math.round(master.carbs * factor * 10) / 10,
+                fat: Math.round(master.fat * factor * 10) / 10
+              });
+            }
+            // Duplikat löschen
+            await deleteDoc(doc(userFoodCol(), String(f.id)));
+            foodDB = foodDB.filter(x => String(x.id) !== String(f.id));
+            deleted++;
+          } catch(e) { console.warn('Consolidate error:', e); }
+          merged++;
+        }
+      }
+
+      window.foodDB = foodDB;
+      renderFoodDB();
+      renderDataStats();
+      document.getElementById('consolidate-modal').style.display = 'none';
+      showToast(`✓ ${consolidateGroups.length} Gruppen zusammengeführt, ${deleted} Einträge gelöscht`);
+      await loadAllData();
     };
 
     window.openAddFoodDB = function() {

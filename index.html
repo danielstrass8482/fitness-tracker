@@ -888,7 +888,14 @@
       <div id="lebensmittel-subtab" class="subtab-content active">
         <div style="margin-bottom:12px;">
           <input type="text" id="fooddb-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchFoodDB()">
-          <button class="btn" onclick="openAddFoodDB()" style="width:100%;">+ Neu</button>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
+            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;">📥 CSV Export</button>
+            <label style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;text-align:center;">
+              📤 CSV Import
+              <input type="file" accept=".csv" style="display:none;" onchange="importFoodDBCsv(this)">
+            </label>
+          </div>
         </div>
         
         <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
@@ -2478,6 +2485,80 @@
       }
     }
     
+    window.exportFoodDBCsv = function() {
+      const rows = [['id', 'name', 'kcal', 'protein', 'carbs', 'fat']];
+      foodDB.forEach(f => {
+        rows.push([
+          f.id,
+          '"' + (f.name || '').replace(/"/g, '""') + '"',
+          f.kcal || 0,
+          f.protein || 0,
+          f.carbs || 0,
+          f.fat || 0
+        ]);
+      });
+      const csv = rows.map(r => r.join(';')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fuelofit_lebensmittel.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`✓ ${foodDB.length} Lebensmittel exportiert`);
+    };
+
+    window.importFoodDBCsv = async function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { showToast('❌ Leere CSV'); return; }
+
+      const header = lines[0].split(';').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+      const idIdx = header.indexOf('id');
+      const nameIdx = header.indexOf('name');
+      const kcalIdx = header.indexOf('kcal');
+      const proteinIdx = header.indexOf('protein');
+      const carbsIdx = header.indexOf('carbs');
+      const fatIdx = header.indexOf('fat');
+
+      if (nameIdx === -1 || kcalIdx === -1) { showToast('❌ Ungültige CSV – Spalten id,name,kcal,protein,carbs,fat erforderlich'); return; }
+
+      let imported = 0, skipped = 0;
+      showToast('⏳ Importiere...');
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(';').map(c => c.trim().replace(/^"|"$/g, ''));
+        const name = cols[nameIdx];
+        if (!name) { skipped++; continue; }
+
+        const id = (idIdx >= 0 && cols[idIdx]) ? cols[idIdx] : ('import_' + Date.now() + '_' + i);
+        const food = {
+          id,
+          name,
+          kcal: parseFloat(cols[kcalIdx]) || 0,
+          protein: parseFloat(cols[proteinIdx] || 0) || 0,
+          carbs: parseFloat(cols[carbsIdx] || 0) || 0,
+          fat: parseFloat(cols[fatIdx] || 0) || 0
+        };
+
+        try {
+          await setDoc(doc(userFoodCol(), String(id)), food);
+          const idx = foodDB.findIndex(f => String(f.id) === String(id));
+          if (idx >= 0) foodDB[idx] = food;
+          else foodDB.push(food);
+          imported++;
+        } catch(e) { skipped++; }
+      }
+
+      window.foodDB = foodDB;
+      renderFoodDB();
+      renderDataStats();
+      input.value = '';
+      showToast(`✓ ${imported} importiert, ${skipped} übersprungen`);
+    };
+
     window.openAddFoodDB = function() {
       document.getElementById('edit-fooddb-modal').style.display = 'flex';
       document.getElementById('fooddb-modal-title').textContent = 'Neues Lebensmittel';

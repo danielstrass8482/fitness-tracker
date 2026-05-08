@@ -1170,9 +1170,13 @@
         Ähnliche Einträge werden gruppiert. Wähle pro Gruppe den <strong>Master-Eintrag</strong> – alle anderen werden gelöscht und Tagebuch-Einträge werden auf den Master umgeschrieben.
       </div>
       <div id="consolidate-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
-      <div style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;margin-bottom:12px;">
+      <div style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
         <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="flex:1;display:none;">✓ Zusammenführen ausführen</button>
         <button id="consolidate-export-btn" onclick="exportConsolidateGroups()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;display:none;">📥 Gruppen exportieren</button>
+        <label id="consolidate-import-btn" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;text-align:center;display:none;">
+          📤 Bereinigt importieren
+          <input type="file" accept=".csv" style="display:none;" onchange="importConsolidateGroups(this)">
+        </label>
         <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
       </div>
       <div id="consolidate-groups"></div>
@@ -2606,6 +2610,87 @@
       return common / Math.max(wa.size, wb.size);
     }
 
+    window.importConsolidateGroups = async function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { showToast('❌ Leere CSV'); return; }
+
+      const header = lines[0].split(';').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+      const gruppeIdx = header.indexOf('gruppe_nr');
+      const masterIdx = header.indexOf('master');
+      const idIdx = header.indexOf('id');
+
+      if (gruppeIdx === -1 || masterIdx === -1 || idIdx === -1) {
+        showToast('❌ Ungültige CSV – gruppe_nr, master, id erforderlich');
+        return;
+      }
+
+      // Gruppen aufbauen
+      const groups = {};
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(';').map(c => c.trim().replace(/^"|"$/g, ''));
+        const gruppeNr = cols[gruppeIdx];
+        const master = parseInt(cols[masterIdx]);
+        const id = cols[idIdx];
+        if (!gruppeNr || !id) continue; // Leerzeile oder kein gruppe_nr → ignorieren
+
+        if (!groups[gruppeNr]) groups[gruppeNr] = { master: null, others: [] };
+        if (master === 1) groups[gruppeNr].master = id;
+        else groups[gruppeNr].others.push(id);
+      }
+
+      const status = document.getElementById('consolidate-status');
+      status.textContent = '⏳ Führe zusammen...';
+
+      let deleted = 0, errors = 0;
+
+      for (const gruppeNr of Object.keys(groups)) {
+        const { master: masterId, others } = groups[gruppeNr];
+        if (!masterId || others.length === 0) continue;
+
+        const masterFood = foodDB.find(f => String(f.id) === String(masterId));
+        if (!masterFood) continue;
+
+        for (const otherId of others) {
+          try {
+            // Tagebuch-Einträge auf Master umschreiben
+            const snap = await getDocs(query(userLogCol(), where('foodId', '==', otherId)));
+            for (const d of snap.docs) {
+              const entry = d.data();
+              const factor = (entry.amount || 100) / 100;
+              await setDoc(doc(userLogCol(), d.id), {
+                ...entry,
+                foodId: masterId,
+                name: masterFood.name,
+                kcal: Math.round(masterFood.kcal * factor * 10) / 10,
+                protein: Math.round(masterFood.protein * factor * 10) / 10,
+                carbs: Math.round(masterFood.carbs * factor * 10) / 10,
+                fat: Math.round(masterFood.fat * factor * 10) / 10
+              });
+            }
+            // Duplikat aus foodDB löschen
+            await deleteDoc(doc(userFoodCol(), String(otherId)));
+            foodDB = foodDB.filter(f => String(f.id) !== String(otherId));
+            deleted++;
+          } catch(e) {
+            console.warn('Merge error:', otherId, e);
+            errors++;
+          }
+        }
+      }
+
+      window.foodDB = foodDB;
+      renderFoodDB();
+      renderDataStats();
+      input.value = '';
+      document.getElementById('consolidate-modal').style.display = 'none';
+      status.textContent = '';
+      showToast(`✓ ${deleted} Einträge zusammengeführt${errors > 0 ? ', ' + errors + ' Fehler' : ''}`);
+      await loadAllData();
+    };
+
     window.exportConsolidateGroups = function() {
       // Format: gruppe_nr;master(1=ja);id;name;kcal;protein;carbs;fat
       const rows = [['gruppe_nr', 'master', 'id', 'name', 'kcal', 'protein', 'carbs', 'fat']];
@@ -2674,6 +2759,7 @@
         status.textContent = `${consolidateGroups.length} Gruppen mit möglichen Duplikaten gefunden`;
         document.getElementById('consolidate-apply-btn').style.display = 'block';
         document.getElementById('consolidate-export-btn').style.display = 'block';
+        document.getElementById('consolidate-import-btn').style.display = 'block';
 
         groupsDiv.innerHTML = consolidateGroups.map((group, gi) => `
           <div style="background:var(--surface);border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">
@@ -3351,6 +3437,7 @@
                 mealEntries.push({
                   ...entry,
                   id: entry.id + '_ing_' + ing.foodId,
+                  _originalId: entry.id,
                   name: ingFood.name + ' (' + ing.amount + 'g)',
                   kcal: Math.round((ingFood.kcal || 0) * factor),
                   protein: Math.round((ingFood.protein || 0) * factor * 10) / 10,
@@ -3395,7 +3482,7 @@
               const isRecipeBlock = settings.recipeDisplay !== 'expanded' && recipes.some(r => String(r.id) === String(e.foodId));
               const fromRecipeNote = e._fromRecipe ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">(aus: ${e._fromRecipe})</span>` : '';
               return `
-              <div class="meal-entry" onclick="editEntry('${e.id}')">
+              <div class="meal-entry" onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="${e._isExpanded ? 'border-left:2px solid var(--border);padding-left:8px;' : ''}">
                 <div>
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
                   ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}

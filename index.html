@@ -897,6 +897,7 @@
             </label>
           </div>
           <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
+          <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
         </div>
         
         <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
@@ -1159,27 +1160,53 @@
       </div>
     </div>
   </div>
-  <!-- Consolidate Modal -->
+  <!-- Consolidate Modal - neues 3-Optionen Interface -->
   <div id="consolidate-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
-    <div style="max-width:700px;margin:0 auto;padding:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;">
-        <h3 style="margin:0;">🔀 Duplikate zusammenführen</h3>
-        <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;">✕</button>
+    <div style="max-width:760px;margin:0 auto;padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
+        <div>
+          <h3 style="margin:0 0 4px;">🔀 Duplikate bereinigen</h3>
+          <div id="consolidate-status" style="font-size:12px;color:var(--muted);"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="display:none;padding:10px 18px;">✓ Ausführen</button>
+          <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
+        </div>
       </div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-        Ähnliche Einträge werden gruppiert. Wähle pro Gruppe den <strong>Master-Eintrag</strong> – alle anderen werden gelöscht und Tagebuch-Einträge werden auf den Master umgeschrieben.
+
+      <!-- Legende -->
+      <div style="display:flex;gap:8px;margin:12px 0;font-size:12px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#1a3a1a;border:1px solid #10b981;border-radius:4px;padding:2px 8px;color:#10b981;">✓ Behalten</span> = Master dieser Gruppe</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#1a2a3a;border:1px solid #4a9eff;border-radius:4px;padding:2px 8px;color:#4a9eff;">⇒ Mergen</span> = wird in Master aufgelöst</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#2a1a2a;border:1px solid #a855f7;border-radius:4px;padding:2px 8px;color:#a855f7;">↗ Eigene Gruppe</span> = aus Gruppe entfernen</span>
       </div>
-      <div id="consolidate-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
-      <div style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-        <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="flex:1;display:none;">✓ Zusammenführen ausführen</button>
-        <button id="consolidate-export-btn" onclick="exportConsolidateGroups()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;display:none;">📥 Gruppen exportieren</button>
-        <label id="consolidate-import-btn" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;text-align:center;display:none;">
-          📤 Bereinigt importieren
-          <input type="file" accept=".csv" style="display:none;" onchange="importConsolidateGroups(this)">
-        </label>
-        <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-      </div>
+
       <div id="consolidate-groups"></div>
+    </div>
+  </div>
+
+  <!-- Bulk Kategorie Modal -->
+  <div id="bulk-kategorie-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
+    <div style="max-width:700px;margin:0 auto;padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
+        <div>
+          <h3 style="margin:0 0 4px;">🏷️ Kategorien zuweisen</h3>
+          <div id="bulk-kat-status" style="font-size:12px;color:var(--muted);"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="saveBulkKategorie()" style="padding:10px 18px;">✓ Speichern</button>
+          <button onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <button onclick="bulkSetAllKat('fleisch_fisch')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥩 Alle → Fleisch</button>
+        <button onclick="bulkSetAllKat('milchprodukte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🧀 Alle → Milch</button>
+        <button onclick="bulkSetAllKat('obst_gemuese')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥦 Alle → Obst/Gem.</button>
+        <button onclick="bulkSetAllKat('getreide_brot')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍞 Alle → Getreide</button>
+        <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßes</button>
+        <button onclick="bulkSetAllKat('')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:12px;">✕ Alle leeren</button>
+      </div>
+      <div id="bulk-kat-list"></div>
     </div>
   </div>
 
@@ -1744,7 +1771,6 @@
     
     // Render All
     function renderAll() {
-      // Sicherstellen dass Ernährung-Tab initial aktiv ist
       const activeTab = document.querySelector('.tab.active');
       if (!activeTab) {
         const ernaehrungBtn = document.querySelector('[data-tab="ernaehrung"]');
@@ -2611,8 +2637,10 @@
       showToast(`✓ ${imported} importiert, ${skipped} übersprungen`);
     };
 
-    // Konsolidierungs-Tool
+    // ── Konsolidierungs-Tool (neu: 3 Optionen pro Eintrag) ───────────────────
     let consolidateGroups = [];
+    // consolidateDecisions[gi][fi] = 'keep' | 'merge' | 'split'
+    let consolidateDecisions = [];
 
     function normalizeFood(name) {
       return name.toLowerCase()
@@ -2628,7 +2656,6 @@
       const na = normalizeFood(a);
       const nb = normalizeFood(b);
       if (na === nb) return 1.0;
-      // Gemeinsame Wörter
       const wa = new Set(na.split(' ').filter(w => w.length > 2));
       const wb = new Set(nb.split(' ').filter(w => w.length > 2));
       if (wa.size === 0 || wb.size === 0) return 0;
@@ -2637,115 +2664,68 @@
       return common / Math.max(wa.size, wb.size);
     }
 
-    window.importConsolidateGroups = async function(input) {
-      const file = input.files[0];
-      if (!file) return;
-      const text = await file.text();
-      const lines = text.split('\n').filter(l => l.trim());
-      if (lines.length < 2) { showToast('❌ Leere CSV'); return; }
-
-      const header = lines[0].split(';').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
-      const gruppeIdx = header.indexOf('gruppe_nr');
-      const masterIdx = header.indexOf('master');
-      const idIdx = header.indexOf('id');
-
-      if (gruppeIdx === -1 || masterIdx === -1 || idIdx === -1) {
-        showToast('❌ Ungültige CSV – gruppe_nr, master, id erforderlich');
+    function renderConsolidateGroups() {
+      const groupsDiv = document.getElementById('consolidate-groups');
+      if (consolidateGroups.length === 0) {
+        groupsDiv.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Keine Duplikate gefunden ✓</div>';
         return;
       }
 
-      // Gruppen aufbauen
-      const groups = {};
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(';').map(c => c.trim().replace(/^"|"$/g, ''));
-        const gruppeNr = cols[gruppeIdx];
-        const master = parseInt(cols[masterIdx]);
-        const id = cols[idIdx];
-        if (!gruppeNr || !id) continue; // Leerzeile oder kein gruppe_nr → ignorieren
+      groupsDiv.innerHTML = consolidateGroups.map((group, gi) => {
+        const decisions = consolidateDecisions[gi];
+        // Erster "keep" in der Gruppe = Master
+        const masterIdx = decisions.indexOf('keep');
 
-        if (!groups[gruppeNr]) groups[gruppeNr] = { master: null, others: [] };
-        if (master === 1) groups[gruppeNr].master = id;
-        else groups[gruppeNr].others.push(id);
-      }
+        return `
+          <div id="cg-${gi}" style="background:var(--surface);border-radius:10px;padding:14px;margin-bottom:14px;border:1px solid var(--border);">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-weight:600;display:flex;justify-content:space-between;">
+              <span>GRUPPE ${gi + 1} · ${group.length} Einträge</span>
+              <span style="color:var(--primary);">${decisions.filter(d=>d==='merge').length} werden gemergt · ${decisions.filter(d=>d==='split').length} eigene Gruppe</span>
+            </div>
+            ${group.map((f, fi) => {
+              const d = decisions[fi];
+              const isMaster = d === 'keep' && fi === masterIdx;
+              const borderColor = d === 'keep' ? '#10b981' : d === 'merge' ? '#4a9eff' : '#a855f7';
+              const bg = d === 'keep' ? 'rgba(16,185,129,0.08)' : d === 'merge' ? 'rgba(74,158,255,0.08)' : 'rgba(168,85,247,0.08)';
+              return `
+                <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px;background:${bg};border:1px solid ${borderColor}30;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}${isMaster ? ' <span style="font-size:10px;background:#10b981;color:#000;padding:1px 5px;border-radius:3px;margin-left:4px;">MASTER</span>' : ''}</div>
+                    <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
+                  </div>
+                  <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <button onclick="setDecision(${gi},${fi},'keep')"
+                      style="padding:5px 10px;border-radius:6px;border:1px solid #10b981;background:${d==='keep'?'#10b981':'transparent'};color:${d==='keep'?'#000':'#10b981'};cursor:pointer;font-size:12px;font-weight:600;">✓ Behalten</button>
+                    <button onclick="setDecision(${gi},${fi},'merge')"
+                      style="padding:5px 10px;border-radius:6px;border:1px solid #4a9eff;background:${d==='merge'?'#4a9eff':'transparent'};color:${d==='merge'?'#000':'#4a9eff'};cursor:pointer;font-size:12px;font-weight:600;">⇒ Mergen</button>
+                    <button onclick="setDecision(${gi},${fi},'split')"
+                      style="padding:5px 10px;border-radius:6px;border:1px solid #a855f7;background:${d==='split'?'#a855f7':'transparent'};color:${d==='split'?'#000':'#a855f7'};cursor:pointer;font-size:12px;font-weight:600;">↗ Eigene</button>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`;
+      }).join('');
+    }
 
-      const status = document.getElementById('consolidate-status');
-      status.textContent = '⏳ Führe zusammen...';
+    window.setDecision = function(gi, fi, decision) {
+      const group = consolidateGroups[gi];
+      const decisions = consolidateDecisions[gi];
 
-      let deleted = 0, errors = 0;
-
-      for (const gruppeNr of Object.keys(groups)) {
-        const { master: masterId, others } = groups[gruppeNr];
-        if (!masterId || others.length === 0) continue;
-
-        const masterFood = foodDB.find(f => String(f.id) === String(masterId));
-        if (!masterFood) continue;
-
-        for (const otherId of others) {
-          try {
-            // Tagebuch-Einträge auf Master umschreiben
-            const snap = await getDocs(query(userLogCol(), where('foodId', '==', otherId)));
-            for (const d of snap.docs) {
-              const entry = d.data();
-              const factor = (entry.amount || 100) / 100;
-              await setDoc(doc(userLogCol(), d.id), {
-                ...entry,
-                foodId: masterId,
-                name: masterFood.name,
-                kcal: Math.round(masterFood.kcal * factor * 10) / 10,
-                protein: Math.round(masterFood.protein * factor * 10) / 10,
-                carbs: Math.round(masterFood.carbs * factor * 10) / 10,
-                fat: Math.round(masterFood.fat * factor * 10) / 10
-              });
-            }
-            // Duplikat aus foodDB löschen
-            await deleteDoc(doc(userFoodCol(), String(otherId)));
-            foodDB = foodDB.filter(f => String(f.id) !== String(otherId));
-            deleted++;
-          } catch(e) {
-            console.warn('Merge error:', otherId, e);
-            errors++;
-          }
+      // Wenn "keep" gesetzt wird: alle anderen die "keep" hatten → "merge"
+      if (decision === 'keep') {
+        for (let i = 0; i < decisions.length; i++) {
+          if (i !== fi && decisions[i] === 'keep') decisions[i] = 'merge';
         }
       }
+      // Wenn der aktuelle Master auf merge/split gesetzt wird: ersten anderen als keep setzen
+      if (decision !== 'keep' && decisions[fi] === 'keep') {
+        const nextKeep = decisions.findIndex((d, i) => i !== fi && d !== 'split');
+        if (nextKeep >= 0) decisions[nextKeep] = 'keep';
+      }
 
-      window.foodDB = foodDB;
-      renderFoodDB();
-      renderDataStats();
-      input.value = '';
-      document.getElementById('consolidate-modal').style.display = 'none';
-      status.textContent = '';
-      showToast(`✓ ${deleted} Einträge zusammengeführt${errors > 0 ? ', ' + errors + ' Fehler' : ''}`);
-      await loadAllData();
-    };
-
-    window.exportConsolidateGroups = function() {
-      // Format: gruppe_nr;master(1=ja);id;name;kcal;protein;carbs;fat
-      const rows = [['gruppe_nr', 'master', 'id', 'name', 'kcal', 'protein', 'carbs', 'fat']];
-      consolidateGroups.forEach((group, gi) => {
-        group.forEach((f, fi) => {
-          rows.push([
-            gi + 1,
-            fi === 0 ? 1 : 0,  // Erster Eintrag = vorgeschlagener Master
-            f.id,
-            '"' + (f.name || '').replace(/"/g, '""') + '"',
-            f.kcal || 0,
-            f.protein || 0,
-            f.carbs || 0,
-            f.fat || 0
-          ]);
-        });
-        // Leerzeile zwischen Gruppen
-        rows.push(['', '', '', '', '', '', '', '']);
-      });
-      const csv = rows.map(r => r.join(';')).join('\n');
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'fuelofit_duplikate.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`✓ ${consolidateGroups.length} Gruppen exportiert`);
+      decisions[fi] = decision;
+      consolidateDecisions[gi] = decisions;
+      renderConsolidateGroups();
     };
 
     window.openConsolidateTool = function() {
@@ -2758,9 +2738,9 @@
       document.getElementById('consolidate-apply-btn').style.display = 'none';
 
       setTimeout(() => {
-        // Gruppen berechnen
         const used = new Set();
         consolidateGroups = [];
+        consolidateDecisions = [];
 
         for (let i = 0; i < foodDB.length; i++) {
           if (used.has(foodDB[i].id)) continue;
@@ -2775,33 +2755,22 @@
             }
           }
 
-          if (group.length > 1) consolidateGroups.push(group);
+          if (group.length > 1) {
+            consolidateGroups.push(group);
+            // Default: erster = keep, alle anderen = merge
+            consolidateDecisions.push(group.map((_, fi) => fi === 0 ? 'keep' : 'merge'));
+          }
         }
 
         if (consolidateGroups.length === 0) {
           status.textContent = '✓ Keine Duplikate gefunden';
+          groupsDiv.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">✓ Keine Duplikate gefunden</div>';
           return;
         }
 
-        status.textContent = `${consolidateGroups.length} Gruppen mit möglichen Duplikaten gefunden`;
+        status.textContent = `${consolidateGroups.length} Gruppen · ${consolidateGroups.reduce((s,g)=>s+g.length,0)} Einträge`;
         document.getElementById('consolidate-apply-btn').style.display = 'block';
-        document.getElementById('consolidate-export-btn').style.display = 'block';
-        document.getElementById('consolidate-import-btn').style.display = 'block';
-
-        groupsDiv.innerHTML = consolidateGroups.map((group, gi) => `
-          <div style="background:var(--surface);border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid var(--border);">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600;">GRUPPE ${gi + 1}</div>
-            ${group.map((f, fi) => `
-              <label style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:6px;cursor:pointer;margin-bottom:6px;background:${fi === 0 ? 'rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.3)' : 'var(--bg);border:1px solid var(--border)'};">
-                <input type="radio" name="group_${gi}" value="${f.id}" ${fi === 0 ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">
-                <div style="flex:1;">
-                  <div style="font-weight:500;font-size:14px;margin-bottom:2px;">${f.name}</div>
-                  <div style="font-size:12px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
-                </div>
-              </label>
-            `).join('')}
-          </div>
-        `).join('');
+        renderConsolidateGroups();
       }, 50);
     };
 
@@ -2810,40 +2779,49 @@
       btn.disabled = true;
       btn.textContent = '⏳ Führe zusammen...';
 
-      let merged = 0, deleted = 0;
+      let merged = 0, deleted = 0, split = 0;
 
       for (let gi = 0; gi < consolidateGroups.length; gi++) {
         const group = consolidateGroups[gi];
-        const selected = document.querySelector(`input[name="group_${gi}"]:checked`);
-        if (!selected) continue;
-        const masterId = selected.value;
+        const decisions = consolidateDecisions[gi];
 
-        for (const f of group) {
-          if (String(f.id) === String(masterId)) continue;
-          // Tagebuch-Einträge auf Master umschreiben
-          try {
-            const snap = await getDocs(query(userLogCol(), where('foodId', '==', f.id)));
-            for (const d of snap.docs) {
-              const master = foodDB.find(m => String(m.id) === String(masterId));
-              if (!master) continue;
-              const entry = d.data();
-              const factor = entry.amount / 100;
-              await setDoc(doc(userLogCol(), d.id), {
-                ...entry,
-                foodId: masterId,
-                name: master.name,
-                kcal: Math.round(master.kcal * factor * 10) / 10,
-                protein: Math.round(master.protein * factor * 10) / 10,
-                carbs: Math.round(master.carbs * factor * 10) / 10,
-                fat: Math.round(master.fat * factor * 10) / 10
-              });
-            }
-            // Duplikat löschen
-            await deleteDoc(doc(userFoodCol(), String(f.id)));
-            foodDB = foodDB.filter(x => String(x.id) !== String(f.id));
-            deleted++;
-          } catch(e) { console.warn('Consolidate error:', e); }
-          merged++;
+        // Master = erstes "keep"
+        const masterIdx = decisions.indexOf('keep');
+        if (masterIdx < 0) continue;
+        const masterId = group[masterIdx].id;
+        const masterFood = foodDB.find(f => String(f.id) === String(masterId));
+        if (!masterFood) continue;
+
+        for (let fi = 0; fi < group.length; fi++) {
+          if (fi === masterIdx) continue;
+          const f = group[fi];
+          const decision = decisions[fi];
+
+          if (decision === 'merge') {
+            try {
+              const snap = await getDocs(query(userLogCol(), where('foodId', '==', f.id)));
+              for (const d of snap.docs) {
+                const entry = d.data();
+                const factor = (entry.amount || 100) / 100;
+                await setDoc(doc(userLogCol(), d.id), {
+                  ...entry,
+                  foodId: masterId,
+                  name: masterFood.name,
+                  kcal: Math.round(masterFood.kcal * factor * 10) / 10,
+                  protein: Math.round(masterFood.protein * factor * 10) / 10,
+                  carbs: Math.round(masterFood.carbs * factor * 10) / 10,
+                  fat: Math.round(masterFood.fat * factor * 10) / 10
+                });
+              }
+              await deleteDoc(doc(userFoodCol(), String(f.id)));
+              foodDB = foodDB.filter(x => String(x.id) !== String(f.id));
+              deleted++;
+              merged++;
+            } catch(e) { console.warn('Merge error:', e); }
+          } else if (decision === 'split') {
+            // Nichts tun — bleibt als eigenständiges Lebensmittel
+            split++;
+          }
         }
       }
 
@@ -2851,9 +2829,72 @@
       renderFoodDB();
       renderDataStats();
       document.getElementById('consolidate-modal').style.display = 'none';
-      showToast(`✓ ${consolidateGroups.length} Gruppen zusammengeführt, ${deleted} Einträge gelöscht`);
+      showToast(`✓ ${merged} gemergt, ${deleted} gelöscht, ${split} als eigene Gruppe behalten`);
       await loadAllData();
     };
+
+    // ── Bulk Kategorie Zuweisung ─────────────────────────────────────────────
+    const KATEGORIE_OPTIONS = [
+      { value: '', label: '— keine —' },
+      { value: 'fleisch_fisch', label: '🥩 Fleisch & Fisch' },
+      { value: 'milchprodukte', label: '🧀 Milchprodukte' },
+      { value: 'obst_gemuese', label: '🥦 Obst & Gemüse' },
+      { value: 'getreide_brot', label: '🍞 Getreide & Brot' },
+      { value: 'suesswaren', label: '🍫 Süßigkeiten & Snacks' }
+    ];
+
+    window.openBulkKategorie = function() {
+      const modal = document.getElementById('bulk-kategorie-modal');
+      const list = document.getElementById('bulk-kat-list');
+      const status = document.getElementById('bulk-kat-status');
+      modal.style.display = 'block';
+
+      // Nur Lebensmittel ohne Kategorie anzeigen
+      const uncategorized = foodDB.filter(f => !f.kategorie);
+      status.textContent = `${uncategorized.length} Lebensmittel ohne Kategorie`;
+
+      if (uncategorized.length === 0) {
+        list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">✓ Alle Lebensmittel haben eine Kategorie</div>';
+        return;
+      }
+
+      list.innerHTML = uncategorized.map(f => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
+            <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
+          </div>
+          <select id="bk-${f.id}" style="padding:7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;min-width:160px;">
+            ${KATEGORIE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+          </select>
+        </div>
+      `).join('');
+    };
+
+    window.bulkSetAllKat = function(value) {
+      document.querySelectorAll('[id^="bk-"]').forEach(sel => { sel.value = value; });
+    };
+
+    window.saveBulkKategorie = async function() {
+      const uncategorized = foodDB.filter(f => !f.kategorie);
+      let saved = 0;
+      for (const f of uncategorized) {
+        const sel = document.getElementById('bk-' + f.id);
+        if (!sel) continue;
+        const kat = sel.value;
+        if (!kat) continue; // keine Kategorie gewählt → überspringen
+        try {
+          await setDoc(doc(userFoodCol(), String(f.id)), { ...f, kategorie: kat });
+          f.kategorie = kat;
+          saved++;
+        } catch(e) { console.warn('Save kategorie error:', e); }
+      }
+      window.foodDB = foodDB;
+      renderFoodDB();
+      document.getElementById('bulk-kategorie-modal').style.display = 'none';
+      showToast(`✓ ${saved} Kategorien gespeichert`);
+    };
+
 
     window.openAddFoodDB = function() {
       document.getElementById('edit-fooddb-modal').style.display = 'flex';
@@ -2870,7 +2911,6 @@
     window.editFoodDB = function(id) {
       const food = foodDB.find(f => String(f.id) === String(id));
       if (!food) return;
-      
       document.getElementById('edit-fooddb-modal').style.display = 'flex';
       document.getElementById('fooddb-modal-title').textContent = 'Lebensmittel bearbeiten';
       document.getElementById('fooddb-id').value = food.id;
@@ -4296,13 +4336,10 @@
         window.foodLog = foodLog;
         
         renderFoodLog();
-        // Modal offen lassen für weiteres Eintragen (Feature 3)
-        // Nur beim Bearbeiten schließen, beim neuen Eintrag offen lassen
         if (editingEntryId) {
           closeAddFood();
           showToast('✓ Aktualisiert');
         } else {
-          // Formular zurücksetzen aber Modal offen lassen
           selectedFood = null;
           document.getElementById('food-search').value = '';
           document.getElementById('food-search-results').innerHTML = '';
@@ -4523,12 +4560,11 @@
       });
     });
     
-    // Feature 2: Widget-Klick öffnet Ernährung-Tab
+    // Feature 2: Widget-Klick öffnet Tab per URL-Parameter oder Android-Bridge
     window.openTabFromWidget = function(tabName) {
       const btn = document.querySelector('[data-tab="' + tabName + '"]');
       if (btn) btn.click();
     };
-    // Deeplink via URL-Parameter: ?tab=ernaehrung
     (function checkDeeplink() {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
@@ -4539,9 +4575,9 @@
         }, 500);
       }
     })();
-    // Android Bridge kann openTabFromWidget('ernaehrung') aufrufen
 
-
+    // Sub-Tab Switching
+    document.addEventListener('click', (e) => {
       if (e.target.classList.contains('sub-tab')) {
         const target = e.target.dataset.subtab;
         const parent = e.target.closest('.tab-content');

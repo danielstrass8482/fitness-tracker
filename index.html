@@ -897,6 +897,8 @@
             <option value="obst_gemuese">🥦 Obst & Gemüse</option>
             <option value="getreide_brot">🍞 Getreide & Brot</option>
             <option value="suesswaren">🍫 Süßigkeiten</option>
+            <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
+            <option value="getraenke">🥤 Getränke</option>
             <option value="sonstiges">📦 Sonstiges</option>
           </select>
           <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -1231,6 +1233,8 @@
         <button onclick="bulkSetAllKat('obst_gemuese')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥦 Alle → Obst/Gem.</button>
         <button onclick="bulkSetAllKat('getreide_brot')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍞 Alle → Getreide</button>
         <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßigkeiten</button>
+        <button onclick="bulkSetAllKat('gerichte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍽️ Alle → Gerichte</button>
+        <button onclick="bulkSetAllKat('getraenke')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥤 Alle → Getränke</button>
         <button onclick="bulkSetAllKat('sonstiges')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">📦 Alle → Sonstiges</button>
         <button onclick="bulkSetAllKat('')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:12px;">✕ Alle leeren</button>
       </div>
@@ -1263,6 +1267,8 @@
             <option value="obst_gemuese">🥦 Obst & Gemüse</option>
             <option value="getreide_brot">🍞 Getreide & Brot</option>
             <option value="suesswaren">🍫 Süßigkeiten</option>
+            <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
+            <option value="getraenke">🥤 Getränke</option>
             <option value="sonstiges">📦 Sonstiges</option>
           </select>
         </div>
@@ -2376,6 +2382,8 @@
           obst_gemuese:   '#22c55e',
           getreide_brot:  '#f59e0b',
           suesswaren:     '#a855f7',
+          gerichte:       '#f97316',
+          getraenke:      '#06b6d4',
           sonstiges:      '#64748b',
           unbekannt:      '#6b7280'
         };
@@ -2385,10 +2393,12 @@
           obst_gemuese:  '🥦 Obst & Gemüse',
           getreide_brot: '🍞 Getreide & Brot',
           suesswaren:    '🍫 Süßigkeiten',
+          gerichte:      '🍽️ Gerichte & Mahlzeiten',
+          getraenke:     '🥤 Getränke',
           sonstiges:     '📦 Sonstiges',
           unbekannt:     '❓ Ohne Kategorie'
         };
-        const KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren','sonstiges','unbekannt'];
+        const KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren','gerichte','getraenke','sonstiges','unbekannt'];
 
         // Baue foodId→kategorie Map
         const foodKatMap = {};
@@ -2679,6 +2689,8 @@
         'obst_gemuese': '🥦 Obst & Gemüse',
         'getreide_brot': '🍞 Getreide & Brot',
         'suesswaren': '🍫 Süßigkeiten',
+        'gerichte': '🍽️ Gerichte & Mahlzeiten',
+        'getraenke': '🥤 Getränke',
         'sonstiges': '📦 Sonstiges'
       };
 
@@ -3004,6 +3016,8 @@
       { value: 'obst_gemuese', label: '🥦 Obst & Gemüse' },
       { value: 'getreide_brot', label: '🍞 Getreide & Brot' },
       { value: 'suesswaren', label: '🍫 Süßigkeiten' },
+      { value: 'gerichte', label: '🍽️ Gerichte & Mahlzeiten' },
+      { value: 'getraenke', label: '🥤 Getränke' },
       { value: 'sonstiges', label: '📦 Sonstiges' }
     ];
 

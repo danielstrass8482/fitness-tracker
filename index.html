@@ -2858,31 +2858,36 @@
         return;
       }
 
-      list.innerHTML = uncategorized.map(f => `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);">
+      list.innerHTML = '';
+      uncategorized.forEach(f => {
+        const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);';
+        div.innerHTML = `
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
+            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>
             <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
           </div>
-          <select id="bk-${f.id}" style="padding:7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;min-width:160px;">
+          <select data-food-id="${f.id}" class="bk-sel" style="padding:7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;min-width:160px;">
             ${KATEGORIE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
-          </select>
-        </div>
-      `).join('');
+          </select>`;
+        list.appendChild(div);
+      });
     };
 
     window.bulkSetAllKat = function(value) {
-      document.querySelectorAll('[id^="bk-"]').forEach(sel => { sel.value = value; });
+      document.querySelectorAll('.bk-sel').forEach(sel => { sel.value = value; });
     };
 
     window.saveBulkKategorie = async function() {
-      const uncategorized = foodDB.filter(f => !f.kategorie);
+      const selects = document.querySelectorAll('.bk-sel');
       let saved = 0;
-      for (const f of uncategorized) {
-        const sel = document.getElementById('bk-' + f.id);
-        if (!sel) continue;
+      for (const sel of selects) {
+        const foodId = sel.dataset.foodId;
         const kat = sel.value;
-        if (!kat) continue; // keine Kategorie gewählt → überspringen
+        if (!kat) continue;
+        const f = foodDB.find(f => String(f.id) === String(foodId));
+        if (!f) continue;
         try {
           await setDoc(doc(userFoodCol(), String(f.id)), { ...f, kategorie: kat });
           f.kategorie = kat;

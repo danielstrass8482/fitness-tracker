@@ -888,6 +888,15 @@
       <div id="lebensmittel-subtab" class="subtab-content active">
         <div style="margin-bottom:12px;">
           <input type="text" id="fooddb-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchFoodDB()">
+          <select id="fooddb-kategorie-filter" onchange="searchFoodDB()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;font-size:13px;">
+            <option value="">— Alle Kategorien —</option>
+            <option value="__none__">⚪ Ohne Kategorie</option>
+            <option value="fleisch_fisch">🥩 Fleisch & Fisch</option>
+            <option value="milchprodukte">🧀 Milchprodukte</option>
+            <option value="obst_gemuese">🥦 Obst & Gemüse</option>
+            <option value="getreide_brot">🍞 Getreide & Brot</option>
+            <option value="suesswaren">🍫 Süßigkeiten & Snacks</option>
+          </select>
           <div style="display:flex;gap:8px;margin-bottom:8px;">
             <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
             <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;">📥 CSV Export</button>
@@ -2527,15 +2536,20 @@
     function renderFoodDB() {
       const query = (document.getElementById('fooddb-search')?.value || '').toLowerCase().trim();
       const localOnly = document.getElementById('fooddb-local-only')?.checked || false;
-      
+      const katFilter = document.getElementById('fooddb-kategorie-filter')?.value || '';
+
       let filtered = foodDB;
-      
+
       if (query.length > 0) {
         filtered = filtered.filter(f => f.name.toLowerCase().includes(query));
       }
-      
       if (localOnly) {
         filtered = filtered.filter(f => f.kcal === 0);
+      }
+      if (katFilter === '__none__') {
+        filtered = filtered.filter(f => !f.kategorie);
+      } else if (katFilter) {
+        filtered = filtered.filter(f => f.kategorie === katFilter);
       }
       
       const list = document.getElementById('fooddb-list');

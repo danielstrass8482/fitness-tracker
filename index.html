@@ -436,14 +436,14 @@
     </div>
     
     <div class="tabs tab-bar" id="bottom-nav">
-      <button class="tab active" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
       <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
+      <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
       <button class="tab" data-tab="dashboard"><span style="font-size:18px;">📊</span>Dashboard</button>
       <button class="tab" data-tab="daten"><span style="font-size:18px;">📥</span>Daten</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
     </div>
     
-    <div id="training-tab" class="tab-content active">
+    <div id="training-tab" class="tab-content">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;">
         <!-- Training Entry -->
         <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
@@ -533,7 +533,7 @@
       </div>
     </div>
     
-    <div id="ernaehrung-tab" class="tab-content">
+    <div id="ernaehrung-tab" class="tab-content active">
       <!-- Date Navigation -->
       <div style="text-align:center;margin-bottom:16px;">
         <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
@@ -1198,6 +1198,18 @@
           <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Name</label>
           <input type="text" id="fooddb-name" placeholder="z.B. Hähnchenbrust" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
         </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Kategorie</label>
+          <select id="fooddb-kategorie" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <option value="">— keine Kategorie —</option>
+            <option value="fleisch_fisch">🥩 Fleisch & Fisch</option>
+            <option value="milchprodukte">🧀 Milchprodukte</option>
+            <option value="obst_gemuese">🥦 Obst & Gemüse</option>
+            <option value="getreide_brot">🍞 Getreide & Brot</option>
+            <option value="suesswaren">🍫 Süßigkeiten & Snacks</option>
+          </select>
+        </div>
         
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
           <div>
@@ -1732,6 +1744,12 @@
     
     // Render All
     function renderAll() {
+      // Sicherstellen dass Ernährung-Tab initial aktiv ist
+      const activeTab = document.querySelector('.tab.active');
+      if (!activeTab) {
+        const ernaehrungBtn = document.querySelector('[data-tab="ernaehrung"]');
+        if (ernaehrungBtn) ernaehrungBtn.classList.add('active');
+      }
       renderFoodLog();
       renderDataStats();
       renderFoodDB();
@@ -2486,13 +2504,22 @@
         return;
       }
       
+      const KATEGORIE_LABELS = {
+        'fleisch_fisch': '🥩 Fleisch & Fisch',
+        'milchprodukte': '🧀 Milchprodukte',
+        'obst_gemuese': '🥦 Obst & Gemüse',
+        'getreide_brot': '🍞 Getreide & Brot',
+        'suesswaren': '🍫 Süßigkeiten & Snacks'
+      };
+
       list.innerHTML = filtered.slice(0, 100).map(f => {
         const key = 'food_' + f.id;
         const isFav = favorites.has(key);
+        const katLabel = f.kategorie ? `<span style="font-size:10px;background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--muted);margin-left:6px;">${KATEGORIE_LABELS[f.kategorie] || f.kategorie}</span>` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
           <div style="flex:1;">
-            <div style="font-weight:500;margin-bottom:4px;">${f.name}</div>
+            <div style="font-weight:500;margin-bottom:4px;">${f.name}${katLabel}</div>
             <div style="font-size:12px;color:var(--muted);">
               ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g
             </div>
@@ -2837,6 +2864,7 @@
       document.getElementById('fooddb-protein').value = '';
       document.getElementById('fooddb-carbs').value = '';
       document.getElementById('fooddb-fat').value = '';
+      document.getElementById('fooddb-kategorie').value = '';
     };
     
     window.editFoodDB = function(id) {
@@ -2851,6 +2879,7 @@
       document.getElementById('fooddb-protein').value = food.protein || 0;
       document.getElementById('fooddb-carbs').value = food.carbs || 0;
       document.getElementById('fooddb-fat').value = food.fat || 0;
+      document.getElementById('fooddb-kategorie').value = food.kategorie || '';
     };
     
     window.closeFoodDBModal = function() {
@@ -2864,13 +2893,14 @@
       const protein = parseFloat(document.getElementById('fooddb-protein').value) || 0;
       const carbs = parseFloat(document.getElementById('fooddb-carbs').value) || 0;
       const fat = parseFloat(document.getElementById('fooddb-fat').value) || 0;
+      const kategorie = document.getElementById('fooddb-kategorie').value || '';
       
       if (!name) {
         alert('Bitte Name eingeben!');
         return;
       }
       
-      const food = { id, name, kcal, protein, carbs, fat };
+      const food = { id, name, kcal, protein, carbs, fat, ...(kategorie ? { kategorie } : {}) };
       
       try {
         await setDoc(doc(userFoodCol(), String(id)), food);
@@ -4266,8 +4296,22 @@
         window.foodLog = foodLog;
         
         renderFoodLog();
-        closeAddFood();
-        showToast(editingEntryId ? '✓ Aktualisiert' : '✓ Gespeichert');
+        // Modal offen lassen für weiteres Eintragen (Feature 3)
+        // Nur beim Bearbeiten schließen, beim neuen Eintrag offen lassen
+        if (editingEntryId) {
+          closeAddFood();
+          showToast('✓ Aktualisiert');
+        } else {
+          // Formular zurücksetzen aber Modal offen lassen
+          selectedFood = null;
+          document.getElementById('food-search').value = '';
+          document.getElementById('food-search-results').innerHTML = '';
+          document.getElementById('food-form').style.display = 'none';
+          document.getElementById('off-results-container').style.display = 'none';
+          document.getElementById('off-search-results').innerHTML = '';
+          setTimeout(() => document.getElementById('food-search')?.focus(), 100);
+          showToast('✓ Gespeichert');
+        }
       } catch (err) {
         console.error('Save error:', err);
         showToast('❌ Speichern fehlgeschlagen');
@@ -4479,8 +4523,25 @@
       });
     });
     
-    // Sub-Tab Switching
-    document.addEventListener('click', (e) => {
+    // Feature 2: Widget-Klick öffnet Ernährung-Tab
+    window.openTabFromWidget = function(tabName) {
+      const btn = document.querySelector('[data-tab="' + tabName + '"]');
+      if (btn) btn.click();
+    };
+    // Deeplink via URL-Parameter: ?tab=ernaehrung
+    (function checkDeeplink() {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setTimeout(() => {
+          const btn = document.querySelector('[data-tab="' + tabParam + '"]');
+          if (btn) btn.click();
+        }, 500);
+      }
+    })();
+    // Android Bridge kann openTabFromWidget('ernaehrung') aufrufen
+
+
       if (e.target.classList.contains('sub-tab')) {
         const target = e.target.dataset.subtab;
         const parent = e.target.closest('.tab-content');

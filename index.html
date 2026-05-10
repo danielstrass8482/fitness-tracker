@@ -2487,6 +2487,8 @@
         document.getElementById('dash-tiles') && renderDashboardTiles(days);
         return;
       }
+
+      if (hasData) {
         // Einheitengruppen – gleiche Gruppe → gleiche Y-Achse
         const unitGroup = v => {
           if (['kcal','kcal_goal','act_kcal_calc','act_kcal_garmin'].includes(v)) return 'kcal';

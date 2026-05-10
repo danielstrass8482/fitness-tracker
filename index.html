@@ -1198,6 +1198,22 @@
           <button onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
         </div>
       </div>
+      <!-- KI Auto-Kategorisierung -->
+      <div style="background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.25);border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-weight:600;font-size:14px;margin-bottom:2px;">🤖 KI Auto-Kategorisierung</div>
+            <div style="font-size:12px;color:var(--muted);">Claude analysiert alle Namen und weist automatisch Kategorien zu</div>
+          </div>
+          <button id="ai-kat-btn" onclick="aiAutoCategorize()" style="padding:10px 16px;background:var(--primary);border:none;border-radius:8px;color:white;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">▶ Starten</button>
+        </div>
+        <div id="ai-kat-progress" style="display:none;margin-top:10px;">
+          <div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:6px;">
+            <div id="ai-kat-bar" style="background:var(--primary);height:6px;border-radius:4px;width:0%;transition:width 0.3s;"></div>
+          </div>
+          <div id="ai-kat-msg" style="font-size:12px;color:var(--muted);"></div>
+        </div>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
         <button onclick="bulkSetAllKat('fleisch_fisch')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥩 Alle → Fleisch</button>
         <button onclick="bulkSetAllKat('milchprodukte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🧀 Alle → Milch</button>
@@ -2901,7 +2917,106 @@
     };
 
 
-    window.openAddFoodDB = function() {
+    // ── KI Auto-Kategorisierung ──────────────────────────────────────────────
+    window.aiAutoCategorize = async function() {
+      const btn = document.getElementById('ai-kat-btn');
+      const progress = document.getElementById('ai-kat-progress');
+      const bar = document.getElementById('ai-kat-bar');
+      const msg = document.getElementById('ai-kat-msg');
+      const status = document.getElementById('bulk-kat-status');
+
+      const uncategorized = foodDB.filter(f => !f.kategorie);
+      if (uncategorized.length === 0) {
+        showToast('✓ Alle Lebensmittel haben bereits eine Kategorie');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Läuft...';
+      progress.style.display = 'block';
+
+      const BATCH_SIZE = 50;
+      const batches = [];
+      for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
+        batches.push(uncategorized.slice(i, i + BATCH_SIZE));
+      }
+
+      const results = {}; // id → kategorie
+      let done = 0;
+
+      for (const batch of batches) {
+        const names = batch.map((f, i) => `${i+1}. ${f.name}`).join('\n');
+        msg.textContent = `Batch ${Math.floor(done/BATCH_SIZE)+1} von ${batches.length} (${done}/${uncategorized.length})...`;
+        bar.style.width = Math.round(done / uncategorized.length * 100) + '%';
+
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1000,
+              system: `Du kategorisierst Lebensmittel in genau eine dieser 5 Kategorien:
+- fleisch_fisch: Fleisch, Fisch, Meeresfrüchte, Wurst, Geflügel, Eier
+- milchprodukte: Milch, Käse, Joghurt, Quark, Butter, Sahne, Eis
+- obst_gemuese: Obst, Gemüse, Salat, Pilze, Kräuter, Hülsenfrüchte, Nüsse, Samen
+- getreide_brot: Brot, Nudeln, Reis, Cerealien, Mehl, Backwaren, Knäckebrot, Müsli
+- suesswaren: Schokolade, Kekse, Kuchen, Bonbons, Chips, Snacks, Fast Food, Fertiggerichte, Getränke, Saucen, Öle, Gewürze, alles andere
+
+Antworte NUR mit JSON, kein Text davor oder danach. Format:
+{"1":"kategorie","2":"kategorie",...}`,
+              messages: [{ role: 'user', content: names }]
+            })
+          });
+
+          const data = await response.json();
+          const text = data.content?.[0]?.text || '{}';
+          const clean = text.replace(/```json|```/g, '').trim();
+          const parsed = JSON.parse(clean);
+
+          batch.forEach((f, i) => {
+            const kat = parsed[String(i+1)];
+            if (kat && ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren'].includes(kat)) {
+              results[f.id] = kat;
+            }
+          });
+        } catch(e) {
+          console.warn('AI batch error:', e);
+        }
+
+        done += batch.length;
+        await new Promise(r => setTimeout(r, 300)); // kurze Pause zwischen Batches
+      }
+
+      bar.style.width = '100%';
+      msg.textContent = `✓ ${Object.keys(results).length} Kategorien ermittelt, speichere...`;
+
+      // Direkt in Firestore speichern
+      let saved = 0;
+      for (const [foodId, kat] of Object.entries(results)) {
+        const f = foodDB.find(f => String(f.id) === String(foodId));
+        if (!f) continue;
+        try {
+          await setDoc(doc(userFoodCol(), String(f.id)), { ...f, kategorie: kat });
+          f.kategorie = kat;
+          saved++;
+        } catch(e) { console.warn('Save error:', e); }
+      }
+
+      window.foodDB = foodDB;
+      renderFoodDB();
+
+      btn.disabled = false;
+      btn.textContent = '▶ Nochmal';
+      msg.textContent = `✓ ${saved} Kategorien gespeichert`;
+      status.textContent = `${foodDB.filter(f => !f.kategorie).length} Lebensmittel noch ohne Kategorie`;
+
+      // Liste neu rendern mit verbleibenden unkategorisierten
+      openBulkKategorie();
+      showToast(`✓ ${saved} Kategorien automatisch vergeben`);
+    };
+
+
       document.getElementById('edit-fooddb-modal').style.display = 'flex';
       document.getElementById('fooddb-modal-title').textContent = 'Neues Lebensmittel';
       document.getElementById('fooddb-id').value = '';

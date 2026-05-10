@@ -899,6 +899,7 @@
             <option value="suesswaren">🍫 Süßigkeiten</option>
             <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
             <option value="getraenke">🥤 Getränke</option>
+            <option value="supplements">🏋️ Supplements &amp; Protein</option>
             <option value="sonstiges">📦 Sonstiges</option>
           </select>
           <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -1235,6 +1236,7 @@
         <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßigkeiten</button>
         <button onclick="bulkSetAllKat('gerichte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍽️ Alle → Gerichte</button>
         <button onclick="bulkSetAllKat('getraenke')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥤 Alle → Getränke</button>
+        <button onclick="bulkSetAllKat('supplements')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🏋️ Alle → Supplements</button>
         <button onclick="bulkSetAllKat('sonstiges')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">📦 Alle → Sonstiges</button>
         <button onclick="bulkSetAllKat('')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:12px;">✕ Alle leeren</button>
       </div>
@@ -1269,6 +1271,7 @@
             <option value="suesswaren">🍫 Süßigkeiten</option>
             <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
             <option value="getraenke">🥤 Getränke</option>
+            <option value="supplements">🏋️ Supplements &amp; Protein</option>
             <option value="sonstiges">📦 Sonstiges</option>
           </select>
         </div>
@@ -2384,6 +2387,7 @@
           suesswaren:     '#a855f7',
           gerichte:       '#f97316',
           getraenke:      '#06b6d4',
+          supplements:    '#ec4899',
           sonstiges:      '#64748b',
           unbekannt:      '#6b7280'
         };
@@ -2395,10 +2399,11 @@
           suesswaren:    '🍫 Süßigkeiten',
           gerichte:      '🍽️ Gerichte & Mahlzeiten',
           getraenke:     '🥤 Getränke',
+          supplements:   '🏋️ Supplements & Protein',
           sonstiges:     '📦 Sonstiges',
           unbekannt:     '❓ Ohne Kategorie'
         };
-        const KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren','gerichte','getraenke','sonstiges','unbekannt'];
+        const KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren','gerichte','getraenke','supplements','sonstiges','unbekannt'];
 
         // Baue foodId→kategorie Map
         const foodKatMap = {};
@@ -2693,6 +2698,7 @@
         'suesswaren': '🍫 Süßigkeiten',
         'gerichte': '🍽️ Gerichte & Mahlzeiten',
         'getraenke': '🥤 Getränke',
+        'supplements': '🏋️ Supplements & Protein',
         'sonstiges': '📦 Sonstiges'
       };
 
@@ -3020,6 +3026,7 @@
       { value: 'suesswaren', label: '🍫 Süßigkeiten' },
       { value: 'gerichte', label: '🍽️ Gerichte & Mahlzeiten' },
       { value: 'getraenke', label: '🥤 Getränke' },
+      { value: 'supplements', label: '🏋️ Supplements & Protein' },
       { value: 'sonstiges', label: '📦 Sonstiges' }
     ];
 

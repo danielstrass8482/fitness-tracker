@@ -654,6 +654,7 @@
               </optgroup>
               <optgroup label="Kalorienziel">
                 <option value="kcal_breakdown">Kalorienziel Aufschlüsselung (Stacked)</option>
+                <option value="kat_breakdown">Kategorien-Intake (100% Stacked)</option>
               </optgroup>
             </select>
             <div style="display:flex;gap:6px;margin-top:6px;">
@@ -895,7 +896,8 @@
             <option value="milchprodukte">🧀 Milchprodukte</option>
             <option value="obst_gemuese">🥦 Obst & Gemüse</option>
             <option value="getreide_brot">🍞 Getreide & Brot</option>
-            <option value="suesswaren">🍫 Süßigkeiten & Snacks</option>
+            <option value="suesswaren">🍫 Süßigkeiten</option>
+            <option value="sonstiges">📦 Sonstiges</option>
           </select>
           <div style="display:flex;gap:8px;margin-bottom:8px;">
             <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
@@ -1228,7 +1230,8 @@
         <button onclick="bulkSetAllKat('milchprodukte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🧀 Alle → Milch</button>
         <button onclick="bulkSetAllKat('obst_gemuese')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥦 Alle → Obst/Gem.</button>
         <button onclick="bulkSetAllKat('getreide_brot')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍞 Alle → Getreide</button>
-        <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßes</button>
+        <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßigkeiten</button>
+        <button onclick="bulkSetAllKat('sonstiges')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">📦 Alle → Sonstiges</button>
         <button onclick="bulkSetAllKat('')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:12px;">✕ Alle leeren</button>
       </div>
       <div id="bulk-kat-list"></div>
@@ -1259,7 +1262,8 @@
             <option value="milchprodukte">🧀 Milchprodukte</option>
             <option value="obst_gemuese">🥦 Obst & Gemüse</option>
             <option value="getreide_brot">🍞 Getreide & Brot</option>
-            <option value="suesswaren">🍫 Süßigkeiten & Snacks</option>
+            <option value="suesswaren">🍫 Süßigkeiten</option>
+            <option value="sonstiges">📦 Sonstiges</option>
           </select>
         </div>
         
@@ -2364,7 +2368,115 @@
         return;
       }
 
-      if (hasData) {
+      // ── Special: kat_breakdown 100% stacked bar ───────────────────────────
+      if (var1 === 'kat_breakdown') {
+        const KAT_COLORS = {
+          fleisch_fisch:  '#ef4444',
+          milchprodukte:  '#3b82f6',
+          obst_gemuese:   '#22c55e',
+          getreide_brot:  '#f59e0b',
+          suesswaren:     '#a855f7',
+          sonstiges:      '#64748b',
+          unbekannt:      '#6b7280'
+        };
+        const KAT_LABELS = {
+          fleisch_fisch: '🥩 Fleisch & Fisch',
+          milchprodukte: '🧀 Milchprodukte',
+          obst_gemuese:  '🥦 Obst & Gemüse',
+          getreide_brot: '🍞 Getreide & Brot',
+          suesswaren:    '🍫 Süßigkeiten',
+          sonstiges:     '📦 Sonstiges',
+          unbekannt:     '❓ Ohne Kategorie'
+        };
+        const KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren','sonstiges','unbekannt'];
+
+        // Baue foodId→kategorie Map
+        const foodKatMap = {};
+        (window.foodDB || []).forEach(f => { foodKatMap[String(f.id)] = f.kategorie || 'unbekannt'; });
+
+        // Aggregiere kcal pro Kategorie pro Bucket
+        const bucketKat = {}; // bucket → { kat: kcal }
+
+        function getBucket(date) {
+          if (dashView === 'days') return date;
+          if (dashView === 'weeks') {
+            const dt = new Date(date + 'T12:00:00');
+            const jan4 = new Date(dt.getFullYear(), 0, 4);
+            const startW1 = new Date(jan4);
+            startW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+            const wn = Math.ceil(((dt - startW1) / 86400000 + 1) / 7);
+            return dt.getFullYear() + '-W' + String(wn).padStart(2, '0');
+          }
+          return date.slice(0, 7);
+        }
+
+        const { fromDate, toDate } = getDateRange();
+        Object.entries(foodLog).forEach(([date, entries]) => {
+          if (date < fromDate || date > toDate) return;
+          const bucket = getBucket(date);
+          if (!bucketKat[bucket]) bucketKat[bucket] = {};
+          entries.forEach(e => {
+            const kat = foodKatMap[String(e.foodId)] || 'unbekannt';
+            bucketKat[bucket][kat] = (bucketKat[bucket][kat] || 0) + (e.kcal || 0);
+          });
+        });
+
+        const sortedBuckets = Object.keys(bucketKat).sort();
+        const bLabels = sortedBuckets.map(b => {
+          if (dashView === 'weeks') { const [yr, wn] = b.split('-W'); return 'KW' + parseInt(wn) + '/' + String(yr).slice(2); }
+          if (dashView === 'days') return b.slice(5);
+          return b;
+        });
+
+        // 100% normalisieren
+        const datasets100 = KATS.filter(kat => sortedBuckets.some(b => (bucketKat[b][kat] || 0) > 0))
+          .map(kat => ({
+            label: KAT_LABELS[kat],
+            data: sortedBuckets.map(b => {
+              const total = KATS.reduce((s, k) => s + (bucketKat[b][k] || 0), 0);
+              if (!total) return null;
+              return Math.round((bucketKat[b][kat] || 0) / total * 1000) / 10;
+            }),
+            backgroundColor: KAT_COLORS[kat],
+            stack: 'kat'
+          }));
+
+        if (dashChartInstance) dashChartInstance.destroy();
+        const ctx = document.getElementById('dash-chart').getContext('2d');
+        dashChartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: { labels: bLabels, datasets: datasets100 },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { labels: { color: '#e8e8e8', font: { size: 11 }, boxWidth: 12 } },
+              tooltip: {
+                callbacks: {
+                  label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%`,
+                  footer: items => {
+                    const b = sortedBuckets[items[0]?.dataIndex];
+                    if (!b) return '';
+                    const total = KATS.reduce((s, k) => s + (bucketKat[b][k] || 0), 0);
+                    return `Gesamt: ${fmt(Math.round(total))} kcal`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { stacked: true, ticks: { color: '#888', maxTicksLimit: 14 }, grid: { color: '#222' } },
+              y: { stacked: true, min: 0, max: 100,
+                   ticks: { color: '#888', callback: v => v + '%' },
+                   grid: { color: '#222' },
+                   title: { display: true, text: 'Anteil (%)', color: '#888' } }
+            }
+          }
+        });
+        document.getElementById('dash-chart').style.display = 'block';
+        document.getElementById('dash-chart-empty').style.display = 'none';
+        document.getElementById('dash-tiles') && renderDashboardTiles(days);
+        return;
+      }
         // Einheitengruppen – gleiche Gruppe → gleiche Y-Achse
         const unitGroup = v => {
           if (['kcal','kcal_goal','act_kcal_calc','act_kcal_garmin'].includes(v)) return 'kcal';
@@ -2530,6 +2642,7 @@
     
     // FoodDB Management
     window.searchFoodDB = function() {
+      window._foodDBPage = 0;
       renderFoodDB();
     };
     
@@ -2565,10 +2678,17 @@
         'milchprodukte': '🧀 Milchprodukte',
         'obst_gemuese': '🥦 Obst & Gemüse',
         'getreide_brot': '🍞 Getreide & Brot',
-        'suesswaren': '🍫 Süßigkeiten & Snacks'
+        'suesswaren': '🍫 Süßigkeiten',
+        'sonstiges': '📦 Sonstiges'
       };
 
-      list.innerHTML = filtered.slice(0, 100).map(f => {
+      // Pagination
+      const PAGE_SIZE = 100;
+      const currentPage = window._foodDBPage || 0;
+      const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+      const paginated = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+      list.innerHTML = paginated.map(f => {
         const key = 'food_' + f.id;
         const isFav = favorites.has(key);
         const katLabel = f.kategorie ? `<span style="font-size:10px;background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--muted);margin-left:6px;">${KATEGORIE_LABELS[f.kategorie] || f.kategorie}</span>` : '';
@@ -2589,7 +2709,16 @@
       }).join('');
       
       if (filtered.length > 100) {
-        list.innerHTML += `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">...und ${filtered.length - 100} weitere</div>`;
+        list.innerHTML += `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);">
+            <button onclick="window._foodDBPage=Math.max(0,(window._foodDBPage||0)-1);renderFoodDB();"
+              style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
+              ${currentPage === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>← Zurück</button>
+            <span style="font-size:13px;color:var(--muted);">Seite ${currentPage+1} / ${totalPages} · ${filtered.length} Einträge</span>
+            <button onclick="window._foodDBPage=Math.min(${totalPages-1},(window._foodDBPage||0)+1);renderFoodDB();"
+              style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
+              ${currentPage >= totalPages-1 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>Weiter →</button>
+          </div>`;
       }
     }
     
@@ -2874,7 +3003,8 @@
       { value: 'milchprodukte', label: '🧀 Milchprodukte' },
       { value: 'obst_gemuese', label: '🥦 Obst & Gemüse' },
       { value: 'getreide_brot', label: '🍞 Getreide & Brot' },
-      { value: 'suesswaren', label: '🍫 Süßigkeiten & Snacks' }
+      { value: 'suesswaren', label: '🍫 Süßigkeiten' },
+      { value: 'sonstiges', label: '📦 Sonstiges' }
     ];
 
     window.openBulkKategorie = function() {

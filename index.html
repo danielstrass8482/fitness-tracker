@@ -2630,9 +2630,11 @@
       const proteinIdx = header.indexOf('protein');
       const carbsIdx = header.indexOf('carbs');
       const fatIdx = header.indexOf('fat');
+      const katIdx = header.indexOf('kategorie');
 
       if (nameIdx === -1 || kcalIdx === -1) { showToast('❌ Ungültige CSV – Spalten id,name,kcal,protein,carbs,fat erforderlich'); return; }
 
+      const VALID_KATS = ['fleisch_fisch','milchprodukte','obst_gemuese','getreide_brot','suesswaren'];
       let imported = 0, skipped = 0;
       showToast('⏳ Importiere...');
 
@@ -2642,13 +2644,15 @@
         if (!name) { skipped++; continue; }
 
         const id = (idIdx >= 0 && cols[idIdx]) ? cols[idIdx] : ('import_' + Date.now() + '_' + i);
+        const kat = katIdx >= 0 && VALID_KATS.includes(cols[katIdx]) ? cols[katIdx] : null;
         const food = {
           id,
           name,
           kcal: parseFloat(cols[kcalIdx]) || 0,
           protein: parseFloat(cols[proteinIdx] || 0) || 0,
           carbs: parseFloat(cols[carbsIdx] || 0) || 0,
-          fat: parseFloat(cols[fatIdx] || 0) || 0
+          fat: parseFloat(cols[fatIdx] || 0) || 0,
+          ...(kat ? { kategorie: kat } : {})
         };
 
         try {

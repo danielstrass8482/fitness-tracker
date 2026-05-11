@@ -2013,8 +2013,15 @@
       else {
         const months = parseInt(dashRange);
         const d = new Date();
-        d.setMonth(d.getMonth() - months);
-        fromDate = d.toISOString().split('T')[0];
+        if (months === 1) {
+          // Aktueller Monat: ab 1. des aktuellen Monats
+          fromDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        } else {
+          // Mehrere Monate: ab 1. des Monats vor X Monaten
+          d.setDate(1);
+          d.setMonth(d.getMonth() - (months - 1));
+          fromDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        }
       }
       return { fromDate, toDate: today };
     }
@@ -2385,8 +2392,8 @@
           gerichte:       '#f97316',
           getraenke:      '#06b6d4',
           supplements:    '#ec4899',
-          sonstiges:      '#64748b',
-          unbekannt:      '#6b7280'
+          sonstiges:      '#94a3b8',
+          unbekannt:      '#1e293b'
         };
         const KAT_LABELS = {
           fleisch_fisch: '🥩 Fleisch & Fisch',
@@ -3196,16 +3203,42 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     // ── Tagebuch-IDs reparieren ──────────────────────────────────────────────
     window.repairFoodIds = async function() {
       if (!await showConfirm('Tagebuch-IDs reparieren?',
-        'Einträge mit ungültiger foodId werden über den Namen mit der Lebensmittel-DB abgeglichen und korrigiert.',
+        'Einträge mit ungültiger foodId werden über den Namen (exakt + Tippfehler-tolerant) mit der Lebensmittel-DB abgeglichen und korrigiert.',
         '🔧', 'Reparieren', false)) return;
 
       showToast('⏳ Analysiere Tagebuch...');
 
-      // Name → food Map (lowercase für Matching)
+      // Levenshtein-Distanz
+      function levenshtein(a, b) {
+        const m = a.length, n = b.length;
+        const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+        for (let i = 1; i <= m; i++)
+          for (let j = 1; j <= n; j++)
+            dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        return dp[m][n];
+      }
+
+      // Name → food Map (exakt, lowercase)
       const nameMap = {};
-      foodDB.forEach(f => {
-        nameMap[f.name.toLowerCase().trim()] = f;
-      });
+      foodDB.forEach(f => { nameMap[f.name.toLowerCase().trim()] = f; });
+
+      // Alle foodDB-Namen für Fuzzy-Matching vorbereiten
+      const allFoods = foodDB.map(f => ({ food: f, lower: f.name.toLowerCase().trim() }));
+
+      function findBestMatch(name) {
+        const nameLower = name.toLowerCase().trim();
+        // 1. Exakter Match
+        if (nameMap[nameLower]) return nameMap[nameLower];
+        // 2. Fuzzy Match — max Distanz abhängig von Namenslänge
+        const maxDist = nameLower.length <= 6 ? 1 : nameLower.length <= 12 ? 2 : 3;
+        let best = null, bestDist = maxDist + 1;
+        for (const {food, lower} of allFoods) {
+          if (Math.abs(lower.length - nameLower.length) > maxDist) continue;
+          const dist = levenshtein(nameLower, lower);
+          if (dist < bestDist) { bestDist = dist; best = food; }
+        }
+        return bestDist <= maxDist ? best : null;
+      }
 
       // Alle Tagebuch-Einträge prüfen
       const allEntries = Object.values(foodLog).flat();
@@ -3219,35 +3252,34 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       showToast(`⏳ ${broken.length} defekte Einträge gefunden, repariere...`);
 
       let fixed = 0, notFound = 0;
-      for (const entry of broken) {
-        // Name-basiertes Matching
-        const nameLower = (entry.name || '').toLowerCase().trim();
-        const match = nameMap[nameLower];
-
-        if (match) {
-          // Eintrag in Firestore aktualisieren
-          try {
-            const updatedEntry = { ...entry, foodId: match.id };
-            await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
-            // Lokalen foodLog aktualisieren
-            const date = entry.datum || entry.date;
-            if (foodLog[date]) {
-              const idx = foodLog[date].findIndex(e => e.id === entry.id);
-              if (idx >= 0) foodLog[date][idx] = updatedEntry;
-            }
-            fixed++;
-          } catch(e) {
-            console.warn('Repair error:', entry.id, e);
+      const BATCH = 50;
+      for (let i = 0; i < broken.length; i += BATCH) {
+        const batch = broken.slice(i, i + BATCH);
+        for (const entry of batch) {
+          const match = findBestMatch(entry.name || '');
+          if (match) {
+            try {
+              const updatedEntry = { ...entry, foodId: match.id };
+              await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
+              const date = entry.datum || entry.date;
+              if (foodLog[date]) {
+                const idx = foodLog[date].findIndex(e => e.id === entry.id);
+                if (idx >= 0) foodLog[date][idx] = updatedEntry;
+              }
+              fixed++;
+            } catch(e) { console.warn('Repair error:', entry.id, e); }
+          } else {
+            notFound++;
           }
-        } else {
-          notFound++;
         }
+        showToast(`⏳ ${i + batch.length}/${broken.length} verarbeitet...`);
+        await new Promise(r => setTimeout(r, 10)); // UI nicht blockieren
       }
 
       window.foodLog = foodLog;
       renderFoodLog();
       renderDashboard();
-      showToast(`✓ ${fixed} repariert, ${notFound} nicht gefunden (Name unbekannt)`);
+      showToast(`✓ ${fixed} repariert, ${notFound} nicht gefunden`);
     };
 
 

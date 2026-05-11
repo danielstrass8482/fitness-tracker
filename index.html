@@ -1629,32 +1629,13 @@
         // Load settings first (needed for detailDays)
         await loadSettings();
 
-        // Load Diary – last N days, handle both 'datum' and 'date' field names
-        const detailDays = settings.detailDays || 365;
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - detailDays);
-        const cy = cutoff.getFullYear();
-        const cm = String(cutoff.getMonth() + 1).padStart(2, '0');
-        const cd = String(cutoff.getDate()).padStart(2, '0');
-        const cutoffStr = `${cy}-${cm}-${cd}`;
-
-        // Try datum first, fall back to loading all and filtering
-        let diarySnap;
-        try {
-          diarySnap = await getDocs(query(userLogCol(), where('datum', '>=', cutoffStr)));
-          // If empty, try with 'date' field
-          if (diarySnap.empty) {
-            diarySnap = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
-          }
-        } catch(e) {
-          diarySnap = await getDocs(userLogCol());
-        }
-
+        // Load all diary entries (no date limit needed for small collections)
+        const diarySnap = await getDocs(userLogCol());
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
           const entryDate = entry.datum || entry.date;
-          if (!entryDate || entryDate < cutoffStr) return;
+          if (!entryDate) return;
           if (!foodLog[entryDate]) foodLog[entryDate] = [];
           foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
         });
@@ -2425,6 +2406,9 @@
         const foodKatMap = {};
         (window.foodDB || []).forEach(f => { foodKatMap[String(f.id)] = f.kategorie || 'unbekannt'; });
 
+        // Baue recipeId Set für schnelle Erkennung
+        const recipeIdSet = new Set((window.recipes || []).map(r => String(r.id)));
+
         // Aggregiere kcal pro Kategorie pro Bucket
         const bucketKat = {}; // bucket → { kat: kcal }
 
@@ -2448,7 +2432,7 @@
           if (!bucketKat[bucket]) bucketKat[bucket] = {};
           entries.forEach(e => {
             // Rezept-Einträge (collapsed) → Kategorie "gerichte"
-            if (e.recipeId) {
+            if (e.recipeId || recipeIdSet.has(String(e.foodId))) {
               bucketKat[bucket]['gerichte'] = (bucketKat[bucket]['gerichte'] || 0) + (e.kcal || 0);
               return;
             }

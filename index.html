@@ -1628,19 +1628,34 @@
         // Load settings first (needed for detailDays)
         await loadSettings();
 
-        // Load Diary – only last N days
-        const detailDays = settings.detailDays || 31;
+        // Load Diary – last N days, handle both 'datum' and 'date' field names
+        const detailDays = settings.detailDays || 365;
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - detailDays);
-        const cutoffStr = cutoff.toISOString().split('T')[0];
-        
-        const diaryQ = query(userLogCol(), where('date', '>=', cutoffStr));
-        const diarySnap = await getDocs(diaryQ);
+        const cy = cutoff.getFullYear();
+        const cm = String(cutoff.getMonth() + 1).padStart(2, '0');
+        const cd = String(cutoff.getDate()).padStart(2, '0');
+        const cutoffStr = `${cy}-${cm}-${cd}`;
+
+        // Try datum first, fall back to loading all and filtering
+        let diarySnap;
+        try {
+          diarySnap = await getDocs(query(userLogCol(), where('datum', '>=', cutoffStr)));
+          // If empty, try with 'date' field
+          if (diarySnap.empty) {
+            diarySnap = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
+          }
+        } catch(e) {
+          diarySnap = await getDocs(userLogCol());
+        }
+
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
-          if (!foodLog[entry.date]) foodLog[entry.date] = [];
-          foodLog[entry.date].push(entry);
+          const entryDate = entry.datum || entry.date;
+          if (!entryDate || entryDate < cutoffStr) return;
+          if (!foodLog[entryDate]) foodLog[entryDate] = [];
+          foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
         });
         window.foodLog = foodLog;
 
@@ -2431,6 +2446,11 @@
           const bucket = getBucket(date);
           if (!bucketKat[bucket]) bucketKat[bucket] = {};
           entries.forEach(e => {
+            // Rezept-Einträge (collapsed) → Kategorie "gerichte"
+            if (e.recipeId) {
+              bucketKat[bucket]['gerichte'] = (bucketKat[bucket]['gerichte'] || 0) + (e.kcal || 0);
+              return;
+            }
             const kat = foodKatMap[String(e.foodId)] || 'unbekannt';
             bucketKat[bucket][kat] = (bucketKat[bucket][kat] || 0) + (e.kcal || 0);
           });
@@ -2663,7 +2683,7 @@
       renderFoodDB();
     };
     
-    function renderFoodDB() {
+    window.renderFoodDB = function renderFoodDB() {
       const query = (document.getElementById('fooddb-search')?.value || '').toLowerCase().trim();
       const localOnly = document.getElementById('fooddb-local-only')?.checked || false;
       const katFilter = document.getElementById('fooddb-kategorie-filter')?.value || '';
@@ -3563,9 +3583,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     let currentDate = new Date().toISOString().split('T')[0];
     
     window.changeDate = function(days) {
-      const date = new Date(currentDate);
+      const parts = currentDate.split('-').map(Number);
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
       date.setDate(date.getDate() + days);
-      currentDate = date.toISOString().split('T')[0];
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      currentDate = `${y}-${m}-${d}`;
       renderFoodLog();
     };
     
@@ -4028,7 +4052,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
             const ingFactor = (ing.amount || 100) / 100 * portionFactor;
             const ingEntry = {
               id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-              date: currentDate, time, meal,
+              datum: currentDate, date: currentDate, time, meal,
               name: ingFood.name,
               foodId: ingFood.id,
               amount: Math.round(ing.amount * portionFactor * 10) / 10,
@@ -4050,8 +4074,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           const fat = Math.round((selectedRecipe.fat || 0) * portionFactor * 10) / 10;
           const entry = {
             id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            date: currentDate, time, meal,
-            name: label, foodId: selectedRecipe.id,
+            datum: currentDate, date: currentDate, time, meal,
+            name: label, foodId: selectedRecipe.id, recipeId: selectedRecipe.id,
             amount: recipeInputMode === 'grams' ? parseFloat(document.getElementById('recipe-grams').value) || 0 : parseFloat(document.getElementById('recipe-portions').value) || 1,
             kcal, protein, carbs, fat
           };
@@ -4594,6 +4618,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       const factor = amount / 100;
       const entry = {
         id: editingEntryId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9)),
+        datum: currentDate,
         date: currentDate,
         time: time,
         meal: meal,

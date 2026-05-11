@@ -3928,34 +3928,36 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         
         const mealDiv = document.createElement('div');
         mealDiv.className = 'meal-category';
+        const isExpanded = expandedMeals.has(mealName);
         mealDiv.innerHTML = `
           <div class="meal-header" onclick="toggleMeal(this)">
-            <div class="meal-title">▶ ${mealName}</div>
-            <div style="display:flex;gap:12px;font-size:12px;">
+            <div class="meal-title">${isExpanded ? '▼' : '▶'} ${mealName}</div>
+            <div style="display:flex;gap:8px;align-items:center;font-size:12px;">
               <span style="color:#4a9eff;">P ${Math.round(mealProtein)}g</span>
               <span style="color:#ffd93d;">K ${Math.round(mealCarbs)}g</span>
               <span style="color:#ff6b9d;">F ${Math.round(mealFat)}g</span>
               <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
+              <button onclick="event.stopPropagation();openBulkTimeEdit('${mealName}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern">🕐</button>
             </div>
           </div>
-          <div class="meal-entries" style="display:none;">
+          <div class="meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
             ${mealEntries.length > 0 ? mealEntries.map(e => {
               const isRecipeBlock = settings.recipeDisplay !== 'expanded' && recipes.some(r => String(r.id) === String(e.foodId));
               const fromRecipeNote = e._fromRecipe ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">(aus: ${e._fromRecipe})</span>` : '';
               return `
-              <div class="meal-entry" onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="${e._isExpanded ? 'border-left:2px solid var(--border);padding-left:8px;' : ''}">
-                <div>
+              <div class="meal-entry" style="${e._isExpanded ? 'border-left:2px solid var(--border);padding-left:8px;' : ''}">
+                <div onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="flex:1;min-width:0;cursor:pointer;">
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
                   ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}
                   ${(() => {
                     if (!e.amount) return '';
-                    // Nicht doppelt anzeigen wenn Gramm schon im Namen steht
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
                     return alreadyInName ? '' : `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${e.amount}g</span>`;
                   })()}
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span>${fmt(e.kcal)} kcal</span>
+                <div style="display:flex;gap:4px;align-items:center;">
+                  <span style="font-size:13px;">${fmt(e.kcal)} kcal</span>
+                  <button onclick="event.stopPropagation();copyEntry('${e.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:14px;" title="Kopieren">⧉</button>
                   <button onclick="event.stopPropagation();deleteEntry('${e.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">✕</button>
                 </div>
               </div>`;
@@ -3967,16 +3969,21 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       });
     }
     
+    let expandedMeals = new Set(); // Merkt welche Mahlzeiten offen sind
+
     window.toggleMeal = function(header) {
       const entries = header.nextElementSibling;
       const arrow = header.querySelector('.meal-title');
+      const mealName = arrow.textContent.substring(2); // ohne ▼/▶
       
       if (entries.style.display === 'none') {
         entries.style.display = 'block';
         arrow.textContent = '▼' + arrow.textContent.substring(1);
+        expandedMeals.add(mealName);
       } else {
         entries.style.display = 'none';
         arrow.textContent = '▶' + arrow.textContent.substring(1);
+        expandedMeals.delete(mealName);
       }
     };
     
@@ -4786,11 +4793,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         return;
       }
 
+      // Feature 1: Immer Lebensmittel-Tab zeigen (nicht Rezept-Tab)
+      setAddFoodMode('food');
+
       // Find food by ID or name fallback
       selectedFood = foodDB.find(f => String(f.id) === String(entry.foodId))
         || foodDB.find(f => f.name === entry.name);
       if (!selectedFood && entry.name) {
-        // Create temporary food from entry data for editing
         selectedFood = {
           id: entry.foodId || entry.name,
           name: entry.name,
@@ -4810,7 +4819,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       
       const entryTime = entry.time || '12:00';
       document.getElementById('food-time').value = entryTime;
-      // Derive meal from stored time
       const entryHour = parseInt(entryTime.split(':')[0]);
       const entryMeal = entry.meal || mealFromHour(entryHour);
       document.getElementById('food-meal').value = entryMeal;
@@ -4823,7 +4831,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       try {
         await deleteDoc(doc(userLogCol(), String(id)));
         
-        // Update local
         Object.keys(foodLog).forEach(date => {
           foodLog[date] = foodLog[date].filter(e => e.id !== id);
           if (foodLog[date].length === 0) delete foodLog[date];
@@ -4836,6 +4843,64 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         console.error('Delete error:', err);
         showToast('❌ Löschen fehlgeschlagen');
       }
+    };
+
+    // Feature 4: Eintrag kopieren
+    window.copyEntry = async function(id) {
+      let entry = null;
+      for (const date in foodLog) {
+        entry = foodLog[date].find(e => String(e.id) === String(id));
+        if (entry) break;
+      }
+      if (!entry) return;
+
+      const newId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const newEntry = { ...entry, id: newId };
+      try {
+        await setDoc(doc(userLogCol(), String(newId)), newEntry);
+        const date = entry.datum || entry.date;
+        if (!foodLog[date]) foodLog[date] = [];
+        foodLog[date].push(newEntry);
+        window.foodLog = foodLog;
+        renderFoodLog();
+        showToast('✓ Kopiert');
+      } catch(e) {
+        showToast('❌ Kopieren fehlgeschlagen');
+      }
+    };
+
+    // Feature 3: Bulk-Zeit-Änderung Modal
+    window.openBulkTimeEdit = function(mealName) {
+      // Alle Einträge der Mahlzeit des aktuellen Tages
+      const entries = (foodLog[currentDate] || []).filter(e => e.meal === mealName);
+      if (entries.length === 0) return;
+
+      // Einfaches Prompt für neue Zeit
+      const currentTime = entries[0].time || '12:00';
+      const newTime = prompt(`Neue Zeit für alle Einträge in "${mealName}" (${entries.length} Einträge):\nAktuell: ${currentTime}`, currentTime);
+      if (!newTime || !/^\d{1,2}:\d{2}$/.test(newTime)) return;
+
+      const [h, m] = newTime.split(':').map(Number);
+      if (h < 0 || h > 23 || m < 0 || m > 59) { showToast('❌ Ungültige Zeit'); return; }
+
+      const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      const newMeal = mealFromHour(h);
+
+      (async () => {
+        let updated = 0;
+        for (const entry of entries) {
+          try {
+            const updatedEntry = { ...entry, time: timeStr, meal: newMeal };
+            await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
+            const idx = foodLog[currentDate].findIndex(e => e.id === entry.id);
+            if (idx >= 0) foodLog[currentDate][idx] = updatedEntry;
+            updated++;
+          } catch(e) { console.warn('Bulk time error:', e); }
+        }
+        window.foodLog = foodLog;
+        renderFoodLog();
+        showToast(`✓ ${updated} Einträge auf ${timeStr} gesetzt`);
+      })();
     };
     
     // Toast

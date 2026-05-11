@@ -4903,7 +4903,78 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       })();
     };
     
-    // Toast
+    // ── Android Back-Button Handler ──────────────────────────────────────────
+    const MODAL_IDS = [
+      'add-food-modal',
+      'edit-fooddb-modal',
+      'edit-recipe-modal',
+      'consolidate-modal',
+      'bulk-kategorie-modal',
+      'barcode-container',
+      'confirm-dialog'
+    ];
+
+    // Wenn ein Modal geöffnet wird, pushState damit Back-Button es schließen kann
+    function pushModalState() {
+      history.pushState({ modal: true }, '');
+    }
+
+    // Back-Button: schließt das oberste offene Modal
+    window.addEventListener('popstate', function(e) {
+      const openModal = MODAL_IDS.find(id => {
+        const el = document.getElementById(id);
+        return el && el.style.display !== 'none';
+      });
+      if (openModal) {
+        // Modal schließen
+        if (openModal === 'add-food-modal') closeAddFood();
+        else if (openModal === 'barcode-container') stopBarcodeScanner();
+        else if (openModal === 'confirm-dialog') {
+          document.getElementById('confirm-dialog').style.display = 'none';
+          if (window.confirmDialogResolve) window.confirmDialogResolve(false);
+        }
+        else document.getElementById(openModal).style.display = 'none';
+      } else {
+        // Kein Modal offen → App-Beenden-Bestätigung
+        history.pushState(null, ''); // verhindert sofortiges Verlassen
+        showConfirm('App beenden?', '', '👋', 'Beenden', true).then(ok => {
+          if (ok && window.AndroidTokenBridge) {
+            // Android: App minimieren statt schließen
+            window.AndroidTokenBridge.minimizeApp?.();
+          }
+        });
+      }
+    });
+
+    // Modal-Öffner patchen um pushState aufzurufen
+    const _origOpenAddFood = window.openAddFood;
+    window.openAddFood = function(...args) {
+      pushModalState();
+      return _origOpenAddFood?.(...args);
+    };
+    const _origOpenAddFoodDB = window.openAddFoodDB;
+    window.openAddFoodDB = function(...args) {
+      pushModalState();
+      return _origOpenAddFoodDB?.(...args);
+    };
+    const _origEditEntry = window.editEntry;
+    window.editEntry = function(...args) {
+      pushModalState();
+      return _origEditEntry?.(...args);
+    };
+    const _origOpenConsolidate = window.openConsolidateTool;
+    window.openConsolidateTool = function(...args) {
+      pushModalState();
+      return _origOpenConsolidate?.(...args);
+    };
+    const _origOpenBulkKat = window.openBulkKategorie;
+    window.openBulkKategorie = function(...args) {
+      pushModalState();
+      return _origOpenBulkKat?.(...args);
+    };
+
+    // Initial state damit der erste Back-Button-Druck korrekt verarbeitet wird
+    history.replaceState(null, '');
 
     // ── Custom Confirm Dialog ─────────────────────────────────────────────────
     window.confirmDialogResolve = null;

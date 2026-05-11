@@ -1661,7 +1661,7 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
-        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days (last ${detailDays}d), ${Object.keys(weeklyStats).length} weeks, ${trainingEntries.length} trainings`);
+        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days (last ${settings.detailDays || 'all'}d), ${Object.keys(weeklyStats).length} weeks, ${trainingEntries.length} trainings`);
         showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage, ${Object.keys(weeklyStats).length} Wochen`);
         
         // Render initial

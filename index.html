@@ -912,6 +912,7 @@
           </div>
           <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
           <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
+          <button onclick="repairFoodIds()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔧 Tagebuch-IDs reparieren</button>
         </div>
         
         <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
@@ -3205,6 +3206,64 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       // Liste neu rendern mit verbleibenden unkategorisierten
       openBulkKategorie();
       showToast(`✓ ${saved} Kategorien automatisch vergeben`);
+    };
+
+
+    // ── Tagebuch-IDs reparieren ──────────────────────────────────────────────
+    window.repairFoodIds = async function() {
+      if (!await showConfirm('Tagebuch-IDs reparieren?',
+        'Einträge mit ungültiger foodId werden über den Namen mit der Lebensmittel-DB abgeglichen und korrigiert.',
+        '🔧', 'Reparieren', false)) return;
+
+      showToast('⏳ Analysiere Tagebuch...');
+
+      // Name → food Map (lowercase für Matching)
+      const nameMap = {};
+      foodDB.forEach(f => {
+        nameMap[f.name.toLowerCase().trim()] = f;
+      });
+
+      // Alle Tagebuch-Einträge prüfen
+      const allEntries = Object.values(foodLog).flat();
+      const broken = allEntries.filter(e => e.foodId && !foodDB.find(f => String(f.id) === String(e.foodId)));
+
+      if (broken.length === 0) {
+        showToast('✓ Alle Tagebuch-Einträge haben gültige foodIds');
+        return;
+      }
+
+      showToast(`⏳ ${broken.length} defekte Einträge gefunden, repariere...`);
+
+      let fixed = 0, notFound = 0;
+      for (const entry of broken) {
+        // Name-basiertes Matching
+        const nameLower = (entry.name || '').toLowerCase().trim();
+        const match = nameMap[nameLower];
+
+        if (match) {
+          // Eintrag in Firestore aktualisieren
+          try {
+            const updatedEntry = { ...entry, foodId: match.id };
+            await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
+            // Lokalen foodLog aktualisieren
+            const date = entry.datum || entry.date;
+            if (foodLog[date]) {
+              const idx = foodLog[date].findIndex(e => e.id === entry.id);
+              if (idx >= 0) foodLog[date][idx] = updatedEntry;
+            }
+            fixed++;
+          } catch(e) {
+            console.warn('Repair error:', entry.id, e);
+          }
+        } else {
+          notFound++;
+        }
+      }
+
+      window.foodLog = foodLog;
+      renderFoodLog();
+      renderDashboard();
+      showToast(`✓ ${fixed} repariert, ${notFound} nicht gefunden (Name unbekannt)`);
     };
 
 

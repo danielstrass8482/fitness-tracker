@@ -580,8 +580,11 @@
       </div>
       
       <!-- Add Food Button -->
-      <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:20px;">+ Essen hinzufügen</button>
-      
+      <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
+
+      <!-- Schritte & Aktivitäten -->
+      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
+
       <!-- Meals Container -->
       <div id="meals-container"></div>
     </div>
@@ -999,37 +1002,8 @@
             </div>
             <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
           </div>
-        </div>
-
-        <!-- Health Connect Integration -->
-        <div id="health-connect-section" style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;display:none;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-            <div style="background:linear-gradient(135deg,#e8f5e9,#a5d6a7);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💚</div>
-            <h3 style="margin:0;">Health Connect</h3>
-          </div>
-          <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Importiert Schritte und Aktivitäten direkt aus Health Connect (Garmin, Samsung Health, etc.).</p>
-          <div id="hc-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
-          <button class="btn" onclick="syncHealthConnect()" id="hc-sync-btn" style="width:100%;background:#34a853;border-color:#34a853;">💚 Health Connect synchronisieren</button>
-        </div>
-
-        <!-- Wochendaten aggregieren -->
-        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
-          <h3 style="margin-bottom:10px;">📊 Wochendaten berechnen</h3>
-          <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Aggregiert alle Tagebuch- und Trainingseinträge zu Wochen-Summaries. Einmalig ausführen nach dem ersten Import, danach automatisch.</p>
-          <div id="agg-status" style="font-size:13px;color:var(--muted);margin-bottom:15px;"></div>
-          <button class="btn" onclick="aggregateWeeklyStats()" id="agg-btn">📊 Wochendaten berechnen</button>
-          
-          <div id="import-progress" style="display:none;margin-top:20px;">
-            <div style="background:var(--bg);border-radius:8px;height:30px;overflow:hidden;margin-bottom:10px;">
-              <div id="import-progress-fill" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);height:100%;width:0%;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;font-size:13px;">
-                <span id="import-progress-text">0%</span>
-              </div>
-            </div>
-            <div id="import-log" style="max-height:200px;overflow-y:auto;background:var(--bg);border-radius:8px;padding:15px;font-family:monospace;font-size:11px;"></div>
-          </div>
-        </div>
       </div>
-      
+
       <!-- Export -->
       <div id="export-subtab" class="subtab-content">
         <div style="display:flex;flex-direction:column;gap:16px;">
@@ -1459,11 +1433,9 @@
     const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
     const userLogCol = () => collection(db, 'users', userId, 'logEntries');
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
-    const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats');
-
+    const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     // Weekly stats state
-    let weeklyStats = {}; // { 'YYYY-WW': { kcal, protein, carbs, fat, days, act_kcal_calc, act_kcal_garmin, run_km, trainings, weight } }
-    window.weeklyStats = weeklyStats;
+    let weeklyStats = {};
     
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
@@ -1483,101 +1455,6 @@
     });
     
     // Login/Logout
-    // Health Connect Integration
-    window.syncHealthConnect = function() {
-      const btn = document.getElementById('hc-sync-btn');
-      const status = document.getElementById('hc-status');
-
-      if (!window.AndroidTokenBridge) {
-        // Im Browser: App per Intent öffnen
-        if (status) status.textContent = '📱 Öffne App für Health Connect Sync...';
-        window.location.href = 'fuelofit://healthconnect-sync';
-        return;
-      }
-
-      if (btn) { btn.disabled = true; btn.textContent = '⏳ Synchronisiere...'; }
-      if (status) status.textContent = '📡 Verbinde mit Health Connect...';
-
-      try {
-        AndroidTokenBridge.requestHealthConnectSync();
-        setTimeout(() => {
-          if (btn && btn.disabled) {
-            btn.disabled = false;
-            btn.textContent = '💚 Health Connect synchronisieren';
-            if (status) status.textContent = '⚠️ Keine Antwort – Permission möglicherweise verweigert oder HC nicht verfügbar';
-          }
-        }, 10000);
-      } catch(e) {
-        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
-        if (status) status.textContent = '❌ Bridge-Fehler: ' + e.message;
-      }
-    };
-
-    window.onHealthConnectPermissionDenied = function() {
-      const btn = document.getElementById('hc-sync-btn');
-      const status = document.getElementById('hc-status');
-      if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
-      if (status) status.textContent = '❌ Permission verweigert – bitte in Health Connect App freigeben';
-    };
-
-    window.onHealthConnectStepsAndActivities = async function(stepsJson, activitiesJson) {
-      const btn = document.getElementById('hc-sync-btn');
-      const status = document.getElementById('hc-status');
-      if (!userId) {
-        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
-        return;
-      }
-      try {
-        const steps = JSON.parse(stepsJson);
-        const activities = JSON.parse(activitiesJson);
-        if (status) status.textContent = `Importiere ${steps.length} Tage Schritte, ${activities.length} Aktivitäten...`;
-
-        // Schritte speichern
-        for (const s of steps) {
-          if (!s.date || !s.steps) continue;
-          const logId = 'log_' + s.date.replace(/-/g, '');
-          await setDoc(doc(db, 'users', userId, 'entries', logId), {
-            id: logId, datum: s.date, typ: 'tageslog',
-            steps: Number(s.steps), source_steps: 'healthconnect'
-          }, { merge: true });
-          const existing = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === s.date);
-          if (existing) existing.steps = Number(s.steps);
-          else trainingEntries.push({ id: logId, datum: s.date, typ: 'tageslog', steps: Number(s.steps), source_steps: 'healthconnect' });
-        }
-
-        // Aktivitäten speichern
-        const HC_TYPE_MAP = {
-          56: 'laufen', 8: 'rad', 4: 'rad', 75: 'laufen',
-          80: 'schwimmen', 97: 'kraft', 99: 'yoga',
-          2: 'cardio', 10: 'cardio', 59: 'cardio', 13: 'rad'
-        };
-        const weight = settings.weight || 75;
-        for (const a of activities) {
-          if (!a.date || !a.hours || a.hours < 0.05) continue;
-          const typ = HC_TYPE_MAP[a.type] || 'cardio';
-          const entryId = 'hc_' + String(a.startTime).replace(/[^0-9]/g, '').slice(0, 20);
-          const met = typ === 'laufen' ? 8 : typ === 'rad' ? 6 : 6;
-          const kcal = Math.round(met * weight * a.hours);
-          const zeitStr = new Date(Math.round(a.hours * 3600000)).toISOString().slice(11, 19);
-          await setDoc(doc(db, 'users', userId, 'entries', entryId), {
-            id: entryId, datum: a.date, typ, source: 'healthconnect',
-            act_kcal_calc: kcal, kalorien: 0, zeit: zeitStr,
-            distanz: 0, sets: '', schritte: null, hf: null, notiz: ''
-          }, { merge: true });
-        }
-
-        await loadAllData();
-        const lastSync = new Date().toLocaleString('de-DE');
-        if (status) status.textContent = `✓ Zuletzt synchronisiert: ${lastSync}`;
-        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
-        showToast('✅ Health Connect synchronisiert');
-      } catch(err) {
-        console.error('Health Connect sync error:', err);
-        if (btn) { btn.disabled = false; btn.textContent = '💚 Health Connect synchronisieren'; }
-        showToast('❌ Sync-Fehler: ' + err.message);
-      }
-    };
-
     window.handleLogin = async function() {
       // In nativer Android App: nativen Login triggern
       if (navigator.userAgent.includes('FuelofitApp')) {
@@ -1641,12 +1518,6 @@
         });
         window.foodLog = foodLog;
 
-        // Load weekly stats (always all)
-        const weekSnap = await getDocs(userWeeklyCol());
-        weeklyStats = {};
-        weekSnap.forEach(d => { weeklyStats[d.id] = d.data(); });
-        window.weeklyStats = weeklyStats;
-        
         // Load Training
         const trainingSnap = await getDocs(userTrainingCol());
         trainingEntries = [];
@@ -1661,8 +1532,8 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
-        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days (last ${settings.detailDays || 'all'}d), ${Object.keys(weeklyStats).length} weeks, ${trainingEntries.length} trainings`);
-        showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage, ${Object.keys(weeklyStats).length} Wochen`);
+        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
+        showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`);
         
         // Render initial
         renderAll();
@@ -3855,6 +3726,63 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `/ ${fmt(proteinGoal)}g Protein` : 'Protein';
       document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0 ? `/ ${fmt(carbsGoal)}g Kohlenhydrate` : 'Kohlenhydrate';
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `/ ${fmt(fatGoal)}g Fett` : 'Fett';
+
+      // ── Schritte + Aktivitäten unter den Kacheln ─────────────────────────
+      const activityContainer = document.getElementById('daily-activity-summary');
+      if (activityContainer) {
+        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
+        const garminSteps = dayLog?.steps || 0;
+        const phoneSteps = window.phoneStepsToday?.[currentDate] || 0;
+        const steps = garminSteps > 0 ? garminSteps : phoneSteps;
+        const stepsSource = garminSteps > 0 ? 'Garmin' : phoneSteps > 0 ? '📱' : '';
+
+        const dayActivities = trainingEntries.filter(e =>
+          e.datum === currentDate && e.typ !== 'tageslog'
+        ).sort((a, b) => (a.garminTime || '').localeCompare(b.garminTime || ''));
+
+        const TYP_LABELS = {
+          laufen: '🏃 Laufen', rad: '🚴 Rad', rad_ebike: '⚡ E-Bike',
+          gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
+          kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio'
+        };
+
+        let html = '<div style="padding:0 0 8px;">';
+
+        // Schritte
+        if (steps > 0) {
+          html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <span style="font-size:20px;">👟</span>
+            <span style="font-weight:500;">${fmt(steps)} Schritte</span>
+            ${stepsSource ? `<span style="font-size:11px;color:var(--muted);background:var(--surface2);padding:1px 6px;border-radius:4px;">${stepsSource}</span>` : ''}
+          </div>`;
+        }
+
+        // Aktivitäten
+        dayActivities.forEach(a => {
+          const label = TYP_LABELS[a.typ] || ('🏅 ' + (a.typ || 'Aktivität'));
+          const kcal = a.act_kcal_calc || a.kalorien || 0;
+          const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km · ` : '';
+          const zeit = a.zeit || '';
+          const meta = (dist + zeit).trim().replace(/·\s*$/, '');
+          html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:16px;">${label.split(' ')[0]}</span>
+              <div>
+                <div style="font-weight:500;font-size:14px;">${label.split(' ').slice(1).join(' ')}</div>
+                ${meta ? `<div style="font-size:12px;color:var(--muted);">${meta}</div>` : ''}
+              </div>
+            </div>
+            ${kcal > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;">${fmt(kcal)} kcal</span>` : ''}
+          </div>`;
+        });
+
+        if (steps === 0 && dayActivities.length === 0) {
+          html += `<div style="padding:10px 0;color:var(--muted);font-size:13px;">Keine Aktivitäten heute</div>`;
+        }
+
+        html += '</div>';
+        activityContainer.innerHTML = html;
+      }
       
       // Group by meal
       const mealOrder = ['Morgens (0-11h)', 'Mittags (11-14h)', 'Abends (14-21h)', 'Nachts (21-24h)'];
@@ -4975,6 +4903,36 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
     // Initial state damit der erste Back-Button-Druck korrekt verarbeitet wird
     history.replaceState(null, '');
+
+    // ── Handy-Schritte (Samsung Sensor) ─────────────────────────────────────
+    // Wird von MainActivity aufgerufen wenn neue Schritte vom Sensor kommen
+    window.phoneStepsToday = {};
+
+    window.onPhoneStepsUpdate = function(date, steps) {
+      // Nur für heute relevant
+      if (date !== currentDate) return;
+
+      // Prüfen ob Garmin-Daten für heute bereits vorhanden sind
+      const todayEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+      const hasGarminSteps = todayEntry?.source_steps === 'googlefit' && (todayEntry?.steps || 0) > 0;
+
+      // Handy-Schritte nur verwenden wenn noch keine Garmin-Daten da sind
+      if (!hasGarminSteps) {
+        window.phoneStepsToday[date] = steps;
+        // Dashboard und Ernährung neu rendern
+        renderFoodLog();
+      }
+    };
+
+    // Gibt Schritte für ein Datum zurück: Garmin hat Priorität, sonst Handy
+    window.getStepsForDate = function(date) {
+      const entry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+      const garminSteps = entry?.steps || 0;
+      const phoneSteps = window.phoneStepsToday?.[date] || 0;
+      if (garminSteps > 0) return { steps: garminSteps, source: 'garmin' };
+      if (phoneSteps > 0) return { steps: phoneSteps, source: 'phone' };
+      return { steps: 0, source: 'none' };
+    };
 
     // ── Custom Confirm Dialog ─────────────────────────────────────────────────
     window.confirmDialogResolve = null;
@@ -6114,80 +6072,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     };
     
     // ===== AGGREGATION =====
-
-    window.aggregateWeeklyStats = async function() {
-      const btn = document.getElementById('agg-btn');
-      const status = document.getElementById('agg-status');
-      btn.disabled = true;
-      status.textContent = '⏳ Lade alle Tagebucheinträge...';
-
-      try {
-        // Load ALL diary entries from Firebase (not just recent)
-        const allDiarySnap = await getDocs(userLogCol());
-        const allFoodLog = {};
-        allDiarySnap.forEach(d => {
-          const entry = d.data();
-          if (!allFoodLog[entry.date]) allFoodLog[entry.date] = [];
-          allFoodLog[entry.date].push(entry);
-        });
-
-        // Get all unique weeks from food log
-        const allDates = Object.keys(allFoodLog).sort();
-        const weeks = new Set(allDates.map(d => getISOWeek(d)));
-
-        // Add weeks from all training entries (including Google Fit)
-        trainingEntries.forEach(e => {
-          if (e.datum) weeks.add(getISOWeek(e.datum));
-        });
-
-        // Add tageslog entries (steps) to allFoodLog structure for aggregation
-        // These are in trainingEntries with typ='tageslog'
-        const tageslogByDate = {};
-        trainingEntries.filter(e => e.typ === 'tageslog' && e.datum).forEach(e => {
-          tageslogByDate[e.datum] = e;
-          weeks.add(getISOWeek(e.datum));
-        });
-
-        status.textContent = `⏳ Berechne ${weeks.size} Wochen...`;
-
-        // Temporarily use full foodLog for calculation
-        const savedFoodLog = foodLog;
-        foodLog = allFoodLog;
-        window.foodLog = foodLog;
-
-        let processed = 0;
-        const weekArr = [...weeks].sort();
-        
-        for (const week of weekArr) {
-          // Find a date in this week
-          const weekDate = allDates.find(d => getISOWeek(d) === week)
-            || trainingEntries.find(e => e.datum && getISOWeek(e.datum) === week)?.datum;
-          if (!weekDate) continue;
-          await updateWeeklyStats(weekDate);
-          processed++;
-          if (processed % 10 === 0) {
-            status.textContent = `⏳ ${processed}/${weekArr.length} Wochen berechnet...`;
-          }
-        }
-
-        // Restore recent foodLog
-        foodLog = savedFoodLog;
-        window.foodLog = foodLog;
-
-        status.innerHTML = `✅ ${processed} Wochen berechnet und gespeichert.`;
-        showToast(`✓ ${processed} Wochendaten gespeichert`);
-        renderDashboard();
-      } catch (err) {
-        console.error('Aggregation error:', err);
-        status.textContent = '❌ Fehler: ' + err.message;
-      }
-      btn.disabled = false;
-    };
-
-    // Auto-update weekly stats when saving a diary entry
-    async function autoUpdateWeekly(date) {
-      try { await updateWeeklyStats(date); } catch(e) { console.warn('Weekly update failed:', e); }
-    }
 
     // ===== IMPORT LOGIC =====
     

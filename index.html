@@ -1585,7 +1585,11 @@
           .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-        const totalSteps = dayLog?.steps || 0;
+        const garminSteps = dayLog?.steps || 0;
+        // Handy-Schritte als Fallback wenn keine Garmin-Daten vorhanden (nur für heute)
+        const phoneSteps = (garminSteps === 0 && date === currentDate)
+          ? (window.phoneStepsToday?.[date] || 0) : 0;
+        const totalSteps = garminSteps > 0 ? garminSteps : phoneSteps;
         const activitySteps = (allTrainingEntries || trainingEntries)
           .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
           .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
@@ -3764,12 +3768,14 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km · ` : '';
           const zeit = a.zeit || '';
           const meta = (dist + zeit).trim().replace(/·\s*$/, '');
+          const details = [a.sets, a.notiz].filter(Boolean).join(' · ');
           html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:16px;">${label.split(' ')[0]}</span>
               <div>
                 <div style="font-weight:500;font-size:14px;">${label.split(' ').slice(1).join(' ')}</div>
                 ${meta ? `<div style="font-size:12px;color:var(--muted);">${meta}</div>` : ''}
+                ${details ? `<div style="font-size:12px;color:var(--muted);">${details}</div>` : ''}
               </div>
             </div>
             ${kcal > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;">${fmt(kcal)} kcal</span>` : ''}

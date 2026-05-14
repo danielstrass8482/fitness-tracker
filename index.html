@@ -3765,10 +3765,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         dayActivities.forEach(a => {
           const label = TYP_LABELS[a.typ] || ('🏅 ' + (a.typ || 'Aktivität'));
           const kcal = a.act_kcal_calc || a.kalorien || 0;
-          const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km · ` : '';
+          // sets enthält bereits "X km · HH:MM:SS" — nur wenn sets leer, dist+zeit selbst bauen
+          const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
-          const meta = (dist + zeit).trim().replace(/·\s*$/, '');
-          const details = [a.sets, a.notiz].filter(Boolean).join(' · ');
+          const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
+          const meta = a.sets || autoMeta;
+          const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:16px;">${label.split(' ')[0]}</span>

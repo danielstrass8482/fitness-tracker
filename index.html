@@ -1628,10 +1628,10 @@
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
         const garminSteps = dayLog?.steps || 0;
-        // Handy-Schritte als Fallback wenn keine Garmin-Daten vorhanden (nur für heute)
-        const phoneSteps = (garminSteps === 0 && date === currentDate)
-          ? (window.phoneStepsToday?.[date] || 0) : 0;
-        const totalSteps = garminSteps > 0 ? garminSteps : phoneSteps;
+        // Für Kalorien: Netto-Schritte (ohne Aktivitäts-Schritte) als Fallback
+        const phoneNetSteps = (garminSteps === 0 && date === currentDate)
+          ? (window.phoneStepsTodayNet?.[date] || 0) : 0;
+        const totalSteps = garminSteps > 0 ? garminSteps : phoneNetSteps;
         const activitySteps = (allTrainingEntries || trainingEntries)
           .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
           .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
@@ -5030,15 +5030,16 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
     window.onPhoneStepsUpdate = function(date, steps) {
       if (!window.phoneStepsToday) window.phoneStepsToday = {};
+      if (!window.phoneStepsTodayNet) window.phoneStepsTodayNet = {};
 
-      // Aktivitäts-Schritte abziehen um Double-Counting zu vermeiden
-      // (Garmin-Aktivitäten wie Laufen werden separat gezählt)
+      // Rohe Schritte für Anzeige
+      window.phoneStepsToday[date] = steps;
+
+      // Netto-Schritte für Kalorien-Berechnung (Aktivitäts-Schritte abziehen)
       const activitySteps = trainingEntries
         .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
         .reduce((sum, e) => sum + (e.schritte || 0), 0);
-
-      const netSteps = Math.max(0, steps - activitySteps);
-      window.phoneStepsToday[date] = netSteps;
+      window.phoneStepsTodayNet[date] = Math.max(0, steps - activitySteps);
 
       // Nur für heute relevant
       if (date !== currentDate) return;

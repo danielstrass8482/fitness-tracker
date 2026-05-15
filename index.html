@@ -1628,24 +1628,22 @@
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
         const garminSteps = dayLog?.steps || 0;
-        const phoneNetSteps = (date === currentDate)
-          ? (window.phoneStepsTodayNet?.[date] || 0) : 0;
 
+        // Aktivitäts-Schritte für diesen Tag (zum Abziehen)
+        const activitySteps = trainingEntries
+          .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
+          .reduce((sum, e) => sum + (e.schritte || 0), 0);
+
+        // Alltagsschritte: Garmin hat Priorität, sonst Handy-Netto, sonst Handy-Roh minus Aktivität
         let totalSteps = 0;
         if (garminSteps > 0) {
-          // Garmin-Gesamtschritte minus Aktivitäts-Schritte = Alltagsschritte
-          const activitySteps = trainingEntries
-            .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
-            .reduce((sum, e) => sum + (e.schritte || 0), 0);
           totalSteps = Math.max(0, garminSteps - activitySteps);
-        } else if (phoneNetSteps > 0) {
-          totalSteps = phoneNetSteps;
+        } else {
+          const phoneNet = window.phoneStepsTodayNet?.[date] || 0;
+          const phoneRaw = window.phoneStepsToday?.[date] || 0;
+          totalSteps = phoneNet > 0 ? phoneNet : Math.max(0, phoneRaw - activitySteps);
         }
-        const activitySteps = (allTrainingEntries || trainingEntries)
-          .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
-          .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
-        const dailySteps = Math.max(0, totalSteps - activitySteps);
-        const dailyKcal = Math.round(dailySteps * 0.04);
+        const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);
 
         return { base, activity, daily: dailyKcal, total: base + activity + dailyKcal };

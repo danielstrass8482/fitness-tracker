@@ -1174,7 +1174,46 @@
     </div>
   </div>
 
-  <!-- Bulk Kategorie Modal -->
+  <!-- Bulk Zeit Modal -->
+  <div id="bulk-time-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+      <h3 style="margin:0 0 16px;">🕐 Zeit ändern</h3>
+      <div id="bulk-time-entry-list" style="max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+        <input type="time" id="bulk-time-input" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;">
+        <button onclick="setBulkTimeToNow()" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;white-space:nowrap;">Jetzt</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('bulk-time-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+        <button onclick="applyBulkTime()" class="btn" style="flex:2;padding:12px;">✓ Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kopieren Modal -->
+  <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+      <h3 style="margin:0 0 4px;">⧉ Eintrag kopieren</h3>
+      <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Datum</label>
+          <input type="date" id="copy-entry-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Uhrzeit</label>
+          <div style="display:flex;gap:6px;">
+            <input type="time" id="copy-entry-time" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+            <button onclick="setCopyTimeToNow()" style="padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;">Jetzt</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('copy-entry-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+        <button onclick="applyCopyEntry()" class="btn" style="flex:2;padding:12px;">⧉ Kopieren</button>
+      </div>
+    </div>
+  </div>
   <div id="bulk-kategorie-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
     <div style="max-width:700px;margin:0 auto;padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
@@ -1302,7 +1341,10 @@
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <div style="flex:1;">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Uhrzeit</label>
-            <input type="time" id="food-time" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="updateMealFromTime()">
+            <div style="display:flex;gap:6px;">
+              <input type="time" id="food-time" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="updateMealFromTime()">
+              <button type="button" onclick="const n=new Date();document.getElementById('food-time').value=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');updateMealFromTime();" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;">Jetzt</button>
+            </div>
           </div>
           <div style="flex:1;">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Mahlzeit (auto)</label>
@@ -3670,7 +3712,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       try {
         if (window.AndroidTokenBridge && typeof AndroidTokenBridge.updateWidgetData === 'function') {
           const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
-          const steps = dayLog?.steps || 0;
+          const garminSteps = dayLog?.steps || 0;
+          const phoneSteps = window.phoneStepsToday?.[currentDate] || 0;
+          const steps = garminSteps > 0 ? garminSteps : phoneSteps;
           AndroidTokenBridge.updateWidgetData(
             Math.round(totalKcal),
             Math.round(totalProtein * 10) / 10,
@@ -4794,8 +4838,65 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       }
     };
 
-    // Feature 4: Eintrag kopieren
-    window.copyEntry = async function(id) {
+    // ── Multi-Select State ───────────────────────────────────────────────────
+    let selectedEntryIds = new Set();
+
+    window.toggleEntrySelect = function(id, cb) {
+      if (cb.checked) selectedEntryIds.add(id);
+      else selectedEntryIds.delete(id);
+    };
+
+    // ── Bulk Zeit Modal ──────────────────────────────────────────────────────
+    window.openBulkTimeEdit = function(mealName) {
+      const entries = (foodLog[currentDate] || []).filter(e => e.meal === mealName);
+      if (entries.length === 0) return;
+
+      selectedEntryIds = new Set(entries.map(e => e.id));
+      const list = document.getElementById('bulk-time-entry-list');
+      list.innerHTML = entries.map(e => `
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+          <input type="checkbox" checked onchange="toggleEntrySelect('${e.id}', this)" style="width:18px;height:18px;">
+          <span style="font-size:13px;">${e.time} · ${e.name}</span>
+        </label>
+      `).join('');
+
+      const now = new Date();
+      document.getElementById('bulk-time-input').value = entries[0].time || `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      document.getElementById('bulk-time-modal').style.display = 'flex';
+      pushModalState();
+    };
+
+    window.setBulkTimeToNow = function() {
+      const now = new Date();
+      document.getElementById('bulk-time-input').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    };
+
+    window.applyBulkTime = async function() {
+      const timeStr = document.getElementById('bulk-time-input').value;
+      if (!timeStr) return;
+      const [h] = timeStr.split(':').map(Number);
+      const newMeal = mealFromHour(h);
+      const toUpdate = (foodLog[currentDate] || []).filter(e => selectedEntryIds.has(e.id));
+      document.getElementById('bulk-time-modal').style.display = 'none';
+      let updated = 0;
+      for (const entry of toUpdate) {
+        try {
+          const updatedEntry = { ...entry, time: timeStr, meal: newMeal };
+          await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
+          const idx = foodLog[currentDate].findIndex(e => e.id === entry.id);
+          if (idx >= 0) foodLog[currentDate][idx] = updatedEntry;
+          updated++;
+        } catch(e) { console.warn('Bulk time error:', e); }
+      }
+      window.foodLog = foodLog;
+      renderFoodLog();
+      showToast(`✓ ${updated} Einträge auf ${timeStr} gesetzt`);
+    };
+
+    // ── Kopieren mit Datum/Zeit Modal ────────────────────────────────────────
+    let copySourceEntryId = null;
+
+    window.copyEntry = function(id) {
       let entry = null;
       for (const date in foodLog) {
         entry = foodLog[date].find(e => String(e.id) === String(id));
@@ -4803,55 +4904,51 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       }
       if (!entry) return;
 
+      copySourceEntryId = id;
+      document.getElementById('copy-entry-name').textContent = entry.name;
+      const now = new Date();
+      document.getElementById('copy-entry-date').value = currentDate;
+      document.getElementById('copy-entry-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      document.getElementById('copy-entry-modal').style.display = 'flex';
+      pushModalState();
+    };
+
+    window.setCopyTimeToNow = function() {
+      const now = new Date();
+      document.getElementById('copy-entry-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    };
+
+    window.applyCopyEntry = async function() {
+      const targetDate = document.getElementById('copy-entry-date').value;
+      const targetTime = document.getElementById('copy-entry-time').value;
+      if (!targetDate || !targetTime || !copySourceEntryId) return;
+
+      let entry = null;
+      for (const date in foodLog) {
+        entry = foodLog[date].find(e => String(e.id) === String(copySourceEntryId));
+        if (entry) break;
+      }
+      if (!entry) return;
+
+      document.getElementById('copy-entry-modal').style.display = 'none';
+      const [h] = targetTime.split(':').map(Number);
+      const newMeal = mealFromHour(h);
       const newId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      const newEntry = { ...entry, id: newId };
+      const newEntry = { ...entry, id: newId, datum: targetDate, date: targetDate, time: targetTime, meal: newMeal };
+
       try {
         await setDoc(doc(userLogCol(), String(newId)), newEntry);
-        const date = entry.datum || entry.date;
-        if (!foodLog[date]) foodLog[date] = [];
-        foodLog[date].push(newEntry);
+        if (!foodLog[targetDate]) foodLog[targetDate] = [];
+        foodLog[targetDate].push(newEntry);
         window.foodLog = foodLog;
+        if (targetDate !== currentDate) currentDate = targetDate;
         renderFoodLog();
-        showToast('✓ Kopiert');
+        showToast(`✓ Kopiert nach ${targetDate} ${targetTime}`);
       } catch(e) {
         showToast('❌ Kopieren fehlgeschlagen');
       }
     };
 
-    // Feature 3: Bulk-Zeit-Änderung Modal
-    window.openBulkTimeEdit = function(mealName) {
-      // Alle Einträge der Mahlzeit des aktuellen Tages
-      const entries = (foodLog[currentDate] || []).filter(e => e.meal === mealName);
-      if (entries.length === 0) return;
-
-      // Einfaches Prompt für neue Zeit
-      const currentTime = entries[0].time || '12:00';
-      const newTime = prompt(`Neue Zeit für alle Einträge in "${mealName}" (${entries.length} Einträge):\nAktuell: ${currentTime}`, currentTime);
-      if (!newTime || !/^\d{1,2}:\d{2}$/.test(newTime)) return;
-
-      const [h, m] = newTime.split(':').map(Number);
-      if (h < 0 || h > 23 || m < 0 || m > 59) { showToast('❌ Ungültige Zeit'); return; }
-
-      const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-      const newMeal = mealFromHour(h);
-
-      (async () => {
-        let updated = 0;
-        for (const entry of entries) {
-          try {
-            const updatedEntry = { ...entry, time: timeStr, meal: newMeal };
-            await setDoc(doc(userLogCol(), String(entry.id)), updatedEntry);
-            const idx = foodLog[currentDate].findIndex(e => e.id === entry.id);
-            if (idx >= 0) foodLog[currentDate][idx] = updatedEntry;
-            updated++;
-          } catch(e) { console.warn('Bulk time error:', e); }
-        }
-        window.foodLog = foodLog;
-        renderFoodLog();
-        showToast(`✓ ${updated} Einträge auf ${timeStr} gesetzt`);
-      })();
-    };
-    
     // ── Android Back-Button Handler ──────────────────────────────────────────
     const MODAL_IDS = [
       'add-food-modal',
@@ -4859,6 +4956,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       'edit-recipe-modal',
       'consolidate-modal',
       'bulk-kategorie-modal',
+      'bulk-time-modal',
+      'copy-entry-modal',
       'barcode-container',
       'confirm-dialog'
     ];
@@ -4931,7 +5030,15 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
     window.onPhoneStepsUpdate = function(date, steps) {
       if (!window.phoneStepsToday) window.phoneStepsToday = {};
-      window.phoneStepsToday[date] = steps;
+
+      // Aktivitäts-Schritte abziehen um Double-Counting zu vermeiden
+      // (Garmin-Aktivitäten wie Laufen werden separat gezählt)
+      const activitySteps = trainingEntries
+        .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
+        .reduce((sum, e) => sum + (e.schritte || 0), 0);
+
+      const netSteps = Math.max(0, steps - activitySteps);
+      window.phoneStepsToday[date] = netSteps;
 
       // Nur für heute relevant
       if (date !== currentDate) return;

@@ -583,9 +583,7 @@
       <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
 
       <!-- Schritte & Aktivitäten -->
-      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;">
-        <div id="phone-steps-debug" style="font-size:11px;color:var(--muted);padding:4px 0;">📱 Sensor: warte auf Daten...</div>
-      </div>
+      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
 
       <!-- Meals Container -->
       <div id="meals-container"></div>
@@ -3754,6 +3752,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         let html = '<div style="padding:0 0 8px;">';
 
+        // Debug-Zeile: Sensor-Status
+        const phoneDbg = window.phoneStepsToday?.[currentDate] || 0;
+        const isAndroid = navigator.userAgent.includes('FuelofitApp');
+        if (isAndroid) {
+          html += `<div id="phone-steps-debug" style="font-size:11px;color:var(--muted);padding:4px 0 0;">📱 Sensor: ${phoneDbg > 0 ? phoneDbg + ' Schritte' : 'warte auf Daten...'}</div>`;
+        }
+
         // Schritte
         if (steps > 0) {
           html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
@@ -4919,21 +4924,16 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     window.phoneStepsToday = {};
 
     window.onPhoneStepsUpdate = function(date, steps) {
-      // Debug-Anzeige immer aktualisieren
-      const dbg = document.getElementById('phone-steps-debug');
-      if (dbg) dbg.textContent = `📱 Sensor: ${steps} Schritte (${date})`;
+      if (!window.phoneStepsToday) window.phoneStepsToday = {};
+      window.phoneStepsToday[date] = steps;
 
       // Nur für heute relevant
       if (date !== currentDate) return;
 
-      // Prüfen ob Garmin-Daten für heute bereits vorhanden sind
       const todayEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
       const hasGarminSteps = todayEntry?.source_steps === 'googlefit' && (todayEntry?.steps || 0) > 0;
 
-      // Handy-Schritte nur verwenden wenn noch keine Garmin-Daten da sind
       if (!hasGarminSteps) {
-        window.phoneStepsToday[date] = steps;
-        // Dashboard und Ernährung neu rendern
         renderFoodLog();
       }
     };

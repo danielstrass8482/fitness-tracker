@@ -1628,10 +1628,19 @@
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
         const garminSteps = dayLog?.steps || 0;
-        // Für Kalorien: Netto-Schritte (ohne Aktivitäts-Schritte) als Fallback
-        const phoneNetSteps = (garminSteps === 0 && date === currentDate)
+        const phoneNetSteps = (date === currentDate)
           ? (window.phoneStepsTodayNet?.[date] || 0) : 0;
-        const totalSteps = garminSteps > 0 ? garminSteps : phoneNetSteps;
+
+        let totalSteps = 0;
+        if (garminSteps > 0) {
+          // Garmin-Gesamtschritte minus Aktivitäts-Schritte = Alltagsschritte
+          const activitySteps = trainingEntries
+            .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
+            .reduce((sum, e) => sum + (e.schritte || 0), 0);
+          totalSteps = Math.max(0, garminSteps - activitySteps);
+        } else if (phoneNetSteps > 0) {
+          totalSteps = phoneNetSteps;
+        }
         const activitySteps = (allTrainingEntries || trainingEntries)
           .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava') && e.datum === date && e.typ === 'laufen')
           .reduce((sum, e) => sum + (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0), 0);
@@ -5044,12 +5053,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       // Nur für heute relevant
       if (date !== currentDate) return;
 
-      const todayEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-      const hasGarminSteps = todayEntry?.source_steps === 'googlefit' && (todayEntry?.steps || 0) > 0;
-
-      if (!hasGarminSteps) {
-        renderFoodLog();
-      }
+      // Immer neu rendern damit Kalorienziel aktualisiert wird
+      renderFoodLog();
     };
 
     // Gibt Schritte für ein Datum zurück: Garmin hat Priorität, sonst Handy

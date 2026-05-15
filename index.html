@@ -1600,7 +1600,7 @@
       return age;
     }
 
-    function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
+    window.calcHistoricalKcalGoal = function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       try {
         const s = settings;
         const height = s?.height;
@@ -1634,14 +1634,14 @@
           .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
           .reduce((sum, e) => sum + (e.schritte || 0), 0);
 
-        // Alltagsschritte: Garmin hat Priorität, sonst Handy-Netto, sonst Handy-Roh minus Aktivität
+        // Alltagsschritte: Garmin hat Priorität, sonst rohe Handy-Schritte
+        // Aktivitäts-Schritte immer abziehen (egal welche Quelle)
         let totalSteps = 0;
         if (garminSteps > 0) {
           totalSteps = Math.max(0, garminSteps - activitySteps);
         } else {
-          const phoneNet = window.phoneStepsTodayNet?.[date] || 0;
           const phoneRaw = window.phoneStepsToday?.[date] || 0;
-          totalSteps = phoneNet > 0 ? phoneNet : Math.max(0, phoneRaw - activitySteps);
+          totalSteps = Math.max(0, phoneRaw - activitySteps);
         }
         const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);

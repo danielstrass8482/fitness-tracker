@@ -583,7 +583,9 @@
       <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
 
       <!-- Schritte & Aktivitäten -->
-      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
+      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;">
+        <div id="phone-steps-debug" style="font-size:11px;color:var(--muted);padding:4px 0;">📱 Sensor: warte auf Daten...</div>
+      </div>
 
       <!-- Meals Container -->
       <div id="meals-container"></div>
@@ -4917,6 +4919,10 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     window.phoneStepsToday = {};
 
     window.onPhoneStepsUpdate = function(date, steps) {
+      // Debug-Anzeige immer aktualisieren
+      const dbg = document.getElementById('phone-steps-debug');
+      if (dbg) dbg.textContent = `📱 Sensor: ${steps} Schritte (${date})`;
+
       // Nur für heute relevant
       if (date !== currentDate) return;
 

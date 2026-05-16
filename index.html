@@ -5037,21 +5037,25 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
     window.onPhoneStepsUpdate = function(date, steps) {
       if (!window.phoneStepsToday) window.phoneStepsToday = {};
-      if (!window.phoneStepsTodayNet) window.phoneStepsTodayNet = {};
 
       // Rohe Schritte für Anzeige
       window.phoneStepsToday[date] = steps;
 
-      // Netto-Schritte für Kalorien-Berechnung (Aktivitäts-Schritte abziehen)
-      const activitySteps = trainingEntries
-        .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
-        .reduce((sum, e) => sum + (e.schritte || 0), 0);
-      window.phoneStepsTodayNet[date] = Math.max(0, steps - activitySteps);
+      // Samsung-Sensor-Schritte in Firestore speichern (alle 100 Schritte)
+      // damit wir später mit Garmin vergleichen können
+      if (steps % 100 === 0 && userId) {
+        const docId = 'phonesteps_' + date.replace(/-/g, '');
+        setDoc(doc(db, 'users', userId, 'entries', docId), {
+          id: docId, datum: date, typ: 'phonesteps',
+          steps: steps, source_steps: 'samsung_sensor',
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(e => console.warn('phonesteps save error:', e));
+      }
 
       // Nur für heute relevant
       if (date !== currentDate) return;
 
-      // Immer neu rendern damit Kalorienziel aktualisiert wird
+      // Neu rendern damit Kalorienziel aktualisiert wird
       renderFoodLog();
     };
 

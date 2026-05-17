@@ -5406,6 +5406,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
               `Zuletzt eingetragen: ${weight} kg am ${date}`;
             calcTDEE();
           }
+          // Gewicht auch in Firestore-Settings speichern
+          if (userId) {
+            setDoc(doc(db, 'users', userId, 'settings', 'main'),
+              { weight: weight }, { merge: true }
+            ).catch(e => console.warn('Weight settings save error:', e));
+          }
         }
         
         showToast('✓ Tageslog gespeichert');

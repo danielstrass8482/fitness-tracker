@@ -3792,7 +3792,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const stepsSource = garminSteps > 0 ? 'Garmin' : phoneSteps > 0 ? '📱' : '';
 
         const dayActivities = trainingEntries.filter(e =>
-          e.datum === currentDate && e.typ !== 'tageslog'
+          e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
         ).sort((a, b) => (a.garminTime || '').localeCompare(b.garminTime || ''));
 
         const TYP_LABELS = {
@@ -3813,10 +3813,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         // Schritte
         if (steps > 0) {
+          const sourceText = stepsSource === 'Garmin' ? 'Garmin' : stepsSource === '📱' ? 'Samsung Sensor' : '';
           html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
             <span style="font-size:20px;">👟</span>
-            <span style="font-weight:500;">${fmt(steps)} Schritte</span>
-            ${stepsSource ? `<span style="font-size:11px;color:var(--muted);background:var(--surface2);padding:1px 6px;border-radius:4px;">${stepsSource}</span>` : ''}
+            <div>
+              <span style="font-weight:500;">${fmt(steps)} Schritte</span>
+              ${sourceText ? `<div style="font-size:11px;color:var(--muted);">${sourceText}</div>` : ''}
+            </div>
           </div>`;
         }
 

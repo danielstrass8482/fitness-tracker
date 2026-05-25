@@ -1548,20 +1548,34 @@
         // Load settings first (needed for detailDays)
         await loadSettings();
 
-        // Load all diary entries (no date limit needed for small collections)
-        const diarySnap = await getDocs(userLogCol());
+        // Load last 365 days of diary entries
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 365);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+
+        const diarySnap = await getDocs(query(userLogCol(), where('datum', '>=', cutoffStr)));
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
           const entryDate = entry.datum || entry.date;
-          if (!entryDate) return;
+          if (!entryDate || entryDate < cutoffStr) return;
+          if (!foodLog[entryDate]) foodLog[entryDate] = [];
+          foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
+        });
+
+        // Fallback: also load entries with 'date' field for older entries
+        const diarySnapOld = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
+        diarySnapOld.forEach(d => {
+          const entry = d.data();
+          const entryDate = entry.datum || entry.date;
+          if (!entryDate || entryDate < cutoffStr || foodLog[entryDate]?.find(e => e.id === entry.id)) return;
           if (!foodLog[entryDate]) foodLog[entryDate] = [];
           foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
         });
         window.foodLog = foodLog;
 
-        // Load Training
-        const trainingSnap = await getDocs(userTrainingCol());
+        // Load Training (last 365 days)
+        const trainingSnap = await getDocs(query(userTrainingCol(), where('datum', '>=', cutoffStr)));
         trainingEntries = [];
         trainingSnap.forEach(d => trainingEntries.push(d.data()));
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
@@ -1623,15 +1637,15 @@
 
         const dayActivity = (allTrainingEntries || trainingEntries)
           .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-            && e.datum === date && e.typ !== 'gehen' && e.typ !== 'wandern')
+            && e.datum === date)
           .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
         const garminSteps = dayLog?.steps || 0;
 
-        // Aktivitäts-Schritte für diesen Tag (zum Abziehen)
+        // Aktivitäts-Schritte für diesen Tag (alle Aktivitäten inkl. Gehen/Wandern abziehen)
         const activitySteps = trainingEntries
-          .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'gehen' && e.typ !== 'wandern' && (e.schritte || 0) > 0)
+          .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
           .reduce((sum, e) => sum + (e.schritte || 0), 0);
 
         // Alltagsschritte: Garmin hat Priorität, sonst rohe Handy-Schritte
@@ -1700,14 +1714,13 @@
         if (dayLog?.steps) steps_total += parseInt(String(dayLog.steps).replace(/\D/g, '')) || 0;
 
         trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-          && e.datum === wd && e.typ !== 'gehen' && e.typ !== 'wandern').forEach(e => {
+          && e.datum === wd).forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
           trainings++;
-          // Aktivitätsschritte nur für Laufen (nicht Gehen/Wandern)
-          const isRunAct = ['laufen', 'laufen_intervall', 'trail'].includes(e.typ);
-          steps_activity += isRunAct ? (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0) : 0;
+          // Alle Aktivitätsschritte abziehen
+          steps_activity += parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
         });
       });
 
@@ -3651,8 +3664,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
     function calcDayActivityKcal(date) {
       return trainingEntries
-        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-          && e.typ !== 'gehen' && e.typ !== 'wandern') // Gehen/Wandern → Alltagskalorien, nicht Aktivität
+        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava'))
         .reduce((sum, e) => sum + calcActivityKcal(e), 0);
     }
 
@@ -3735,7 +3747,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           // Letzte 7 Tage cachen
           if (typeof AndroidTokenBridge.updateWidgetHistory === 'function') {
             const history = [];
-            for (let i = 1; i <= 7; i++) {
+            for (let i = 1; i <= 31; i++) {
               const d = new Date();
               d.setDate(d.getDate() - i);
               const dateStr = d.toISOString().split('T')[0];

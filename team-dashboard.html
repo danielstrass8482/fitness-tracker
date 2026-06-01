@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Performance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2333;--border:#2a2f42;
+  --accent:#f5c842;--accent2:#4ade80;--accent3:#60a5fa;--danger:#f87171;
+  --text:#e8eaf0;--muted:#6b7280;--radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.header-logo{display:flex;align-items:baseline;gap:0;font-size:1rem;font-weight:800;letter-spacing:.01em;}
+.header-logo .t1{color:var(--text);}
+.header-logo .sep{color:var(--border);margin:0 8px;font-weight:300;}
+.header-logo .t2{color:var(--accent);}
+.header-right{display:flex;gap:10px;align-items:center;}
+.btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 14px;border-radius:6px;font-family:'Syne',sans-serif;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:var(--accent);color:#111;border-color:var(--accent);}
+.btn.primary:hover{opacity:.85;color:#111;}
+
+.container{max-width:1600px;margin:0 auto;padding:24px 32px;}
+
+/* FILTER BAR */
+.filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:20px;}
+.filter-group{display:flex;flex-direction:column;gap:4px;}
+.filter-group label{font-size:.65rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;}
+.filter-group select{background:var(--surface2);border:1px solid #3d4460;color:var(--text);padding:7px 28px 7px 10px;border-radius:6px;font-family:'Syne',sans-serif;font-size:.82rem;min-width:148px;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;}
+.filter-group input[type=month]{background:var(--surface2);border:1px solid #3d4460;color:var(--text);padding:7px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:.82rem;min-width:148px;cursor:pointer;color-scheme:dark;}
+.filter-group select:focus,.filter-group input[type=month]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,200,66,.12);}
+.filter-group select option{background:#1e2333;color:var(--text);}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:20px;}
+@media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:700px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px 14px;position:relative;overflow:hidden;}
+.kpi-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--card-color,var(--accent));}
+.kpi-label{font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Value scales down automatically with clamp */
+.kpi-value{font-weight:800;line-height:1.05;color:var(--card-color,var(--accent));
+  font-size:clamp(1.3rem,3.5vw,2.2rem);letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kpi-sub{font-size:.68rem;color:var(--muted);margin-top:7px;font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kpi-delta{font-family:'DM Mono',monospace;font-size:.68rem;margin-top:4px;}
+.kpi-delta.up{color:var(--accent2);}
+.kpi-delta.down{color:var(--danger);}
+
+/* CHARTS */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+.chart-grid.wide{grid-template-columns:1fr;}
+@media(max-width:900px){.chart-grid{grid-template-columns:1fr;}}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;}
+.chart-card h3{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;}
+/* Chart.js needs a parent with explicit height and position:relative */
+.chart-wrap{position:relative;width:100%;height:240px;}
+
+/* TABLE */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:20px;overflow-x:auto;}
+.table-card h3{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+table{width:100%;border-collapse:collapse;font-size:.82rem;}
+th{text-align:left;padding:9px 12px;font-size:.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:9px 12px;border-bottom:1px solid var(--border);font-family:'DM Mono',monospace;font-size:.8rem;white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--surface2);}
+td.agent-name{font-family:'Syne',sans-serif;font-weight:600;color:var(--text);}
+.badge{display:inline-block;padding:2px 6px;border-radius:20px;font-size:.65rem;font-weight:700;font-family:'Syne',sans-serif;margin-right:4px;}
+.badge.green{background:rgba(74,222,128,.15);color:var(--accent2);}
+.badge.yellow{background:rgba(245,200,66,.15);color:var(--accent);}
+.badge.red{background:rgba(248,113,113,.15);color:var(--danger);}
+
+/* EDITABLE CELLS */
+.editable{background:transparent;border:1px solid transparent;color:var(--text);font-family:'DM Mono',monospace;font-size:.8rem;padding:4px 8px;border-radius:4px;width:100%;transition:all .15s;}
+.editable:focus{outline:none;border-color:var(--accent);background:var(--surface2);}
+select.editable{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;padding-right:20px;}
+select.editable option{background:#1e2333;}
+.row-delete{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:2px 6px;border-radius:4px;transition:all .15s;}
+.row-delete:hover{color:var(--danger);background:rgba(248,113,113,.1);}
+
+/* MODAL */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:200;align-items:center;justify-content:center;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto;}
+.modal h2{font-size:1rem;font-weight:800;margin-bottom:6px;}
+.modal>.modal-desc{font-size:.78rem;color:var(--muted);margin-bottom:18px;}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(245,200,66,.04);}
+.upload-zone .icon{font-size:1.8rem;margin-bottom:8px;}
+.upload-zone p{font-size:.78rem;color:var(--muted);margin:0;}
+.upload-zone strong{color:var(--text);}
+input[type=file]{display:none;}
+.upload-tabs{display:flex;gap:4px;margin-bottom:18px;}
+.upload-tab{flex:1;padding:7px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .15s;}
+.upload-tab.active{background:var(--accent);color:#111;border-color:var(--accent);}
+.info-box{background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:8px;padding:10px 13px;font-size:.75rem;color:#93c5fd;margin-bottom:13px;line-height:1.7;}
+.warn-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:10px 13px;font-size:.75rem;color:#fca5a5;margin-bottom:13px;line-height:1.6;}
+
+.empty-state{text-align:center;padding:70px 20px;}
+.empty-state .icon{font-size:3rem;margin-bottom:14px;opacity:.35;}
+.empty-state h2{font-size:1rem;font-weight:700;margin-bottom:8px;}
+.empty-state p{font-size:.82rem;color:var(--muted);max-width:400px;margin:0 auto 22px;}
+
+#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent2);border-radius:8px;padding:12px 18px;font-size:.82rem;font-weight:600;transform:translateY(70px);opacity:0;transition:all .3s;z-index:999;max-width:360px;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast.error{border-left-color:var(--danger);}
+
+/* TABS – opacity+pointer-events so containers always have real pixel dimensions for Chart.js */
+.nav-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);}
+.nav-tab{padding:9px 16px;font-size:.78rem;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;text-transform:uppercase;letter-spacing:.04em;}
+.nav-tab:hover{color:var(--text);}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+.scroll-hint{font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;font-weight:400;}
+.chip-unmatched{display:inline-block;background:rgba(248,113,113,.15);color:#fca5a5;border-radius:4px;padding:1px 5px;font-size:.65rem;font-family:'DM Mono',monospace;margin-left:5px;}
+.reg-stats{display:flex;gap:18px;margin-bottom:14px;font-size:.74rem;color:var(--muted);font-family:'DM Mono',monospace;}
+.reg-stats span b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-logo">
+    <span class="t1">Team</span><span class="sep">·</span><span class="t2">Performance Dashboard</span>
+  </div>
+  <div class="header-right">
+    <button class="btn" onclick="openModal('upload-modal')">⬆ Import CSV</button>
+    <button class="btn" onclick="exportData()">⬇ Export</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Brand</label>
+      <select id="f-brand" onchange="onBrandChange()"><option value="">Alle</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Team</label>
+      <select id="f-team" onchange="onTeamChange()"><option value="">Alle</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Agent</label>
+      <select id="f-agent" onchange="applyFilters()"><option value="">Alle</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Channel</label>
+      <select id="f-channel" onchange="applyFilters()"><option value="">Alle</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Von</label>
+      <input type="month" id="f-from" onchange="applyFilters()">
+    </div>
+    <div class="filter-group">
+      <label>Bis</label>
+      <input type="month" id="f-to" onchange="applyFilters()">
+    </div>
+    <button class="btn" onclick="resetFilters()" style="margin-top:18px;">✕ Reset</button>
+  </div>
+
+  <div class="nav-tabs">
+    <div class="nav-tab active" id="navtab-overview"  onclick="switchTab('overview',this)">Übersicht</div>
+    <div class="nav-tab"        id="navtab-agents"    onclick="switchTab('agents',this)">Agenten</div>
+    <div class="nav-tab"        id="navtab-performance" onclick="switchTab('performance',this)">Performance</div>
+    <div class="nav-tab"        id="navtab-users"     onclick="switchTab('users',this)">👤 Userverwaltung</div>
+  </div>
+
+  <div class="tab-content active" id="tab-overview"><div id="overview-body"></div></div>
+  <div class="tab-content"        id="tab-agents"><div id="agents-body"></div></div>
+  <div class="tab-content"        id="tab-performance"><div id="performance-body"></div></div>
+  <div class="tab-content"        id="tab-users"><div id="users-body"></div></div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal-backdrop" id="upload-modal">
+  <div class="modal">
+    <h2>Daten importieren</h2>
+    <p class="modal-desc">Wähle den Datentyp und lade deine CSV-Datei hoch.</p>
+    <div class="upload-tabs">
+      <div class="upload-tab active" id="tab-csat-btn" onclick="switchUploadTab('csat')">CSAT / NPS</div>
+      <div class="upload-tab" id="tab-perf-btn" onclick="switchUploadTab('perf')">Performance</div>
+    </div>
+    <div id="upload-csat">
+      <div class="info-box">
+        <b>Verwendete Spalten:</b><br>
+        • <code>Score</code> → NPS (0–10): Promoter ≥9, Passiv 7–8, Dettraktor 0–6<br>
+        • <code>score3</code> → CSAT (1–5 Sterne): Anteil 4+5<br>
+        • <code>agent id</code> → Mapping gegen Userverwaltung<br>
+        • <code>Brand</code>, <code>Team</code>, <code>Agent</code> (Rohspalten, kein Final-Suffix)<br>
+        • Optionale Subwerte: Freundlichkeit, Fachkompetenz, Service
+      </div>
+      <div class="upload-zone" id="drop-csat" onclick="document.getElementById('file-csat').click()">
+        <div class="icon">📊</div>
+        <p><strong>CSV auswählen oder hierher ziehen</strong></p>
+      </div>
+      <input type="file" id="file-csat" accept=".csv" onchange="handleCSAT(this)">
+    </div>
+    <div id="upload-perf" style="display:none">
+      <div class="info-box">
+        <b>Pflicht:</b> <code>agent_id</code>, <code>Month</code> (YYYY-MM), <code>AHT</code> (Sek.), <code>Tickets_per_hour</code>, <code>FCR</code> (%), <code>Reopen_Rate</code> (%)<br>
+        Mapping über <b>agent_id</b> → Userverwaltung.
+      </div>
+      <div class="upload-zone" id="drop-perf" onclick="document.getElementById('file-perf').click()">
+        <div class="icon">⚡</div>
+        <p><strong>Performance CSV auswählen oder hierher ziehen</strong></p>
+      </div>
+      <input type="file" id="file-perf" accept=".csv" onchange="handlePerf(this)">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal('upload-modal')">Schließen</button>
+      <button class="btn primary" onclick="loadSampleData()">📂 Beispieldaten laden</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONSTANTS & STATE
+// ═══════════════════════════════════════════
+const FIXED_TEAMS   = ['Vertragsservice','Customer Service','Sonstige'];
+const MONTHS_MAP    = {'01':'Jan','02':'Feb','03':'Mär','04':'Apr','05':'Mai','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Okt','11':'Nov','12':'Dez'};
+const LS_KEY        = 'dashboard_agent_registry_v1';
+
+let rawCSAT      = [];
+let rawPerf      = [];
+let filtered     = [];
+let charts       = {};
+let activeTab    = 'overview';
+let agentRegistry= loadReg();
+
+// ═══════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════
+function loadReg(){try{const r=localStorage.getItem(LS_KEY);return r?JSON.parse(r):{}}catch{return{}}}
+function saveReg(){try{localStorage.setItem(LS_KEY,JSON.stringify(agentRegistry))}catch{}}
+function escHtml(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function fmt(n){if(n===null||n===undefined||!isFinite(Number(n)))return String(n??'–');return Number(n).toLocaleString('de-DE')}
+function avg(arr){const v=arr.filter(x=>isFinite(x)&&x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null}
+function fmtAHT(s){if(!s)return'–';return Math.floor(s/60)+'m '+Math.round(s%60)+'s'}
+function monthLabel(ym){const p=ym.split('-');return(MONTHS_MAP[p[1]]||p[1])+' '+p[0].slice(2)}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}))
+function toast(msg,isError=false){const el=document.getElementById('toast');el.textContent=msg;el.className='show'+(isError?' error':'');setTimeout(()=>el.className='',3500)}
+
+function switchUploadTab(t){
+  document.getElementById('upload-csat').style.display=t==='csat'?'block':'none';
+  document.getElementById('upload-perf').style.display=t==='perf'?'block':'none';
+  document.getElementById('tab-csat-btn').classList.toggle('active',t==='csat');
+  document.getElementById('tab-perf-btn').classList.toggle('active',t==='perf');
+}
+
+// ═══════════════════════════════════════════
+//  TAB SWITCHING — key: destroy+recreate charts after tab becomes visible
+// ═══════════════════════════════════════════
+function switchTab(name, el) {
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  // Make tab visible FIRST so chart containers have real pixel dimensions
+  document.getElementById('tab-'+name).classList.add('active');
+  activeTab = name;
+  // Now render — DOM is visible, offsetWidth/height will be real values
+  if(name==='overview')         renderOverview();
+  else if(name==='agents')      renderAgents();
+  else if(name==='performance') renderPerformance();
+  else if(name==='users')       renderUsers();
+}
+
+// ═══════════════════════════════════════════
+//  CSV IMPORT
+// ═══════════════════════════════════════════
+function handleCSAT(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    rawCSAT=normalizeCSAT(res.data);
+    autoPopulateRegistry(rawCSAT);
+    closeModal('upload-modal');
+    populateFilters();
+    // Reset filtered to full set first, then apply
+    filtered=[...rawCSAT];
+    applyFilters();
+    toast(`✓ ${fmt(rawCSAT.length)} Datensätze · ${fmt(Object.keys(agentRegistry).length)} Agenten`);
+    input.value='';
+  },error:e=>toast('Fehler: '+e.message,true)});
+}
+
+function handlePerf(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    rawPerf=enrichPerf(res.data);
+    closeModal('upload-modal');
+    if(activeTab==='performance') renderPerformance();
+    const u=rawPerf.filter(r=>r._unmatched).length;
+    toast(`✓ ${fmt(rawPerf.length)} Einträge`+(u?` · ⚠ ${u} ohne Match`:''),u>0);
+    input.value='';
+  },error:e=>toast('Fehler: '+e.message,true)});
+}
+
+// ─── Normalise survey rows ────────────────
+function normalizeCSAT(rows){
+  return rows.map(r=>{
+    const d=(r['Date']||r['date']||'').toString().trim();
+    const npsScore=parseFloat(r['Score']||r['score']||'');
+    const csatRaw =parseFloat(r['score3']||'');
+    const csat45  =isFinite(csatRaw)?(csatRaw>=4?1:0):null;
+    const friendly =parseFloat(r['(Optional) Wie zufrieden waren Sie mit der Freundlichkeit und Hilfsbereitschaft des Mitarbeitenden?']||r['Friendly']||'');
+    const kompetenz=parseFloat(r['(Optional) Wie zufrieden waren Sie mit der fachlichen Kompetenz des Mitarbeitenden?']||r['Competence']||'');
+    const service  =parseFloat(r['(Optional) Wie zufrieden waren sie mit unserem Service heute?']||r['Service']||'');
+    const agentId=(r['agent id']||r['agent_id']||r['agentId']||'').toString().trim();
+    const reg=agentId?agentRegistry[agentId]:null;
+    // Use registry if available, otherwise raw columns (NO *Final fallback)
+    const agent =reg?.name  ||(r['Agent']||r['agent']||'Unbekannt').trim();
+    const team  =reg?.team  ||normalizeTeam(r['Team']||r['team']||'');
+    const brand =reg?.brand ||(r['Brand']||r['brand']||'').trim();
+    const channel=(r['Channel']||r['channel']||r['amp;channel']||'').trim();
+    let month='';
+    if(d){
+      const m1=d.match(/(\d{4})-(\d{2})/);
+      if(m1)month=m1[1]+'-'+m1[2];
+      else{const m2=d.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m2)month=m2[3]+'-'+m2[2].padStart(2,'0');}
+    }
+    return{date:d,month,npsScore,csatRaw,csat45,friendly,kompetenz,service,agentId,agent,team,brand,channel};
+  }).filter(r=>r.date||r.agentId);
+}
+
+function normalizeTeam(raw){
+  const s=(raw||'').trim().toLowerCase();
+  if(!s)return'Sonstige';
+  if(s.includes('vertrag')||s.includes('contract'))return'Vertragsservice';
+  if(s.includes('customer')||s.includes('kunden')||s.includes('support')||s.includes('service'))return'Customer Service';
+  return'Sonstige';
+}
+
+function autoPopulateRegistry(rows){
+  let added=0;
+  rows.forEach(r=>{
+    if(!r.agentId||agentRegistry[r.agentId])return;
+    agentRegistry[r.agentId]={name:r.agent||'Agent '+r.agentId,team:r.team||'Sonstige',brand:r.brand||''};
+    added++;
+  });
+  if(added)saveReg();
+}
+
+function enrichPerf(rows){
+  return rows.map(r=>{
+    const id=(r['agent_id']||r['agentId']||r['agent id']||'').toString().trim();
+    const reg=id?agentRegistry[id]:null;
+    return{...r,agent_id:id,
+      Agent:reg?.name||r['Agent']||r['agent']||(id?'ID:'+id:'Unbekannt'),
+      Team:reg?.team||normalizeTeam(r['Team']||r['team']||''),
+      Brand:reg?.brand||r['Brand']||r['brand']||'',
+      _unmatched:!reg};
+  });
+}
+
+// ═══════════════════════════════════════════
+//  SAMPLE DATA
+// ═══════════════════════════════════════════
+function loadSampleData(){
+  const structure={
+    'Dogado':{'Vertragsservice':[{id:'D-VS-01',name:'Anna Müller'},{id:'D-VS-02',name:'Ben Schmidt'}],'Customer Service':[{id:'D-CS-01',name:'Clara Weber'},{id:'D-CS-02',name:'David Koch'},{id:'D-CS-03',name:'Eva Bauer'}],'Sonstige':[{id:'D-SO-01',name:'Felix Huber'}]},
+    'IONOS':{'Vertragsservice':[{id:'I-VS-01',name:'Greta Wolf'},{id:'I-VS-02',name:'Hans Keller'}],'Customer Service':[{id:'I-CS-01',name:'Iris Meier'},{id:'I-CS-02',name:'Jan Zimmermann'},{id:'I-CS-03',name:'Kai Brandt'}],'Sonstige':[{id:'I-SO-01',name:'Laura Schu'}]}
+  };
+  const channels=['Email','Chat','Phone'];
+  const months=['2025-01','2025-02','2025-03','2025-04','2025-05','2025-06','2025-07','2025-08'];
+  agentRegistry={};
+  Object.entries(structure).forEach(([brand,teams])=>Object.entries(teams).forEach(([team,agents])=>agents.forEach(ag=>{agentRegistry[ag.id]={name:ag.name,team,brand};})));
+  saveReg();
+  rawCSAT=[];
+  months.forEach(month=>{
+    Object.entries(structure).forEach(([brand,teams])=>{
+      Object.entries(teams).forEach(([team,agents])=>{
+        const count=30+Math.floor(Math.random()*25);
+        for(let i=0;i<count;i++){
+          const ag=agents[Math.floor(Math.random()*agents.length)];
+          const npsScore=Math.random()<.65?Math.floor(Math.random()*2)+9:Math.random()<.5?Math.floor(Math.random()*2)+7:Math.floor(Math.random()*7);
+          const hasCsat=brand==='Dogado';
+          const csatRaw=hasCsat?Math.random()<.75?(Math.random()<.55?5:4):Math.floor(Math.random()*3)+1:NaN;
+          rawCSAT.push({date:month+'-15',month,npsScore,csatRaw,csat45:hasCsat?(csatRaw>=4?1:0):null,
+            friendly:hasCsat?Math.min(5,Math.max(1,csatRaw+(Math.random()-.5))):NaN,
+            kompetenz:hasCsat?Math.min(5,Math.max(1,csatRaw+(Math.random()-.5))):NaN,
+            service:hasCsat?Math.min(5,Math.max(1,csatRaw+(Math.random()-.5))):NaN,
+            agentId:ag.id,agent:ag.name,team,brand,channel:channels[Math.floor(Math.random()*channels.length)]});
+        }
+      });
+    });
+  });
+  rawPerf=[];
+  months.forEach(month=>{Object.entries(structure).forEach(([brand,teams])=>{Object.entries(teams).forEach(([team,agents])=>{agents.forEach(ag=>{rawPerf.push({agent_id:ag.id,Agent:ag.name,Team:team,Brand:brand,Month:month,AHT:Math.round(180+Math.random()*240),Tickets_per_hour:+(2.5+Math.random()*2.5).toFixed(1),FCR:Math.round(65+Math.random()*25),Reopen_Rate:+(1+Math.random()*8).toFixed(1),_unmatched:false});});});});});
+  closeModal('upload-modal');
+  populateFilters();
+  filtered=[...rawCSAT];
+  applyFilters();
+  toast('✓ Beispieldaten geladen');
+}
+
+// ═══════════════════════════════════════════
+//  FILTERS (cascading)
+// ═══════════════════════════════════════════
+function populateFilters(){
+  const brands=[...new Set(rawCSAT.map(r=>r.brand).filter(Boolean))].sort();
+  fillSelect('f-brand',brands);
+  fillSelect('f-team',FIXED_TEAMS);
+  const channels=[...new Set(rawCSAT.map(r=>r.channel).filter(Boolean))].sort();
+  fillSelect('f-channel',channels);
+  updateAgentDropdown('','');
+}
+function updateAgentDropdown(brand,team){
+  const agents=[...new Set(rawCSAT.filter(r=>(!brand||r.brand===brand)&&(!team||r.team===team)).map(r=>r.agent).filter(Boolean))].sort();
+  fillSelect('f-agent',agents);
+}
+function onBrandChange(){document.getElementById('f-agent').value='';updateAgentDropdown(document.getElementById('f-brand').value,document.getElementById('f-team').value);applyFilters();}
+function onTeamChange(){document.getElementById('f-agent').value='';updateAgentDropdown(document.getElementById('f-brand').value,document.getElementById('f-team').value);applyFilters();}
+function fillSelect(id,vals){const s=document.getElementById(id);const c=s.value;s.innerHTML='<option value="">Alle</option>'+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');if(vals.includes(c))s.value=c;}
+function resetFilters(){['f-brand','f-team','f-agent','f-channel'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-from').value='';document.getElementById('f-to').value='';updateAgentDropdown('','');applyFilters();}
+
+function applyFilters(){
+  const brand=document.getElementById('f-brand').value;
+  const team =document.getElementById('f-team').value;
+  const agent=document.getElementById('f-agent').value;
+  const chan =document.getElementById('f-channel').value;
+  const from =document.getElementById('f-from').value;
+  const to   =document.getElementById('f-to').value;
+  filtered=rawCSAT.filter(r=>{
+    if(brand&&r.brand!==brand)return false;
+    if(team &&r.team !==team) return false;
+    if(agent&&r.agent!==agent)return false;
+    if(chan &&r.channel!==chan)return false;
+    if(from&&r.month&&r.month<from)return false;
+    if(to  &&r.month&&r.month>to)  return false;
+    return true;
+  });
+  // Only re-render the currently visible tab
+  if(activeTab==='overview')    renderOverview();
+  else if(activeTab==='agents') renderAgents();
+  else if(activeTab==='performance') renderPerformance();
+}
+
+// ═══════════════════════════════════════════
+//  CALCULATIONS
+// ═══════════════════════════════════════════
+function calcNPS(rows){
+  const v=rows.filter(r=>isFinite(r.npsScore)&&r.npsScore>=0&&r.npsScore<=10);
+  if(!v.length)return null;
+  const n=v.length;
+  return Math.round((v.filter(r=>r.npsScore>=9).length/n - v.filter(r=>r.npsScore<=6).length/n)*100);
+}
+function calcCSAT(rows){
+  const v=rows.filter(r=>r.csat45!==null&&r.csat45!==undefined);
+  if(!v.length)return null;
+  return(v.filter(r=>r.csat45===1).length/v.length*100).toFixed(1);
+}
+function calcByMonth(rows){const bm={};rows.forEach(r=>{if(!r.month)return;if(!bm[r.month])bm[r.month]=[];bm[r.month].push(r);});return bm;}
+
+// ═══════════════════════════════════════════
+//  CHART HELPERS
+// ═══════════════════════════════════════════
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+// Create a chart after ensuring the canvas has real pixel dimensions
+function mkChart(id, cfg){
+  const canvas=document.getElementById(id);
+  if(!canvas) return;
+  destroyChart(id);
+  // Ensure options have the required responsive flags
+  if(!cfg.options) cfg.options={};
+  cfg.options.responsive=true;
+  cfg.options.maintainAspectRatio=false;
+  charts[id]=new Chart(canvas, cfg);
+}
+
+const CHART_BASE={
+  responsive:true,
+  maintainAspectRatio:false,
+  animation:{duration:300},
+  plugins:{legend:{labels:{color:'#9ca3af',font:{family:'DM Mono',size:10}}}},
+};
+function xScale(){return{ticks:{color:'#6b7280',font:{family:'DM Mono',size:9}},grid:{color:'#1e2333'}};}
+function yScale(opts={}){return{ticks:{color:'#6b7280',font:{family:'DM Mono',size:9},...(opts.ticksExtra||{})},grid:{color:'#1e2333'},...opts};}
+
+// ═══════════════════════════════════════════
+//  RENDER OVERVIEW
+// ═══════════════════════════════════════════
+function renderOverview(){
+  const body=document.getElementById('overview-body');
+  if(!filtered.length){body.innerHTML=emptyState('Noch keine Daten','Lade deine CSV-Exporte hoch oder nutze die Beispieldaten.',true);return;}
+
+  const npsTotal =calcNPS(filtered);
+  const csatTotal=calcCSAT(filtered);
+  const total    =filtered.length;
+  const npsValid =filtered.filter(r=>isFinite(r.npsScore)&&r.npsScore>=0).length;
+  const csatValid=filtered.filter(r=>r.csat45!==null).length;
+
+  const fv=filtered.map(r=>r.friendly).filter(v=>isFinite(v)&&v>0);
+  const kv=filtered.map(r=>r.kompetenz).filter(v=>isFinite(v)&&v>0);
+  const sv=filtered.map(r=>r.service).filter(v=>isFinite(v)&&v>0);
+  const ap=vals=>vals.length?Math.round(avg(vals)/5*100)+'%':'–';
+  const cl=vals=>vals.length?fmt(vals.length)+' Wertungen':'keine Daten';
+
+  const bm=calcByMonth(filtered);
+  const sm=Object.keys(bm).sort();
+  const npsSer =sm.map(m=>calcNPS(bm[m]));
+  const csatSer=sm.map(m=>{const v=parseFloat(calcCSAT(bm[m]));return isFinite(v)?v:null;});
+  const volSer =sm.map(m=>bm[m].length);
+  const lbl    =sm.map(monthLabel);
+
+  const deltaN=npsSer.filter(v=>v!==null).length>1?(npsSer[npsSer.length-1]||0)-(npsSer[npsSer.length-2]||0):null;
+  const deltaC=csatSer.filter(v=>v!==null).length>1?((csatSer[csatSer.length-1]||0)-(csatSer[csatSer.length-2]||0)).toFixed(1):null;
+
+  body.innerHTML=`
+    <div class="kpi-grid">
+      ${kpi('NPS',npsTotal!==null?fmt(npsTotal):'–',fmt(npsValid)+' Bewertungen',deltaN,'#60a5fa')}
+      ${kpi('CSAT',csatTotal!==null?csatTotal+'%':'–',fmt(csatValid)+' mit CSAT-Wert',deltaC,'#f5c842')}
+      ${kpi('Freundlichkeit',ap(fv),cl(fv),null,'#4ade80')}
+      ${kpi('Fachk. Kompetenz',ap(kv),cl(kv),null,'#a78bfa')}
+      ${kpi('Service',ap(sv),cl(sv),null,'#fb923c')}
+      ${kpi('Gesamt',fmt(total),'Datensätze',null,'#f472b6')}
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>NPS &amp; CSAT Verlauf</h3><div class="chart-wrap"><canvas id="trend-chart"></canvas></div></div>
+      <div class="chart-card"><h3>Kategorien-Übersicht (Ø)</h3><div class="chart-wrap"><canvas id="cat-chart"></canvas></div></div>
+    </div>
+    <div class="chart-grid wide">
+      <div class="chart-card"><h3>Bewertungsvolumen pro Monat</h3><div class="chart-wrap"><canvas id="vol-chart"></canvas></div></div>
+    </div>`;
+
+  mkChart('trend-chart',{type:'line',data:{labels:lbl,datasets:[
+    {label:'NPS',data:npsSer,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.08)',tension:.35,pointRadius:4,pointBackgroundColor:'#60a5fa',yAxisID:'y',spanGaps:true},
+    {label:'CSAT %',data:csatSer,borderColor:'#f5c842',backgroundColor:'rgba(245,200,66,.08)',tension:.35,pointRadius:4,pointBackgroundColor:'#f5c842',yAxisID:'y2',spanGaps:true}
+  ]},options:{...CHART_BASE,scales:{
+    x:xScale(),
+    y:{...yScale({min:-100,max:100}),position:'left',ticks:{...yScale().ticks,color:'#60a5fa'},title:{display:true,text:'NPS',color:'#60a5fa',font:{size:9}}},
+    y2:{...yScale({min:0,max:100}),position:'right',ticks:{color:'#f5c842',font:{family:'DM Mono',size:9},callback:v=>v+'%',stepSize:20},grid:{display:false},title:{display:true,text:'CSAT %',color:'#f5c842',font:{size:9}}}
+  },plugins:{...CHART_BASE.plugins,tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw+(ctx.dataset.yAxisID==='y2'?'%':'')}}}}});
+
+  mkChart('cat-chart',{type:'bar',data:{labels:['Freundlichkeit','Fachkompetenz','Service'],datasets:[{
+    data:[fv.length?+(avg(fv)/5*100).toFixed(1):null,kv.length?+(avg(kv)/5*100).toFixed(1):null,sv.length?+(avg(sv)/5*100).toFixed(1):null],
+    backgroundColor:['rgba(74,222,128,.7)','rgba(167,139,250,.7)','rgba(251,146,60,.7)'],borderRadius:5
+  }]},options:{...CHART_BASE,plugins:{legend:{display:false}},scales:{x:xScale(),y:yScale({min:0,max:100,ticks:{...yScale().ticks,callback:v=>v+'%',stepSize:20}})}}});
+
+  mkChart('vol-chart',{type:'bar',data:{labels:lbl,datasets:[{label:'Bewertungen',data:volSer,backgroundColor:'rgba(245,200,66,.5)',borderRadius:4}]},
+    options:{...CHART_BASE,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(ctx.raw)+' Bewertungen'}}},
+    scales:{x:xScale(),y:yScale({min:0,ticks:{...yScale().ticks,callback:v=>fmt(v)}})}}});
+}
+
+// ═══════════════════════════════════════════
+//  RENDER AGENTS
+// ═══════════════════════════════════════════
+function renderAgents(){
+  const body=document.getElementById('agents-body');
+  if(!filtered.length){body.innerHTML=emptyState('Keine Daten');return;}
+  const byAgent={};
+  filtered.forEach(r=>{if(!byAgent[r.agent])byAgent[r.agent]={agent:r.agent,agentId:r.agentId,team:r.team,brand:r.brand,rows:[]};byAgent[r.agent].rows.push(r);});
+  const rows=Object.values(byAgent).map(a=>({...a,nps:calcNPS(a.rows),csat:parseFloat(calcCSAT(a.rows)),vol:a.rows.length})).sort((a,b)=>(b.nps??-999)-(a.nps??-999));
+  const allMonths=[...new Set(filtered.map(r=>r.month).filter(Boolean))].sort().slice(-6);
+  body.innerHTML=`
+    <div class="table-card">
+      <h3>Agenten-Übersicht <span class="scroll-hint">↔ scroll</span></h3>
+      <table><thead><tr>
+        <th>Agent</th><th>ID</th><th>Brand</th><th>Team</th><th>Vol.</th>
+        <th>NPS Total</th><th>CSAT Total</th>
+        ${allMonths.map(m=>`<th>NPS ${monthLabel(m)}</th>`).join('')}
+        ${allMonths.map(m=>`<th>CSAT ${monthLabel(m)}</th>`).join('')}
+      </tr></thead><tbody>
+      ${rows.map(r=>{
+        const nm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=calcNPS(mR);return v!==null?`<td>${npsBadge(v)}${v}</td>`:'<td style="color:var(--muted)">–</td>';}).join('');
+        const cm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=parseFloat(calcCSAT(mR));return isFinite(v)?`<td>${csatBadge(v)}${v.toFixed(1)}%</td>`:'<td style="color:var(--muted)">–</td>';}).join('');
+        return`<tr>
+          <td class="agent-name">${r.agent}</td>
+          <td style="color:var(--muted)">${r.agentId||'–'}</td>
+          <td style="color:var(--accent);font-family:'Syne',sans-serif;font-size:.75rem">${r.brand}</td>
+          <td style="color:var(--muted);font-family:'Syne',sans-serif">${r.team}</td>
+          <td>${fmt(r.vol)}</td>
+          <td>${r.nps!==null?npsBadge(r.nps)+r.nps:'–'}</td>
+          <td>${isFinite(r.csat)?csatBadge(r.csat)+r.csat.toFixed(1)+'%':'–'}</td>
+          ${nm}${cm}</tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+}
+
+// ═══════════════════════════════════════════
+//  RENDER PERFORMANCE
+// ═══════════════════════════════════════════
+function renderPerformance(){
+  const body=document.getElementById('performance-body');
+  const brand=document.getElementById('f-brand').value,team=document.getElementById('f-team').value,
+        agentF=document.getElementById('f-agent').value,from=document.getElementById('f-from').value,to=document.getElementById('f-to').value;
+  const pd=rawPerf.filter(r=>{
+    if(brand&&r.Brand!==brand)return false;if(team&&r.Team!==team)return false;
+    if(agentF&&r.Agent!==agentF)return false;if(from&&r.Month&&r.Month<from)return false;
+    if(to&&r.Month&&r.Month>to)return false;return true;
+  });
+  if(!pd.length){
+    body.innerHTML=`${emptyState('Keine Performance-Daten','Performance-CSV importieren. Mapping via agent_id.',false)}<div style="text-align:center;margin-top:14px"><button class="btn primary" onclick="openModal('upload-modal');switchUploadTab('perf')">Performance importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()">📂 Beispieldaten</button></div>`;
+    return;
+  }
+  const u=pd.filter(r=>r._unmatched).length;
+  const banner=u?`<div class="warn-box" style="margin-bottom:18px">⚠ ${u} Einträge ohne Agent-ID-Match · Userverwaltung prüfen</div>`:'';
+  const pa=key=>avg(pd.map(r=>parseFloat(r[key])||0).filter(v=>v>0));
+  const avgAHT=Math.round(pa('AHT')||0),avgTPH=(pa('Tickets_per_hour')||0).toFixed(1),
+        avgFCR=(pa('FCR')||0).toFixed(1),avgReopen=(pa('Reopen_Rate')||0).toFixed(1);
+  const byM={};pd.forEach(r=>{if(!r.Month)return;if(!byM[r.Month])byM[r.Month]=[];byM[r.Month].push(r);});
+  const sM=Object.keys(byM).sort(),lbl=sM.map(monthLabel);
+  const ahtS=sM.map(m=>Math.round(avg(byM[m].map(r=>parseFloat(r.AHT)||0).filter(v=>v>0))||0));
+  const tphS=sM.map(m=>+(avg(byM[m].map(r=>parseFloat(r.Tickets_per_hour)||0).filter(v=>v>0))||0).toFixed(1));
+  const fcrS=sM.map(m=>+(avg(byM[m].map(r=>parseFloat(r.FCR)||0).filter(v=>v>0))||0).toFixed(1));
+  const byA={};pd.forEach(r=>{const k=r.Agent||'?';if(!byA[k])byA[k]={agent:k,id:r.agent_id,team:r.Team||'',brand:r.Brand||'',_u:r._unmatched,rows:[]};byA[k].rows.push(r);});
+  const aR=Object.values(byA).map(a=>({agent:a.agent,id:a.id,team:a.team,brand:a.brand,_u:a._u,
+    aht:Math.round(avg(a.rows.map(r=>parseFloat(r.AHT)||0).filter(v=>v>0))||0),
+    tph:+(avg(a.rows.map(r=>parseFloat(r.Tickets_per_hour)||0).filter(v=>v>0))||0).toFixed(1),
+    fcr:+(avg(a.rows.map(r=>parseFloat(r.FCR)||0).filter(v=>v>0))||0).toFixed(1),
+    reopen:+(avg(a.rows.map(r=>parseFloat(r.Reopen_Rate)||0))||0).toFixed(1)
+  })).sort((a,b)=>b.tph-a.tph);
+
+  body.innerHTML=`${banner}
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      ${kpi('Ø AHT',fmtAHT(avgAHT),'Avg Handle Time',null,'#60a5fa')}
+      ${kpi('Ø Tickets/h',avgTPH,'Durchsatz',null,'#4ade80')}
+      ${kpi('Ø FCR',avgFCR+'%','First Contact Resolution',null,'#f5c842')}
+      ${kpi('Ø Reopen Rate',avgReopen+'%','Wiedereröffnungen',null,'#f87171')}
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>AHT Verlauf (Sekunden)</h3><div class="chart-wrap"><canvas id="aht-chart"></canvas></div></div>
+      <div class="chart-card"><h3>Tickets/h &amp; FCR</h3><div class="chart-wrap"><canvas id="tph-chart"></canvas></div></div>
+    </div>
+    <div class="table-card"><h3>Performance per Agent</h3>
+    <table><thead><tr><th>Agent</th><th>ID</th><th>Brand</th><th>Team</th><th>Ø AHT</th><th>Ø Tickets/h</th><th>Ø FCR %</th><th>Ø Reopen %</th></tr></thead>
+    <tbody>${aR.map(r=>`<tr>
+      <td class="agent-name">${r.agent}${r._u?'<span class="chip-unmatched">kein Match</span>':''}</td>
+      <td style="color:var(--muted)">${r.id||'–'}</td>
+      <td style="color:var(--accent);font-family:'Syne',sans-serif;font-size:.75rem">${r.brand}</td>
+      <td style="color:var(--muted);font-family:'Syne',sans-serif">${r.team}</td>
+      <td>${fmtAHT(r.aht)}</td><td>${r.tph}</td>
+      <td>${csatBadge(r.fcr)}${r.fcr}%</td>
+      <td style="color:${r.reopen>5?'var(--danger)':'var(--accent2)'}">${r.reopen}%</td>
+    </tr>`).join('')}</tbody></table></div>`;
+
+  mkChart('aht-chart',{type:'line',data:{labels:lbl,datasets:[{label:'AHT (sek)',data:ahtS,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.08)',tension:.35,pointRadius:4,pointBackgroundColor:'#60a5fa'}]},
+    options:{...CHART_BASE,plugins:{legend:{display:false}},scales:{x:xScale(),y:yScale({min:0})}}});
+  mkChart('tph-chart',{type:'line',data:{labels:lbl,datasets:[
+    {label:'Tickets/h',data:tphS,borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.08)',tension:.35,yAxisID:'y',pointRadius:4,pointBackgroundColor:'#4ade80'},
+    {label:'FCR %',data:fcrS,borderColor:'#f5c842',backgroundColor:'rgba(245,200,66,.08)',tension:.35,yAxisID:'y2',pointRadius:4,pointBackgroundColor:'#f5c842'}
+  ]},options:{...CHART_BASE,scales:{x:xScale(),y:yScale({min:0,ticks:{...yScale().ticks,color:'#4ade80'}}),
+    y2:{...yScale({min:0,max:100}),position:'right',ticks:{color:'#f5c842',font:{family:'DM Mono',size:9},callback:v=>v+'%'},grid:{display:false}}}}});
+}
+
+// ═══════════════════════════════════════════
+//  RENDER USERS
+// ═══════════════════════════════════════════
+function renderUsers(){
+  const body=document.getElementById('users-body');
+  const entries=Object.entries(agentRegistry).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  const teamOpts=sel=>FIXED_TEAMS.map(t=>`<option value="${escHtml(t)}"${t===sel?' selected':''}>${escHtml(t)}</option>`).join('');
+  const brands=[...new Set(rawCSAT.map(r=>r.brand).filter(Boolean))].sort();
+  const uu=[...new Set(rawCSAT.filter(r=>r.agentId&&!agentRegistry[r.agentId]).map(r=>r.agentId))];
+  body.innerHTML=`
+    <div class="table-card">
+      <h3>Agent-Register <div style="display:flex;gap:8px">
+        <button class="btn" onclick="addAgentRow()">+ Agent</button>
+        <button class="btn" onclick="importRegistryCSV()">⬆ CSV</button>
+        <button class="btn" onclick="exportRegistryCSV()">⬇ CSV</button>
+      </div></h3>
+      <div class="reg-stats">
+        <span><b>${entries.length}</b> Agenten</span>
+        <span><b>${[...new Set(entries.map(([,v])=>v.brand).filter(Boolean))].length}</b> Brands</span>
+        ${uu.length?`<span style="color:var(--danger)"><b>${uu.length}</b> IDs ohne Registereintrag</span>`:''}
+      </div>
+      ${uu.length?`<div class="warn-box">IDs ohne Eintrag: <code>${uu.slice(0,8).join(', ')}${uu.length>8?'…':''}</code><br><button class="btn" style="margin-top:7px" onclick="autoFillMissing()">Aus Daten befüllen</button></div>`:''}
+      <table id="registry-table">
+        <thead><tr><th>Agent-ID</th><th>Name</th><th>Brand</th><th>Team</th><th></th></tr></thead>
+        <tbody>${entries.map(([id,v])=>`
+          <tr data-id="${escHtml(id)}">
+            <td><input class="editable" value="${escHtml(id)}" onchange="updId(this,'${escHtml(id)}')" placeholder="ID"></td>
+            <td><input class="editable" value="${escHtml(v.name)}" onchange="updField('${escHtml(id)}','name',this.value)" placeholder="Name"></td>
+            <td><input class="editable" value="${escHtml(v.brand)}" onchange="updField('${escHtml(id)}','brand',this.value)" placeholder="Brand" list="brand-list"></td>
+            <td><select class="editable" onchange="updField('${escHtml(id)}','team',this.value)">${teamOpts(v.team)}</select></td>
+            <td><button class="row-delete" onclick="delAgent('${escHtml(id)}')" title="Löschen">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <datalist id="brand-list">${brands.map(b=>`<option value="${escHtml(b)}">`).join('')}</datalist>
+    </div>
+    <input type="file" id="file-registry" accept=".csv" style="display:none" onchange="handleRegistryCSV(this)">`;
+}
+
+function updField(id,field,val){if(!agentRegistry[id])return;agentRegistry[id][field]=val.trim();saveReg();rawCSAT.forEach(r=>{if(r.agentId===id)r[field]=val.trim();});}
+function updId(input,oldId){const nid=input.value.trim();if(!nid||nid===oldId||agentRegistry[nid]){input.value=oldId;toast('ID bereits vergeben',true);return;}agentRegistry[nid]=agentRegistry[oldId];delete agentRegistry[oldId];saveReg();rawCSAT.forEach(r=>{if(r.agentId===oldId)r.agentId=nid;});renderUsers();toast('ID aktualisiert');}
+function delAgent(id){if(!confirm(`"${agentRegistry[id]?.name||id}" löschen?`))return;delete agentRegistry[id];saveReg();renderUsers();toast('Gelöscht');}
+function addAgentRow(){const nid='NEW-'+Date.now();agentRegistry[nid]={name:'',team:'Customer Service',brand:''};saveReg();renderUsers();setTimeout(()=>{const rows=document.querySelectorAll('#registry-table tbody tr');if(rows.length)rows[rows.length-1].querySelector('input').focus();},50);}
+function autoFillMissing(){const seen={};rawCSAT.forEach(r=>{if(r.agentId&&!agentRegistry[r.agentId]&&!seen[r.agentId]){seen[r.agentId]=true;agentRegistry[r.agentId]={name:r.agent||'Agent '+r.agentId,team:r.team||'Sonstige',brand:r.brand||''};}});saveReg();renderUsers();toast('✓ Fehlende Agenten ergänzt');}
+function exportRegistryCSV(){const rows=[['agent_id','name','team','brand'],...Object.entries(agentRegistry).map(([id,v])=>[id,v.name,v.team,v.brand])];const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='agent-register.csv';a.click();URL.revokeObjectURL(url);toast('✓ Register exportiert');}
+function importRegistryCSV(){document.getElementById('file-registry').click();}
+function handleRegistryCSV(input){const file=input.files[0];if(!file)return;Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{let a=0,u=0;res.data.forEach(r=>{const id=(r['agent_id']||r['agentId']||'').toString().trim();if(!id)return;const e=!!agentRegistry[id];agentRegistry[id]={name:(r['name']||'').trim(),team:normalizeTeam(r['team']||''),brand:(r['brand']||'').trim()};e?u++:a++;});saveReg();renderUsers();toast(`✓ ${a} neu · ${u} aktualisiert`);input.value='';},error:e=>toast('Fehler: '+e.message,true)});}
+
+// ═══════════════════════════════════════════
+//  SHARED COMPONENT HELPERS
+// ═══════════════════════════════════════════
+function kpi(label,value,sub,delta,color){
+  const d=delta!==null&&delta!==undefined?`<div class="kpi-delta ${parseFloat(delta)>=0?'up':'down'}">${parseFloat(delta)>=0?'↑':'↓'} ${Math.abs(delta)} vs. Vormonat</div>`:'';
+  return`<div class="kpi-card" style="--card-color:${color}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div>${d}</div>`;
+}
+function csatBadge(v){const c=v>=80?'green':v>=65?'yellow':'red';return`<span class="badge ${c}">${v>=80?'▲':v>=65?'◆':'▼'}</span>`;}
+function npsBadge(v){const c=v>=30?'green':v>=0?'yellow':'red';return`<span class="badge ${c}">${v>=30?'▲':v>=0?'◆':'▼'}</span>`;}
+function emptyState(title,text='',showBtn=false){return`<div class="empty-state"><div class="icon">📭</div><h2>${title}</h2><p>${text}</p>${showBtn?`<button class="btn primary" onclick="openModal('upload-modal')">⬆ Daten importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()">📂 Beispieldaten</button>`:''}</div>`;}
+
+function exportData(){if(!filtered.length){toast('Keine Daten',true);return;}const csv=Papa.unparse(filtered);const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='dashboard-export.csv';a.click();URL.revokeObjectURL(url);toast('✓ Export gestartet');}
+
+['drop-csat','drop-perf'].forEach(id=>{
+  const z=document.getElementById(id);
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag');});
+  z.addEventListener('dragleave',()=>z.classList.remove('drag'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');const f=e.dataTransfer.files[0];if(!f)return;const inp=document.getElementById(id==='drop-csat'?'file-csat':'file-perf');const dt=new DataTransfer();dt.items.add(f);inp.files=dt.files;inp.dispatchEvent(new Event('change'));});
+});
+
+// Tab is already display:block, render happens synchronously on visible DOM
+renderOverview();
+</script>
+</body>
+</html>

@@ -167,14 +167,12 @@ function normalise(rows){
     const kompetenz=parseFloat(r['(Optional) Wie zufrieden waren Sie mit der fachlichen Kompetenz des Mitarbeitenden?']||'');
     const service=parseFloat(r['(Optional) Wie zufrieden waren sie mit unserem Service heute?']||'');
     // Agent ID for registry lookup
-    const agentId=(r['agent id']||r['agent_id']||r['agentId']||'').toString().trim();
+    const agentId=(r['agent id']||'').toString().trim();
     const entry=agentId?reg[agentId]:null;
-    // Name: registry > 'Agent name' > 'Agent Final' > 'Agent'
-    const agent=entry?.name||(r['Agent name']||r['Agent Final']||r['Agent']||r['agent']||'Unbekannt').trim();
-    // Team: registry > 'Team Final' > 'Team'
-    const team=entry?.team||normTeam(r['Team Final']||r['Team']||r['team']||'');
-    // Brand: registry > 'Brand Final' > 'Brand4' > 'brand'
-    const brand=entry?.brand||(r['Brand Final']||r['Brand4']||r['Brand']||r['brand']||'').trim();
+    // Exactly these three columns, nothing else
+    const agent=entry?.name||(r['Agent name']||'Unbekannt').trim();
+    const team=entry?.team||normTeam(r['Team']||'');
+    const brand=entry?.brand||(r['Brand4']||'').trim();
     const channel=(r.Channel||r.channel||r['amp;channel']||'').trim();
     let month='';
     if(d){const m1=d.match(/(\d{4})-(\d{2})/);if(m1)month=m1[1]+'-'+m1[2];else{const m2=d.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m2)month=m2[3]+'-'+m2[2].padStart(2,'0')}}

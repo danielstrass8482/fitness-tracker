@@ -158,18 +158,24 @@ function byMonth(rows){const m={};rows.forEach(r=>{if(!r.month)return;if(!m[r.mo
 function normalise(rows){
   return rows.map(r=>{
     const d=(r.Date||r.date||'').toString().trim();
+    // NPS from Score column (0-10 scale)
     const nps=parseFloat(r.Score||r.score||'');
+    // CSAT from score3 column (1-5 stars)
     const c3=parseFloat(r.score3||'');
-    const csat45=isFinite(c3)?(c3>=4?1:0):null;
+    const csat45=isFinite(c3)&&c3>0?(c3>=4?1:0):null;
     const friendly=parseFloat(r['(Optional) Wie zufrieden waren Sie mit der Freundlichkeit und Hilfsbereitschaft des Mitarbeitenden?']||'');
     const kompetenz=parseFloat(r['(Optional) Wie zufrieden waren Sie mit der fachlichen Kompetenz des Mitarbeitenden?']||'');
     const service=parseFloat(r['(Optional) Wie zufrieden waren sie mit unserem Service heute?']||'');
-    const agentId=(r['agent id']||r.agent_id||'').toString().trim();
+    // Agent ID for registry lookup
+    const agentId=(r['agent id']||r['agent_id']||r['agentId']||'').toString().trim();
     const entry=agentId?reg[agentId]:null;
-    const agent=entry?.name||(r.Agent||r.agent||'Unbekannt').trim();
-    const team=entry?.team||normTeam(r.Team||r.team||'');
-    const brand=entry?.brand||(r.Brand||r.brand||'').trim();
-    const channel=(r.Channel||r.channel||'').trim();
+    // Name: registry > 'Agent name' > 'Agent Final' > 'Agent'
+    const agent=entry?.name||(r['Agent name']||r['Agent Final']||r['Agent']||r['agent']||'Unbekannt').trim();
+    // Team: registry > 'Team Final' > 'Team'
+    const team=entry?.team||normTeam(r['Team Final']||r['Team']||r['team']||'');
+    // Brand: registry > 'Brand Final' > 'Brand4' > 'brand'
+    const brand=entry?.brand||(r['Brand Final']||r['Brand4']||r['Brand']||r['brand']||'').trim();
+    const channel=(r.Channel||r.channel||r['amp;channel']||'').trim();
     let month='';
     if(d){const m1=d.match(/(\d{4})-(\d{2})/);if(m1)month=m1[1]+'-'+m1[2];else{const m2=d.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m2)month=m2[3]+'-'+m2[2].padStart(2,'0')}}
     return{date:d,month,nps,csat45,csatRaw:isFinite(c3)?c3:null,friendly,kompetenz,service,agentId,agent,team,brand,channel};

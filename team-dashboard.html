@@ -245,7 +245,8 @@ input[type=file]{display:none;}
 
 <div id="toast"></div>
 
-<script>
+<script>document.addEventListener('DOMContentLoaded', function() {
+
 // ===========================================
 //  CONSTANTS & STATE
 // ===========================================
@@ -747,6 +748,7 @@ function exportData(){if(!filtered.length){toast('Keine Daten',true);return;}con
 
 // Tab is already display:block, render happens synchronously on visible DOM
 renderOverview();
-</script>
+
+});</script>
 </body>
 </html>

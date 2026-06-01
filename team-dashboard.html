@@ -113,7 +113,7 @@ input[type=file]{display:none;}
 #toast.show{transform:translateY(0);opacity:1;}
 #toast.error{border-left-color:var(--danger);}
 
-/* TABS – opacity+pointer-events so containers always have real pixel dimensions for Chart.js */
+/* TABS - opacity+pointer-events so containers always have real pixel dimensions for Chart.js */
 .nav-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);}
 .nav-tab{padding:9px 16px;font-size:.78rem;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;text-transform:uppercase;letter-spacing:.04em;}
 .nav-tab:hover{color:var(--text);}
@@ -193,8 +193,8 @@ input[type=file]{display:none;}
     <div id="upload-csat">
       <div class="info-box">
         <b>Verwendete Spalten:</b><br>
-        • <code>Score</code> → NPS (0–10): Promoter ≥9, Passiv 7–8, Dettraktor 0–6<br>
-        • <code>score3</code> → CSAT (1–5 Sterne): Anteil 4+5<br>
+        • <code>Score</code> → NPS (0-10): Promoter ≥9, Passiv 7-8, Dettraktor 0-6<br>
+        • <code>score3</code> → CSAT (1-5 Sterne): Anteil 4+5<br>
         • <code>agent id</code> → Mapping gegen Userverwaltung<br>
         • <code>Brand</code>, <code>Team</code>, <code>Agent</code> (Rohspalten, kein Final-Suffix)<br>
         • Optionale Subwerte: Freundlichkeit, Fachkompetenz, Service
@@ -226,9 +226,9 @@ input[type=file]{display:none;}
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════
+// ===========================================
 //  CONSTANTS & STATE
-// ═══════════════════════════════════════════
+// ===========================================
 const FIXED_TEAMS   = ['Vertragsservice','Customer Service','Sonstige'];
 const MONTHS_MAP    = {'01':'Jan','02':'Feb','03':'Mär','04':'Apr','05':'Mai','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Okt','11':'Nov','12':'Dez'};
 const LS_KEY        = 'dashboard_agent_registry_v1';
@@ -240,15 +240,15 @@ let charts       = {};
 let activeTab    = 'overview';
 let agentRegistry= loadReg();
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  UTILS
-// ═══════════════════════════════════════════
+// ===========================================
 function loadReg(){try{const r=localStorage.getItem(LS_KEY);return r?JSON.parse(r):{}}catch{return{}}}
 function saveReg(){try{localStorage.setItem(LS_KEY,JSON.stringify(agentRegistry))}catch{}}
 function escHtml(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function fmt(n){if(n===null||n===undefined||!isFinite(Number(n)))return String(n??'–');return Number(n).toLocaleString('de-DE')}
+function fmt(n){if(n===null||n===undefined||!isFinite(Number(n)))return String(n??'-');return Number(n).toLocaleString('de-DE')}
 function avg(arr){const v=arr.filter(x=>isFinite(x)&&x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null}
-function fmtAHT(s){if(!s)return'–';return Math.floor(s/60)+'m '+Math.round(s%60)+'s'}
+function fmtAHT(s){if(!s)return'-';return Math.floor(s/60)+'m '+Math.round(s%60)+'s'}
 function monthLabel(ym){const p=ym.split('-');return(MONTHS_MAP[p[1]]||p[1])+' '+p[0].slice(2)}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
@@ -262,9 +262,9 @@ function switchUploadTab(t){
   document.getElementById('tab-perf-btn').classList.toggle('active',t==='perf');
 }
 
-// ═══════════════════════════════════════════
-//  TAB SWITCHING — key: destroy+recreate charts after tab becomes visible
-// ═══════════════════════════════════════════
+// ===========================================
+//  TAB SWITCHING - key: destroy+recreate charts after tab becomes visible
+// ===========================================
 function switchTab(name, el) {
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -272,16 +272,16 @@ function switchTab(name, el) {
   // Make tab visible FIRST so chart containers have real pixel dimensions
   document.getElementById('tab-'+name).classList.add('active');
   activeTab = name;
-  // Now render — DOM is visible, offsetWidth/height will be real values
+  // Now render - DOM is visible, offsetWidth/height will be real values
   if(name==='overview')         renderOverview();
   else if(name==='agents')      renderAgents();
   else if(name==='performance') renderPerformance();
   else if(name==='users')       renderUsers();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CSV IMPORT
-// ═══════════════════════════════════════════
+// ===========================================
 function handleCSAT(input){
   const file=input.files[0];if(!file)return;
   Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
@@ -292,7 +292,7 @@ function handleCSAT(input){
     // Reset filtered to full set first, then apply
     filtered=[...rawCSAT];
     applyFilters();
-    toast(`✓ ${fmt(rawCSAT.length)} Datensätze · ${fmt(Object.keys(agentRegistry).length)} Agenten`);
+    toast(`OK ${fmt(rawCSAT.length)} Datensätze · ${fmt(Object.keys(agentRegistry).length)} Agenten`);
     input.value='';
   },error:e=>toast('Fehler: '+e.message,true)});
 }
@@ -304,12 +304,12 @@ function handlePerf(input){
     closeModal('upload-modal');
     if(activeTab==='performance') renderPerformance();
     const u=rawPerf.filter(r=>r._unmatched).length;
-    toast(`✓ ${fmt(rawPerf.length)} Einträge`+(u?` · ⚠ ${u} ohne Match`:''),u>0);
+    toast(`OK ${fmt(rawPerf.length)} Einträge`+(u?` · &#9888; ${u} ohne Match`:''),u>0);
     input.value='';
   },error:e=>toast('Fehler: '+e.message,true)});
 }
 
-// ─── Normalise survey rows ────────────────
+// --- Normalise survey rows ----------------
 function normalizeCSAT(rows){
   return rows.map(r=>{
     const d=(r['Date']||r['date']||'').toString().trim();
@@ -366,9 +366,9 @@ function enrichPerf(rows){
   });
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SAMPLE DATA
-// ═══════════════════════════════════════════
+// ===========================================
 function loadSampleData(){
   const structure={
     'Dogado':{'Vertragsservice':[{id:'D-VS-01',name:'Anna Müller'},{id:'D-VS-02',name:'Ben Schmidt'}],'Customer Service':[{id:'D-CS-01',name:'Clara Weber'},{id:'D-CS-02',name:'David Koch'},{id:'D-CS-03',name:'Eva Bauer'}],'Sonstige':[{id:'D-SO-01',name:'Felix Huber'}]},
@@ -404,12 +404,12 @@ function loadSampleData(){
   populateFilters();
   filtered=[...rawCSAT];
   applyFilters();
-  toast('✓ Beispieldaten geladen');
+  toast('OK Beispieldaten geladen');
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  FILTERS (cascading)
-// ═══════════════════════════════════════════
+// ===========================================
 function populateFilters(){
   const brands=[...new Set(rawCSAT.map(r=>r.brand).filter(Boolean))].sort();
   fillSelect('f-brand',brands);
@@ -449,9 +449,9 @@ function applyFilters(){
   else if(activeTab==='performance') renderPerformance();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CALCULATIONS
-// ═══════════════════════════════════════════
+// ===========================================
 function calcNPS(rows){
   const v=rows.filter(r=>isFinite(r.npsScore)&&r.npsScore>=0&&r.npsScore<=10);
   if(!v.length)return null;
@@ -465,9 +465,9 @@ function calcCSAT(rows){
 }
 function calcByMonth(rows){const bm={};rows.forEach(r=>{if(!r.month)return;if(!bm[r.month])bm[r.month]=[];bm[r.month].push(r);});return bm;}
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CHART HELPERS
-// ═══════════════════════════════════════════
+// ===========================================
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
 // Create a chart after ensuring the canvas has real pixel dimensions
@@ -491,9 +491,9 @@ const CHART_BASE={
 function xScale(){return{ticks:{color:'#6b7280',font:{family:'DM Mono',size:9}},grid:{color:'#1e2333'}};}
 function yScale(opts={}){return{ticks:{color:'#6b7280',font:{family:'DM Mono',size:9},...(opts.ticksExtra||{})},grid:{color:'#1e2333'},...opts};}
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENDER OVERVIEW
-// ═══════════════════════════════════════════
+// ===========================================
 function renderOverview(){
   const body=document.getElementById('overview-body');
   if(!filtered.length){body.innerHTML=emptyState('Noch keine Daten','Lade deine CSV-Exporte hoch oder nutze die Beispieldaten.',true);return;}
@@ -507,7 +507,7 @@ function renderOverview(){
   const fv=filtered.map(r=>r.friendly).filter(v=>isFinite(v)&&v>0);
   const kv=filtered.map(r=>r.kompetenz).filter(v=>isFinite(v)&&v>0);
   const sv=filtered.map(r=>r.service).filter(v=>isFinite(v)&&v>0);
-  const ap=vals=>vals.length?Math.round(avg(vals)/5*100)+'%':'–';
+  const ap=vals=>vals.length?Math.round(avg(vals)/5*100)+'%':'-';
   const cl=vals=>vals.length?fmt(vals.length)+' Wertungen':'keine Daten';
 
   const bm=calcByMonth(filtered);
@@ -522,8 +522,8 @@ function renderOverview(){
 
   body.innerHTML=`
     <div class="kpi-grid">
-      ${kpi('NPS',npsTotal!==null?fmt(npsTotal):'–',fmt(npsValid)+' Bewertungen',deltaN,'#60a5fa')}
-      ${kpi('CSAT',csatTotal!==null?csatTotal+'%':'–',fmt(csatValid)+' mit CSAT-Wert',deltaC,'#f5c842')}
+      ${kpi('NPS',npsTotal!==null?fmt(npsTotal):'-',fmt(npsValid)+' Bewertungen',deltaN,'#60a5fa')}
+      ${kpi('CSAT',csatTotal!==null?csatTotal+'%':'-',fmt(csatValid)+' mit CSAT-Wert',deltaC,'#f5c842')}
       ${kpi('Freundlichkeit',ap(fv),cl(fv),null,'#4ade80')}
       ${kpi('Fachk. Kompetenz',ap(kv),cl(kv),null,'#a78bfa')}
       ${kpi('Service',ap(sv),cl(sv),null,'#fb923c')}
@@ -556,9 +556,9 @@ function renderOverview(){
     scales:{x:xScale(),y:yScale({min:0,ticks:{...yScale().ticks,callback:v=>fmt(v)}})}}});
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENDER AGENTS
-// ═══════════════════════════════════════════
+// ===========================================
 function renderAgents(){
   const body=document.getElementById('agents-body');
   if(!filtered.length){body.innerHTML=emptyState('Keine Daten');return;}
@@ -568,7 +568,7 @@ function renderAgents(){
   const allMonths=[...new Set(filtered.map(r=>r.month).filter(Boolean))].sort().slice(-6);
   body.innerHTML=`
     <div class="table-card">
-      <h3>Agenten-Übersicht <span class="scroll-hint">↔ scroll</span></h3>
+      <h3>Agenten-Übersicht <span class="scroll-hint">&#8596; scroll</span></h3>
       <table><thead><tr>
         <th>Agent</th><th>ID</th><th>Brand</th><th>Team</th><th>Vol.</th>
         <th>NPS Total</th><th>CSAT Total</th>
@@ -576,24 +576,24 @@ function renderAgents(){
         ${allMonths.map(m=>`<th>CSAT ${monthLabel(m)}</th>`).join('')}
       </tr></thead><tbody>
       ${rows.map(r=>{
-        const nm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=calcNPS(mR);return v!==null?`<td>${npsBadge(v)}${v}</td>`:'<td style="color:var(--muted)">–</td>';}).join('');
-        const cm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=parseFloat(calcCSAT(mR));return isFinite(v)?`<td>${csatBadge(v)}${v.toFixed(1)}%</td>`:'<td style="color:var(--muted)">–</td>';}).join('');
+        const nm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=calcNPS(mR);return v!==null?`<td>${npsBadge(v)}${v}</td>`:'<td style="color:var(--muted)">-</td>';}).join('');
+        const cm=allMonths.map(m=>{const mR=r.rows.filter(x=>x.month===m);const v=parseFloat(calcCSAT(mR));return isFinite(v)?`<td>${csatBadge(v)}${v.toFixed(1)}%</td>`:'<td style="color:var(--muted)">-</td>';}).join('');
         return`<tr>
           <td class="agent-name">${r.agent}</td>
-          <td style="color:var(--muted)">${r.agentId||'–'}</td>
+          <td style="color:var(--muted)">${r.agentId||'-'}</td>
           <td style="color:var(--accent);font-family:'Syne',sans-serif;font-size:.75rem">${r.brand}</td>
           <td style="color:var(--muted);font-family:'Syne',sans-serif">${r.team}</td>
           <td>${fmt(r.vol)}</td>
-          <td>${r.nps!==null?npsBadge(r.nps)+r.nps:'–'}</td>
-          <td>${isFinite(r.csat)?csatBadge(r.csat)+r.csat.toFixed(1)+'%':'–'}</td>
+          <td>${r.nps!==null?npsBadge(r.nps)+r.nps:'-'}</td>
+          <td>${isFinite(r.csat)?csatBadge(r.csat)+r.csat.toFixed(1)+'%':'-'}</td>
           ${nm}${cm}</tr>`;
       }).join('')}
       </tbody></table></div>`;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENDER PERFORMANCE
-// ═══════════════════════════════════════════
+// ===========================================
 function renderPerformance(){
   const body=document.getElementById('performance-body');
   const brand=document.getElementById('f-brand').value,team=document.getElementById('f-team').value,
@@ -604,11 +604,11 @@ function renderPerformance(){
     if(to&&r.Month&&r.Month>to)return false;return true;
   });
   if(!pd.length){
-    body.innerHTML=`${emptyState('Keine Performance-Daten','Performance-CSV importieren. Mapping via agent_id.',false)}<div style="text-align:center;margin-top:14px"><button class="btn primary" onclick="openModal('upload-modal');switchUploadTab('perf')">Performance importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()">📂 Beispieldaten</button></div>`;
+    body.innerHTML=`${emptyState('Keine Performance-Daten','Performance-CSV importieren. Mapping via agent_id.',false)}<div style="text-align:center;margin-top:14px"><button class="btn primary" onclick="openModal('upload-modal');switchUploadTab('perf')">Performance importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()"> Beispieldaten</button></div>`;
     return;
   }
   const u=pd.filter(r=>r._unmatched).length;
-  const banner=u?`<div class="warn-box" style="margin-bottom:18px">⚠ ${u} Einträge ohne Agent-ID-Match · Userverwaltung prüfen</div>`:'';
+  const banner=u?`<div class="warn-box" style="margin-bottom:18px">&#9888; ${u} Einträge ohne Agent-ID-Match · Userverwaltung prüfen</div>`:'';
   const pa=key=>avg(pd.map(r=>parseFloat(r[key])||0).filter(v=>v>0));
   const avgAHT=Math.round(pa('AHT')||0),avgTPH=(pa('Tickets_per_hour')||0).toFixed(1),
         avgFCR=(pa('FCR')||0).toFixed(1),avgReopen=(pa('Reopen_Rate')||0).toFixed(1);
@@ -640,7 +640,7 @@ function renderPerformance(){
     <table><thead><tr><th>Agent</th><th>ID</th><th>Brand</th><th>Team</th><th>Ø AHT</th><th>Ø Tickets/h</th><th>Ø FCR %</th><th>Ø Reopen %</th></tr></thead>
     <tbody>${aR.map(r=>`<tr>
       <td class="agent-name">${r.agent}${r._u?'<span class="chip-unmatched">kein Match</span>':''}</td>
-      <td style="color:var(--muted)">${r.id||'–'}</td>
+      <td style="color:var(--muted)">${r.id||'-'}</td>
       <td style="color:var(--accent);font-family:'Syne',sans-serif;font-size:.75rem">${r.brand}</td>
       <td style="color:var(--muted);font-family:'Syne',sans-serif">${r.team}</td>
       <td>${fmtAHT(r.aht)}</td><td>${r.tph}</td>
@@ -657,9 +657,9 @@ function renderPerformance(){
     y2:{...yScale({min:0,max:100}),position:'right',ticks:{color:'#f5c842',font:{family:'DM Mono',size:9},callback:v=>v+'%'},grid:{display:false}}}}});
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENDER USERS
-// ═══════════════════════════════════════════
+// ===========================================
 function renderUsers(){
   const body=document.getElementById('users-body');
   const entries=Object.entries(agentRegistry).sort((a,b)=>a[1].name.localeCompare(b[1].name));
@@ -670,15 +670,15 @@ function renderUsers(){
     <div class="table-card">
       <h3>Agent-Register <div style="display:flex;gap:8px">
         <button class="btn" onclick="addAgentRow()">+ Agent</button>
-        <button class="btn" onclick="importRegistryCSV()">⬆ CSV</button>
-        <button class="btn" onclick="exportRegistryCSV()">⬇ CSV</button>
+        <button class="btn" onclick="importRegistryCSV()">&#8679; CSV</button>
+        <button class="btn" onclick="exportRegistryCSV()">&#8681; CSV</button>
       </div></h3>
       <div class="reg-stats">
         <span><b>${entries.length}</b> Agenten</span>
         <span><b>${[...new Set(entries.map(([,v])=>v.brand).filter(Boolean))].length}</b> Brands</span>
         ${uu.length?`<span style="color:var(--danger)"><b>${uu.length}</b> IDs ohne Registereintrag</span>`:''}
       </div>
-      ${uu.length?`<div class="warn-box">IDs ohne Eintrag: <code>${uu.slice(0,8).join(', ')}${uu.length>8?'…':''}</code><br><button class="btn" style="margin-top:7px" onclick="autoFillMissing()">Aus Daten befüllen</button></div>`:''}
+      ${uu.length?`<div class="warn-box">IDs ohne Eintrag: <code>${uu.slice(0,8).join(', ')}${uu.length>8?'...':''}</code><br><button class="btn" style="margin-top:7px" onclick="autoFillMissing()">Aus Daten befüllen</button></div>`:''}
       <table id="registry-table">
         <thead><tr><th>Agent-ID</th><th>Name</th><th>Brand</th><th>Team</th><th></th></tr></thead>
         <tbody>${entries.map(([id,v])=>`
@@ -687,7 +687,7 @@ function renderUsers(){
             <td><input class="editable" value="${escHtml(v.name)}" onchange="updField('${escHtml(id)}','name',this.value)" placeholder="Name"></td>
             <td><input class="editable" value="${escHtml(v.brand)}" onchange="updField('${escHtml(id)}','brand',this.value)" placeholder="Brand" list="brand-list"></td>
             <td><select class="editable" onchange="updField('${escHtml(id)}','team',this.value)">${teamOpts(v.team)}</select></td>
-            <td><button class="row-delete" onclick="delAgent('${escHtml(id)}')" title="Löschen">✕</button></td>
+            <td><button class="row-delete" onclick="delAgent('${escHtml(id)}')" title="Löschen">x</button></td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -700,23 +700,23 @@ function updField(id,field,val){if(!agentRegistry[id])return;agentRegistry[id][f
 function updId(input,oldId){const nid=input.value.trim();if(!nid||nid===oldId||agentRegistry[nid]){input.value=oldId;toast('ID bereits vergeben',true);return;}agentRegistry[nid]=agentRegistry[oldId];delete agentRegistry[oldId];saveReg();rawCSAT.forEach(r=>{if(r.agentId===oldId)r.agentId=nid;});renderUsers();toast('ID aktualisiert');}
 function delAgent(id){if(!confirm(`"${agentRegistry[id]?.name||id}" löschen?`))return;delete agentRegistry[id];saveReg();renderUsers();toast('Gelöscht');}
 function addAgentRow(){const nid='NEW-'+Date.now();agentRegistry[nid]={name:'',team:'Customer Service',brand:''};saveReg();renderUsers();setTimeout(()=>{const rows=document.querySelectorAll('#registry-table tbody tr');if(rows.length)rows[rows.length-1].querySelector('input').focus();},50);}
-function autoFillMissing(){const seen={};rawCSAT.forEach(r=>{if(r.agentId&&!agentRegistry[r.agentId]&&!seen[r.agentId]){seen[r.agentId]=true;agentRegistry[r.agentId]={name:r.agent||'Agent '+r.agentId,team:r.team||'Sonstige',brand:r.brand||''};}});saveReg();renderUsers();toast('✓ Fehlende Agenten ergänzt');}
-function exportRegistryCSV(){const rows=[['agent_id','name','team','brand'],...Object.entries(agentRegistry).map(([id,v])=>[id,v.name,v.team,v.brand])];const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='agent-register.csv';a.click();URL.revokeObjectURL(url);toast('✓ Register exportiert');}
+function autoFillMissing(){const seen={};rawCSAT.forEach(r=>{if(r.agentId&&!agentRegistry[r.agentId]&&!seen[r.agentId]){seen[r.agentId]=true;agentRegistry[r.agentId]={name:r.agent||'Agent '+r.agentId,team:r.team||'Sonstige',brand:r.brand||''};}});saveReg();renderUsers();toast('OK Fehlende Agenten ergänzt');}
+function exportRegistryCSV(){const rows=[['agent_id','name','team','brand'],...Object.entries(agentRegistry).map(([id,v])=>[id,v.name,v.team,v.brand])];const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='agent-register.csv';a.click();URL.revokeObjectURL(url);toast('OK Register exportiert');}
 function importRegistryCSV(){document.getElementById('file-registry').click();}
-function handleRegistryCSV(input){const file=input.files[0];if(!file)return;Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{let a=0,u=0;res.data.forEach(r=>{const id=(r['agent_id']||r['agentId']||'').toString().trim();if(!id)return;const e=!!agentRegistry[id];agentRegistry[id]={name:(r['name']||'').trim(),team:normalizeTeam(r['team']||''),brand:(r['brand']||'').trim()};e?u++:a++;});saveReg();renderUsers();toast(`✓ ${a} neu · ${u} aktualisiert`);input.value='';},error:e=>toast('Fehler: '+e.message,true)});}
+function handleRegistryCSV(input){const file=input.files[0];if(!file)return;Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{let a=0,u=0;res.data.forEach(r=>{const id=(r['agent_id']||r['agentId']||'').toString().trim();if(!id)return;const e=!!agentRegistry[id];agentRegistry[id]={name:(r['name']||'').trim(),team:normalizeTeam(r['team']||''),brand:(r['brand']||'').trim()};e?u++:a++;});saveReg();renderUsers();toast(`OK ${a} neu · ${u} aktualisiert`);input.value='';},error:e=>toast('Fehler: '+e.message,true)});}
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SHARED COMPONENT HELPERS
-// ═══════════════════════════════════════════
+// ===========================================
 function kpi(label,value,sub,delta,color){
-  const d=delta!==null&&delta!==undefined?`<div class="kpi-delta ${parseFloat(delta)>=0?'up':'down'}">${parseFloat(delta)>=0?'↑':'↓'} ${Math.abs(delta)} vs. Vormonat</div>`:'';
+  const d=delta!==null&&delta!==undefined?`<div class="kpi-delta ${parseFloat(delta)>=0?'up':'down'}">${parseFloat(delta)>=0?'&#8593;':'&#8595;'} ${Math.abs(delta)} vs. Vormonat</div>`:'';
   return`<div class="kpi-card" style="--card-color:${color}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div>${d}</div>`;
 }
-function csatBadge(v){const c=v>=80?'green':v>=65?'yellow':'red';return`<span class="badge ${c}">${v>=80?'▲':v>=65?'◆':'▼'}</span>`;}
-function npsBadge(v){const c=v>=30?'green':v>=0?'yellow':'red';return`<span class="badge ${c}">${v>=30?'▲':v>=0?'◆':'▼'}</span>`;}
-function emptyState(title,text='',showBtn=false){return`<div class="empty-state"><div class="icon">📭</div><h2>${title}</h2><p>${text}</p>${showBtn?`<button class="btn primary" onclick="openModal('upload-modal')">⬆ Daten importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()">📂 Beispieldaten</button>`:''}</div>`;}
+function csatBadge(v){const c=v>=80?'green':v>=65?'yellow':'red';return`<span class="badge ${c}">${v>=80?'&#9650;':v>=65?'&#9670;':'&#9660;'}</span>`;}
+function npsBadge(v){const c=v>=30?'green':v>=0?'yellow':'red';return`<span class="badge ${c}">${v>=30?'&#9650;':v>=0?'&#9670;':'&#9660;'}</span>`;}
+function emptyState(title,text='',showBtn=false){return`<div class="empty-state"><div class="icon">[empty]</div><h2>${title}</h2><p>${text}</p>${showBtn?`<button class="btn primary" onclick="openModal('upload-modal')">&#8679; Daten importieren</button><button class="btn" style="margin-left:8px" onclick="loadSampleData()"> Beispieldaten</button>`:''}</div>`;}
 
-function exportData(){if(!filtered.length){toast('Keine Daten',true);return;}const csv=Papa.unparse(filtered);const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='dashboard-export.csv';a.click();URL.revokeObjectURL(url);toast('✓ Export gestartet');}
+function exportData(){if(!filtered.length){toast('Keine Daten',true);return;}const csv=Papa.unparse(filtered);const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='dashboard-export.csv';a.click();URL.revokeObjectURL(url);toast('OK Export gestartet');}
 
 ['drop-csat','drop-perf'].forEach(id=>{
   const z=document.getElementById(id);

@@ -466,6 +466,7 @@
               <option value="pullups">Pull-ups</option>
               <option value="pushups">Push-ups</option>
               <option value="lunges">Lunges</option>
+              <option value="terraband_knie">Terraband Knie</option>
             </select>
           </div>
 
@@ -2654,6 +2655,7 @@
       // ── Letzte Aktivitäten ─────────────────────────────────────────────
       const typeLabels = {
         pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
+        terraband_knie: '🦵 Terraband Knie',
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
         schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining'
@@ -2675,7 +2677,7 @@
             const calcKcal = calcActivityKcal(e);
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-            const label = typeLabels[typ] || typ;
+            const label = typeLabels[typ] || customTrainingTypes.find(t => t.id === typ)?.label || typ;
             const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:#1a2a3a;color:#4285f4;padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
             return `
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
@@ -3894,7 +3896,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           laufen: '🏃 Laufen', rad: '🚴 Rad', rad_ebike: '⚡ E-Bike',
           gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
           kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio',
-          pullups: '💪 Pull-ups', pushups: '💪 Push-ups'
+          pullups: '💪 Pull-ups', pushups: '💪 Push-ups',
+          lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie'
         };
 
         let html = '<div style="padding:0 0 8px;">';
@@ -3920,7 +3923,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         // Aktivitäten
         dayActivities.forEach(a => {
-          const baseLabel = TYP_LABELS[a.typ] || ('🏅 ' + (a.typ || 'Aktivität'));
+          const baseLabel = TYP_LABELS[a.typ] || (customTrainingTypes.find(t => t.id === a.typ)?.label ? '🏅 ' + customTrainingTypes.find(t => t.id === a.typ).label : ('🏅 ' + (a.typ || 'Aktivität')));
           const emoji = baseLabel.split(' ')[0];
           const typName = baseLabel.split(' ').slice(1).join(' ');
           // Variante anhängen wenn vorhanden (pullups/pushups)
@@ -5399,6 +5402,10 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           <option value="normal">Normal</option>
           <option value="elevated_feet">Elevated Feet</option>
           <option value="weighted">Mit Gewichten</option>`;
+      } else if (type === 'terraband_knie') {
+        variantSel.innerHTML = `
+          <option value="gerade">Gerade</option>
+          <option value="seitlich">Seitlich</option>`;
       } else if (type.startsWith('custom_')) {
         variantSel.innerHTML = '<option value="">—</option>';
       } else {
@@ -5426,7 +5433,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       const variantLabels = {
         regulaer: 'Regulär', reverse: 'Reverse', hammer: 'Hammer Grip',
         weit: 'Weit', eng: 'Eng', diamond: 'Diamond',
-        normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten'
+        normal: 'Normal', elevated_feet: 'Elevated Feet', weighted: 'Mit Gewichten',
+        gerade: 'Gerade', seitlich: 'Seitlich'
       };
       
       const timeVal = document.getElementById('training-time')?.value || '';
@@ -5544,6 +5552,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       
       const typeLabels = {
         pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
+        terraband_knie: '🦵 Terraband Knie',
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
         schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining',
@@ -5553,7 +5562,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
         const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
         const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-        const typeLabel = typeLabels[typ] || typ;
+        const typeLabel = typeLabels[typ] || customTrainingTypes.find(t => t.id === typ)?.label || typ;
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
         const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;

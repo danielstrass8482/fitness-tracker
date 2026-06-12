@@ -1478,7 +1478,101 @@
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     // Weekly stats state
     let weeklyStats = {};
-    
+
+    // ── IndexedDB Cache ──────────────────────────────────────────────────────
+    const CACHE_DB_NAME = 'fuelofit-cache';
+    const CACHE_DB_VERSION = 1;
+    let cacheDB = null;
+
+    async function openCacheDB() {
+      return new Promise(resolve => {
+        const req = indexedDB.open(CACHE_DB_NAME, CACHE_DB_VERSION);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('kv')) {
+            db.createObjectStore('kv', { keyPath: 'key' });
+          }
+        };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = () => { console.warn('Cache DB open failed'); resolve(null); };
+      });
+    }
+
+    async function cacheGet(key) {
+      if (!cacheDB) return null;
+      return new Promise(resolve => {
+        const req = cacheDB.transaction('kv', 'readonly').objectStore('kv').get(key);
+        req.onsuccess = e => resolve(e.target.result?.value ?? null);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function cachePut(key, value) {
+      if (!cacheDB) return;
+      return new Promise(resolve => {
+        const tx = cacheDB.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put({ key, value });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    }
+
+    async function loadFromCache() {
+      try {
+        cacheDB = await openCacheDB();
+        if (!cacheDB) return false;
+        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings] = await Promise.all([
+          cacheGet('foodDB'),
+          cacheGet('recipes'),
+          cacheGet('foodLogEntries'),
+          cacheGet('trainingEntries'),
+          cacheGet('favorites'),
+          cacheGet('settings'),
+        ]);
+        let hasCache = false;
+        if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
+        if (cachedRecipes?.length) { recipes = cachedRecipes; window.recipes = recipes; hasCache = true; }
+        if (cachedFoodLogEntries?.length) {
+          foodLog = {};
+          for (const entry of cachedFoodLogEntries) {
+            const d = entry.datum || entry.date;
+            if (d) {
+              if (!foodLog[d]) foodLog[d] = [];
+              foodLog[d].push(entry);
+            }
+          }
+          window.foodLog = foodLog;
+          hasCache = true;
+        }
+        if (cachedTraining?.length) {
+          trainingEntries = cachedTraining;
+          dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+          window.trainingEntries = trainingEntries;
+          window.dayLogs = dayLogs;
+          hasCache = true;
+        }
+        if (cachedFavs) { favorites = new Set(cachedFavs); hasCache = true; }
+        if (cachedSettings) { settings = { ...settings, ...cachedSettings }; }
+        return hasCache;
+      } catch(e) {
+        console.warn('Cache load error:', e);
+        return false;
+      }
+    }
+
+    function saveToCache() {
+      if (!cacheDB) return;
+      const foodLogEntries = Object.values(foodLog).flat();
+      Promise.all([
+        cachePut('foodDB', foodDB),
+        cachePut('recipes', recipes),
+        cachePut('foodLogEntries', foodLogEntries),
+        cachePut('trainingEntries', trainingEntries),
+        cachePut('favorites', [...favorites]),
+        cachePut('settings', settings),
+      ]).catch(e => console.warn('Cache save error:', e));
+    }
+
     // Auth Listener
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -1486,9 +1580,16 @@
         document.getElementById('user-email').textContent = user.email;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app-container').classList.add('show');
-        
-        // Load all data
-        await loadAllData();
+
+        // Cache-first: sofort aus IndexedDB rendern, dann Firestore im Hintergrund
+        const hasCachedData = await loadFromCache();
+        if (hasCachedData) {
+          renderAll();
+          showToast('⏳ Synchronisiere...');
+          loadAllData(true); // Hintergrund-Sync, kein await
+        } else {
+          await loadAllData(false); // Erststart: blockierend laden
+        }
       } else {
         userId = null;
         document.getElementById('login-screen').style.display = 'flex';
@@ -1521,9 +1622,9 @@
     };
     
     // Load Data from Firebase
-    async function loadAllData() {
-      showToast('⏳ Lade Daten...');
-      
+    async function loadAllData(backgroundSync = false) {
+      if (!backgroundSync) showToast('⏳ Lade Daten...');
+
       try {
         // Load Foods
         const foodSnap = await getDocs(userFoodCol());
@@ -1589,16 +1690,17 @@
         }
 
         console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
-        showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`);
-        
-        // Render initial
+        if (backgroundSync) showToast(`✓ Synchronisiert`);
+        else showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`);
+
+        saveToCache();
+
         renderAll();
-        // Auto-backup check (runs silently in background)
         setTimeout(() => checkAutoBackup(), 5000);
-        
+
       } catch (err) {
         console.error('Load error:', err);
-        showToast('❌ Fehler beim Laden');
+        if (!backgroundSync) showToast('❌ Fehler beim Laden');
       }
     }
 
@@ -3031,6 +3133,7 @@
         } catch(e) { console.warn('Save kategorie error:', e); }
       }
       window.foodDB = foodDB;
+      saveToCache();
       renderFoodDB();
       document.getElementById('bulk-kategorie-modal').style.display = 'none';
       showToast(`✓ ${saved} Kategorien gespeichert`);
@@ -3124,6 +3227,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       }
 
       window.foodDB = foodDB;
+      saveToCache();
       renderFoodDB();
 
       btn.disabled = false;
@@ -3268,7 +3372,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       
       try {
         await setDoc(doc(userFoodCol(), String(id)), food);
-        
+
         const idx = foodDB.findIndex(f => String(f.id) === String(id));
         if (idx >= 0) {
           foodDB[idx] = food;
@@ -3276,7 +3380,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           foodDB.push(food);
         }
         window.foodDB = foodDB;
-        
+        saveToCache();
+
         renderFoodDB();
         renderDataStats();
         closeFoodDBModal();
@@ -3294,7 +3399,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         await deleteDoc(doc(userFoodCol(), String(id)));
         foodDB = foodDB.filter(f => String(f.id) !== String(id));
         window.foodDB = foodDB;
-        
+        saveToCache();
+
         renderFoodDB();
         renderDataStats();
         showToast('✓ Gelöscht');
@@ -3303,7 +3409,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         showToast('❌ Löschen fehlgeschlagen');
       }
     };
-    
+
     // Recipes Management
     window.searchRecipes = function() {
       renderRecipes();
@@ -3564,6 +3670,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const idx = recipes.findIndex(r => String(r.id) === String(id));
         if (idx >= 0) recipes[idx] = recipe; else recipes.push(recipe);
         window.recipes = recipes;
+        saveToCache();
         renderRecipes();
         renderDataStats();
         closeRecipeModal();
@@ -3581,7 +3688,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         await deleteDoc(doc(userRecipeCol(), String(id)));
         recipes = recipes.filter(r => String(r.id) !== String(id));
         window.recipes = recipes;
-        
+        saveToCache();
+
         renderRecipes();
         renderDataStats();
         showToast('✓ Gelöscht');
@@ -3590,7 +3698,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         showToast('❌ Löschen fehlgeschlagen');
       }
     };
-    
+
     // Current Date
     let currentDate = new Date().toISOString().split('T')[0];
     
@@ -3660,31 +3768,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           // Fallback für unbekannte Typen mit Zeit: MET 5
           return hours > 0 ? Math.round(5.0 * weight * hours) : 0;
       }
-    }
-
-    function calcDayActivityKcal(date) {
-      return trainingEntries
-        .filter(e => e.datum === date && (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava'))
-        .reduce((sum, e) => sum + calcActivityKcal(e), 0);
-    }
-
-    function calcDailyKcalGoal(date) {
-      // BMR × 1,375 (Basis) + Aktivitätskalorien des Tages
-      const age = settings.age;
-      const height = settings.height;
-      const weight = settings.weight;
-      const gender = settings.gender || 'male';
-
-      if (age && height && weight) {
-        let bmr = gender === 'male'
-          ? (10 * weight) + (6.25 * height) - (5 * age) + 5
-          : (10 * weight) + (6.25 * height) - (5 * age) - 161;
-        const base = Math.round(bmr * 1.375);
-        const activity = calcDayActivityKcal(date);
-        return { base, activity, total: base + activity };
-      }
-      // Fallback: manueller TDEE
-      return { base: settings.tdee || 2700, activity: 0, total: settings.tdee || 2700 };
     }
 
     // Render Food Log
@@ -4182,6 +4265,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         }
 
         window.foodLog = foodLog;
+        saveToCache();
         renderFoodLog();
         closeAddFood();
       } catch (err) {
@@ -4489,6 +4573,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       await setDoc(doc(db, 'users', userId, 'settings', 'favorites'), {
         ids: [...favorites]
       });
+      saveToCache();
       // Re-render je nach Kontext
       const query = document.getElementById('food-search')?.value?.trim();
       if (query && query.length >= 2) searchFood();
@@ -4748,7 +4833,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         }
         
         window.foodLog = foodLog;
-        
+        saveToCache();
+
         renderFoodLog();
         if (editingEntryId) {
           closeAddFood();
@@ -4851,7 +4937,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           if (foodLog[date].length === 0) delete foodLog[date];
         });
         window.foodLog = foodLog;
-        
+        saveToCache();
+
         renderFoodLog();
         showToast('✓ Gelöscht');
       } catch (err) {
@@ -4911,6 +4998,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         } catch(e) { console.warn('Bulk time error:', e); }
       }
       window.foodLog = foodLog;
+      saveToCache();
       renderFoodLog();
       showToast(`✓ ${updated} Einträge auf ${timeStr} gesetzt`);
     };
@@ -4963,6 +5051,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         if (!foodLog[targetDate]) foodLog[targetDate] = [];
         foodLog[targetDate].push(newEntry);
         window.foodLog = foodLog;
+        saveToCache();
         if (targetDate !== currentDate) currentDate = targetDate;
         renderFoodLog();
         showToast(`✓ Kopiert nach ${targetDate} ${targetTime}`);
@@ -5357,14 +5446,15 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
         trainingEntries.push(entry);
         window.trainingEntries = trainingEntries;
-        
+        saveToCache();
+
         renderTrainingHistory();
         renderDataStats();
-        
+
         // Clear form
         initSetsUI('');
         document.getElementById('training-notiz').value = '';
-        
+
         showToast('✓ Training gespeichert');
       } catch (err) {
         console.error('Save error:', err);
@@ -5404,7 +5494,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
-        
+        saveToCache();
+
         renderTrainingHistory();
         renderDataStats();
 
@@ -5541,7 +5632,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
-        
+        saveToCache();
+
         renderTrainingHistory();
         renderDataStats();
         showToast('✓ Gelöscht');
@@ -5691,10 +5783,11 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');
         await setDoc(docRef, settings);
-        
+        saveToCache();
+
         // Update display
         renderFoodLog();
-        
+
         showToast('✓ Einstellungen gespeichert');
       } catch (err) {
         console.error('Save settings error:', err);
@@ -6614,16 +6707,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       }
       
       return recipes;
-    }
-    
-    // Berechnet Rezept-Nährwerte aus Zutaten (für manuell angelegte Rezepte)
-    function calcRecipeNutrition(ingredients) {
-      const totalWeight = ingredients.reduce((s, ing) => s + (ing.amount || 0), 0);
-      const kcal = Math.round(ingredients.reduce((s, ing) => s + (ing.kcal || 0), 0) * 10) / 10;
-      const protein = Math.round(ingredients.reduce((s, ing) => s + (ing.protein || 0), 0) * 10) / 10;
-      const carbs = Math.round(ingredients.reduce((s, ing) => s + (ing.carbs || 0), 0) * 10) / 10;
-      const fat = Math.round(ingredients.reduce((s, ing) => s + (ing.fat || 0), 0) * 10) / 10;
-      return { totalWeight: Math.round(totalWeight), kcal, protein, carbs, fat };
     }
     
     // Parser: Garmin Activities CSV

@@ -4038,7 +4038,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
               <span style="color:#ffd93d;">K ${Math.round(mealCarbs)}g</span>
               <span style="color:#ff6b9d;">F ${Math.round(mealFat)}g</span>
               <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
-              <button onclick="event.stopPropagation();openBulkTimeEdit('${mealName}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern">🕐</button>
+              <button onclick="event.stopPropagation();openBulkTimeEdit('${key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern">🕐</button>
             </div>
           </div>
           <div class="meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
@@ -4228,6 +4228,11 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         if (!foodLog[currentDate]) foodLog[currentDate] = [];
 
         if (settings.recipeDisplay === 'expanded' && selectedRecipe.ingredients?.length > 0) {
+          // When editing an existing block entry: delete it first, then re-save as ingredients
+          if (editingEntryId) {
+            await deleteDoc(doc(userLogCol(), String(editingEntryId)));
+            foodLog[currentDate] = foodLog[currentDate].filter(e => String(e.id) !== String(editingEntryId));
+          }
           // Save each ingredient as a separate log entry
           for (const ing of selectedRecipe.ingredients) {
             const ingFood = foodDB.find(f => String(f.id) === String(ing.foodId));
@@ -4250,21 +4255,28 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           }
           showToast(`✓ ${selectedRecipe.ingredients.length} Zutaten gespeichert`);
         } else {
-          // Save as single block entry
+          // Save as single block entry — reuse existing ID when editing
+          const entryId = editingEntryId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9));
           const kcal = Math.round((selectedRecipe.kcal || 0) * portionFactor * 10) / 10;
           const protein = Math.round((selectedRecipe.protein || 0) * portionFactor * 10) / 10;
           const carbs = Math.round((selectedRecipe.carbs || 0) * portionFactor * 10) / 10;
           const fat = Math.round((selectedRecipe.fat || 0) * portionFactor * 10) / 10;
           const entry = {
-            id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            id: entryId,
             datum: currentDate, date: currentDate, time, meal,
             name: label, foodId: selectedRecipe.id, recipeId: selectedRecipe.id,
             amount: recipeInputMode === 'grams' ? parseFloat(document.getElementById('recipe-grams').value) || 0 : parseFloat(document.getElementById('recipe-portions').value) || 1,
             kcal, protein, carbs, fat
           };
           await setDoc(doc(userLogCol(), String(entry.id)), entry);
-          foodLog[currentDate].push(entry);
-          showToast('✓ Rezept gespeichert');
+          if (editingEntryId) {
+            const idx = foodLog[currentDate].findIndex(e => String(e.id) === String(editingEntryId));
+            if (idx >= 0) foodLog[currentDate][idx] = entry;
+            else foodLog[currentDate].push(entry);
+          } else {
+            foodLog[currentDate].push(entry);
+          }
+          showToast(editingEntryId ? '✓ Aktualisiert' : '✓ Rezept gespeichert');
         }
 
         window.foodLog = foodLog;

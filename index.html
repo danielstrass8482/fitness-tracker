@@ -184,15 +184,12 @@
     .analyse-chip:hover { border-color: var(--primary); color: var(--primary); }
     .analyse-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Composer bleibt fix am unteren Bildschirmrand, unabhängig von der Höhe
-       des Chat-Verlaufs darüber (verhindert das "Stauchen" nach der ersten Antwort) */
+    /* Composer bleibt am unteren Bildschirmrand kleben, sobald man dorthin
+       scrollt (position:sticky respektiert den normalen Dokumentfluss, kann
+       die Chat-Box darüber also nicht überlappen — anders als position:fixed) */
     #analyse-input-row {
-      position: fixed;
-      left: 0;
-      right: 0;
+      position: sticky;
       bottom: 0;
-      max-width: 800px;
-      margin: 0 auto;
       z-index: 500;
       display: flex;
       gap: 8px;
@@ -789,11 +786,10 @@
 
         <div id="analyse-messages" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:300px;max-height:55vh;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
 
-        <div style="height:160px;"></div>
-      </div>
-      <div id="analyse-input-row">
-        <textarea id="analyse-input" rows="2" placeholder="Frage stellen..." style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}"></textarea>
-        <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;align-self:flex-end;">Senden</button>
+        <div id="analyse-input-row">
+          <textarea id="analyse-input" rows="2" placeholder="Frage stellen..." style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}"></textarea>
+          <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;align-self:flex-end;">Senden</button>
+        </div>
       </div>
     </div>
 

@@ -169,7 +169,21 @@
     /* Content Areas */
     .tab-content { display: none; }
     .tab-content.active { display: block; }
-    
+
+    /* Analyse Chat */
+    .analyse-chip {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .analyse-chip:hover { border-color: var(--primary); color: var(--primary); }
+    .analyse-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* Loading */
     .loading {
       text-align: center;
@@ -439,6 +453,7 @@
       <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
       <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
       <button class="tab" data-tab="dashboard"><span style="font-size:18px;">📊</span>Dashboard</button>
+      <button class="tab" data-tab="analyse"><span style="font-size:18px;">🤖</span>Analyse</button>
       <button class="tab" data-tab="daten"><span style="font-size:18px;">📥</span>Daten</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
     </div>
@@ -735,7 +750,33 @@
 
 
     </div>
-    
+
+    <div id="analyse-tab" class="tab-content">
+      <div style="max-width:800px;margin:0 auto;">
+        <h2 style="margin-bottom:10px;">🤖 Analyse</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Stelle Fragen an Claude zu deinen Trainings- und Ernährungsdaten. Dein API Key wird nur lokal gespeichert und direkt an Anthropic gesendet.</p>
+
+        <div id="analyse-no-key" style="display:none;background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <p style="margin-bottom:12px;">Kein Anthropic API Key hinterlegt.</p>
+          <button class="btn" onclick="document.querySelector('[data-tab=einstellungen]').click()">Zu den Einstellungen</button>
+        </div>
+
+        <div id="analyse-chip-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+          <button class="analyse-chip" onclick="sendAnalysisMessage('Analysiere meine Intervall-Läufe der letzten 6 Monate (Pace-Entwicklung)')">Intervall-Läufe: Pace-Entwicklung</button>
+          <button class="analyse-chip" onclick="sendAnalysisMessage('Wie war meine Kalorienbalance letzte Woche?')">Kalorienbalance letzte Woche</button>
+          <button class="analyse-chip" onclick="sendAnalysisMessage('An welchen Tagen esse ich am meisten? Gibt es ein Muster?')">Esse ich nach Muster?</button>
+          <button class="analyse-chip" onclick="sendAnalysisMessage('Vergleiche meine Laufleistung diesen Monat vs letzten Monat')">Laufleistung: Monatsvergleich</button>
+        </div>
+
+        <div id="analyse-messages" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:300px;max-height:55vh;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
+
+        <div style="display:flex;gap:8px;">
+          <textarea id="analyse-input" rows="2" placeholder="Frage stellen..." style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}"></textarea>
+          <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;align-self:flex-end;">Senden</button>
+        </div>
+      </div>
+    </div>
+
     <div id="einstellungen-tab" class="tab-content">
       <div style="max-width:800px;margin:0 auto;">
         <h2 style="margin-bottom:30px;">Einstellungen</h2>
@@ -866,8 +907,13 @@
 
           <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
         </div>
-        
 
+        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <h3 style="margin-bottom:15px;">🤖 KI-Analyse (Anthropic)</h3>
+          <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anthropic API Key</label>
+          <input type="password" id="settings-anthropic-key" placeholder="sk-ant-..." style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Dein API Key wird nur lokal gespeichert und direkt an Anthropic gesendet — nicht über Firebase. Erforderlich für den "Analyse"-Tab.</div>
+        </div>
 
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);">
           <h3 style="margin-bottom:15px;color:var(--danger);">⚠️ Danger Zone</h3>
@@ -5237,6 +5283,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         if (target === 'einstellungen' && userId) {
           // settings tab opened
         }
+        if (target === 'analyse' && userId) {
+          updateAnalyseKeyState();
+        }
         if (target === 'daten' && userId) {
           loadGoogleFitStatus();
           // Health Connect Section nur in App anzeigen
@@ -5730,6 +5779,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           document.getElementById('settings-activity').value = settings.activityLevel || 1.55;
           if (document.getElementById('settings-detail-days'))
             document.getElementById('settings-detail-days').value = settings.detailDays || 31;
+          if (document.getElementById('settings-anthropic-key'))
+            document.getElementById('settings-anthropic-key').value = settings.anthropicApiKey || '';
 
           if (latestWeight) {
             document.getElementById('settings-weight-hint').textContent =
@@ -5739,6 +5790,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
           calcTDEE();
         }
+        updateAnalyseKeyState();
       } catch (err) {
         console.error('Load settings error:', err);
       }
@@ -5796,11 +5848,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       
       const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
       const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
+      const anthropicApiKey = document.getElementById('settings-anthropic-key')?.value.trim() || '';
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays, recipeDisplay
+        gender, age, height, weight, activityLevel, detailDays, recipeDisplay, anthropicApiKey
       };
-      
+
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');
         await setDoc(docRef, settings);
@@ -5808,6 +5861,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         // Update display
         renderFoodLog();
+        updateAnalyseKeyState();
 
         showToast('✓ Einstellungen gespeichert');
       } catch (err) {
@@ -5815,7 +5869,202 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         showToast('❌ Speichern fehlgeschlagen');
       }
     };
-    
+
+    // ── KI-Analyse (Anthropic Claude API, direkt aus dem Browser) ───────────
+    let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
+
+    function updateAnalyseKeyState() {
+      const noKeyEl = document.getElementById('analyse-no-key');
+      const chipRow = document.getElementById('analyse-chip-row');
+      const input = document.getElementById('analyse-input');
+      const sendBtn = document.getElementById('analyse-send-btn');
+      const hasKey = !!settings.anthropicApiKey;
+      if (noKeyEl) noKeyEl.style.display = hasKey ? 'none' : 'block';
+      if (chipRow) chipRow.style.display = hasKey ? 'flex' : 'none';
+      if (input) input.disabled = !hasKey;
+      if (sendBtn) sendBtn.disabled = !hasKey;
+    }
+    window.updateAnalyseKeyState = updateAnalyseKeyState;
+
+    // Baut komprimierte Datenzusammenfassung (keine rohen Firestore-Dokumente, keine Einzel-Lebensmittel)
+    function buildAnalysisContextData() {
+      const today = new Date();
+      const cutoffTraining = new Date(today); cutoffTraining.setDate(today.getDate() - 180);
+      const cutoffNutrition = new Date(today); cutoffNutrition.setDate(today.getDate() - 90);
+      const cutoffTrainingStr = cutoffTraining.toISOString().split('T')[0];
+      const cutoffNutritionStr = cutoffNutrition.toISOString().split('T')[0];
+
+      const profile = {
+        geschlecht: settings.gender === 'female' ? 'weiblich' : 'männlich',
+        alter: settings.age || null,
+        groesse_cm: settings.height || null,
+        gewicht_kg: settings.weight || null,
+        aktivitaetsfaktor: settings.activityLevel || null,
+        tdee_kcal: settings.tdee || null,
+        ziel_protein_g: settings.proteinGoal || null,
+        ziel_carbs_g: settings.carbsGoal || null,
+        ziel_fett_g: settings.fatGoal || null
+      };
+
+      // Trainingseinträge (ohne Tageslogs/Phonesteps), letzte 180 Tage
+      const trainingRows = trainingEntries
+        .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && e.datum >= cutoffTrainingStr)
+        .sort((a, b) => a.datum.localeCompare(b.datum))
+        .map(e => {
+          const distanz = parseFloat(e.distanz) || 0;
+          const zeit = e.zeit || '';
+          let pace = '-';
+          if (distanz > 0 && zeit) {
+            const parts = zeit.split('.')[0].split(':').map(Number);
+            const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60
+                            : parts.length === 2 ? parts[0] + parts[1] / 60 : 0;
+            if (totalMin > 0) {
+              const paceMin = totalMin / distanz;
+              const pm = Math.floor(paceMin);
+              const ps = Math.round((paceMin - pm) * 60);
+              pace = pm + ':' + String(ps).padStart(2, '0');
+            }
+          }
+          const kcal = e.kcal || calcActivityKcal(e) || 0;
+          const notiz = (e.notiz || '').slice(0, 60).replace(/\|/g, '/').replace(/\n/g, ' ');
+          return [e.datum, e.typ, distanz || '-', zeit || '-', pace, Math.round(kcal), notiz].join('|');
+        });
+
+      // Tägliche Ernährungsbilanz, letzte 90 Tage (aggregiert pro Tag, keine Einzel-Lebensmittel)
+      const dayMap = {};
+      Object.keys(foodLog).forEach(d => {
+        if (d < cutoffNutritionStr) return;
+        const entries = foodLog[d] || [];
+        if (!entries.length) return;
+        let kcal = 0, protein = 0, carbs = 0, fat = 0;
+        entries.forEach(e => { kcal += e.kcal || 0; protein += e.protein || 0; carbs += e.carbs || 0; fat += e.fat || 0; });
+        dayMap[d] = { kcal: Math.round(kcal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) };
+      });
+      const nutritionRows = Object.keys(dayMap).sort().map(d => {
+        const goal = window.calcHistoricalKcalGoal(d);
+        const n = dayMap[d];
+        const diff = n.kcal - Math.round(goal.total || 0);
+        return [d, n.kcal, n.protein, n.carbs, n.fat, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
+      });
+
+      // Tageslog: Gewicht & Schritte, letzte 90 Tage
+      const dayLogRows = trainingEntries
+        .filter(e => e.typ === 'tageslog' && e.datum >= cutoffNutritionStr)
+        .sort((a, b) => a.datum.localeCompare(b.datum))
+        .map(e => [e.datum, e.weight ?? '-', e.steps ?? '-'].join('|'));
+
+      return { profile, trainingRows, nutritionRows, dayLogRows };
+    }
+
+    function buildAnalysisSystemPrompt() {
+      const ctx = buildAnalysisContextData();
+      const p = ctx.profile;
+      return `Du bist ein Fitness- und Ernährungs-Analyseassistent für die persönliche Tracking-App "Fuelofit". Der Nutzer ist Hybrid-Athlet (Laufen, Radfahren, Wandern) mit Garmin-Uhr.
+Antworte auf Deutsch, präzise und mit konkreten Zahlen aus den unten stehenden Daten. Wenn Daten fehlen oder unklar sind, sag das explizit statt zu raten.
+
+=== Nutzerprofil ===
+Geschlecht: ${p.geschlecht}
+Alter: ${p.alter ?? 'unbekannt'}
+Größe: ${p.groesse_cm ?? '?'} cm
+Gewicht: ${p.gewicht_kg ?? '?'} kg
+Aktivitätsfaktor: ${p.aktivitaetsfaktor ?? '?'}
+TDEE: ${p.tdee_kcal ?? '?'} kcal
+Ziele: ${p.ziel_protein_g ?? '?'}g Protein, ${p.ziel_carbs_g ?? '?'}g Kohlenhydrate, ${p.ziel_fett_g ?? '?'}g Fett
+
+=== Trainingseinträge (letzte 180 Tage, ohne Tageslogs) ===
+Format: Datum|Typ|Distanz(km)|Zeit|Pace(min/km)|Kcal|Notiz
+${ctx.trainingRows.join('\n') || '(keine Einträge)'}
+
+=== Tägliche Ernährungsbilanz (letzte 90 Tage) ===
+Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|KcalZiel|Differenz
+${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
+
+=== Tageslog: Gewicht & Schritte (letzte 90 Tage) ===
+Format: Datum|Gewicht(kg)|Schritte
+${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
+    }
+
+    let analyseMsgCounter = 0;
+    function appendAnalysisMessage(role, text, isLoading) {
+      const container = document.getElementById('analyse-messages');
+      const id = 'analyse-msg-' + (++analyseMsgCounter);
+      const isUser = role === 'user';
+      const bubble = document.createElement('div');
+      bubble.id = id;
+      bubble.style.cssText = `align-self:${isUser ? 'flex-end' : 'flex-start'};max-width:85%;background:${isUser ? 'var(--primary)' : 'var(--surface2)'};color:${isUser ? '#fff' : 'var(--text)'};padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;`;
+      bubble.textContent = isLoading ? '…' : text;
+      container.appendChild(bubble);
+      container.scrollTop = container.scrollHeight;
+      return id;
+    }
+
+    function updateAnalysisMessage(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+      const container = document.getElementById('analyse-messages');
+      if (container) container.scrollTop = container.scrollHeight;
+    }
+
+    window.sendAnalysisMessage = async function(presetText) {
+      const input = document.getElementById('analyse-input');
+      const text = (typeof presetText === 'string' ? presetText : input?.value || '').trim();
+      if (!text) return;
+
+      const apiKey = settings.anthropicApiKey;
+      if (!apiKey) {
+        showToast('❌ Bitte zuerst einen Anthropic API Key in den Einstellungen eintragen');
+        return;
+      }
+
+      if (typeof presetText !== 'string' && input) input.value = '';
+      appendAnalysisMessage('user', text);
+      analysisMessages.push({ role: 'user', content: text });
+
+      const loadingId = appendAnalysisMessage('assistant', '', true);
+      const sendBtn = document.getElementById('analyse-send-btn');
+      document.querySelectorAll('.analyse-chip').forEach(b => b.disabled = true);
+      if (sendBtn) sendBtn.disabled = true;
+
+      try {
+        const systemPrompt = buildAnalysisSystemPrompt();
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-5',
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: analysisMessages
+          })
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          const msg = data?.error?.message || ('HTTP ' + resp.status);
+          updateAnalysisMessage(loadingId, '❌ Fehler: ' + msg);
+          analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
+          return;
+        }
+
+        const textBlock = (data.content || []).find(b => b.type === 'text');
+        const answer = textBlock?.text || '(keine Antwort erhalten)';
+        analysisMessages.push({ role: 'assistant', content: answer });
+        updateAnalysisMessage(loadingId, answer);
+      } catch (err) {
+        console.error('Analyse API error:', err);
+        updateAnalysisMessage(loadingId, '❌ Verbindungsfehler: ' + err.message);
+        analysisMessages.pop();
+      } finally {
+        document.querySelectorAll('.analyse-chip').forEach(b => b.disabled = false);
+        if (sendBtn) sendBtn.disabled = false;
+      }
+    };
+
 
     window.calcMacroSuggestion = function() {
       const weight = parseFloat(document.getElementById('settings-weight')?.value) || settings.weight || 75;

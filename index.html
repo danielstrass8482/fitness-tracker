@@ -184,20 +184,32 @@
     .analyse-chip:hover { border-color: var(--primary); color: var(--primary); }
     .analyse-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Composer bleibt am unteren Bildschirmrand kleben, sobald man dorthin
-       scrollt (position:sticky respektiert den normalen Dokumentfluss, kann
-       die Chat-Box darüber also nicht überlappen — anders als position:fixed) */
-    #analyse-input-row {
-      position: sticky;
-      bottom: 0;
-      z-index: 500;
+    /* Analyse-Tab: eigener Flex-Layout-Rahmen (statt normalem Seiten-Scroll),
+       damit der Chat-Verlauf den verfügbaren Platz füllt (flex:1, scrollt
+       intern) und der Composer darunter fest stehen bleibt (flex-shrink:0),
+       ohne von wachsendem Inhalt verdrängt zu werden. Die Höhe wird per JS
+       (sizeAnalyseTab) gesetzt, da die Header-Höhe variieren kann. */
+    #analyse-tab.active {
       display: flex;
+      flex-direction: column;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    #analyse-tab .analyse-fixed-top { flex-shrink: 0; }
+
+    #analyse-input-row {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
       gap: 8px;
       background: var(--bg);
       border-top: 1px solid var(--border);
       box-sizing: border-box;
       padding: 10px 12px;
-      padding-bottom: max(80px, env(safe-area-inset-bottom, 80px));
+      padding-bottom: 80px;
     }
 
     /* Loading */
@@ -768,7 +780,7 @@
     </div>
 
     <div id="analyse-tab" class="tab-content">
-      <div style="max-width:800px;margin:0 auto;">
+      <div class="analyse-fixed-top">
         <h2 style="margin-bottom:10px;">🤖 Analyse</h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Stelle Fragen an Claude zu deinen Trainings- und Ernährungsdaten. Dein API Key wird nur lokal gespeichert und direkt an Anthropic gesendet.</p>
 
@@ -783,13 +795,13 @@
           <button class="analyse-chip" onclick="sendAnalysisMessage('An welchen Tagen esse ich am meisten? Gibt es ein Muster?')">Esse ich nach Muster?</button>
           <button class="analyse-chip" onclick="sendAnalysisMessage('Vergleiche meine Laufleistung diesen Monat vs letzten Monat')">Laufleistung: Monatsvergleich</button>
         </div>
+      </div>
 
-        <div id="analyse-messages" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:300px;max-height:55vh;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
+      <div id="analyse-messages" style="flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
 
-        <div id="analyse-input-row">
-          <textarea id="analyse-input" rows="2" placeholder="Frage stellen..." style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}"></textarea>
-          <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;align-self:flex-end;">Senden</button>
-        </div>
+      <div id="analyse-input-row">
+        <textarea id="analyse-input" rows="1" placeholder="Frage stellen..." style="flex-grow:1;min-width:0;height:auto;max-height:120px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:none;overflow-y:auto;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
+        <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;">Senden</button>
       </div>
     </div>
 
@@ -5301,6 +5313,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         }
         if (target === 'analyse' && userId) {
           updateAnalyseKeyState();
+          requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
         }
         if (target === 'daten' && userId) {
           loadGoogleFitStatus();
@@ -5889,6 +5902,23 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     // ── KI-Analyse (Anthropic Claude API, direkt aus dem Browser) ───────────
     let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
 
+    // Setzt die Höhe des Analyse-Tab-Flex-Layouts auf den tatsächlich verfügbaren
+    // Platz (Viewport minus Header darüber und fixierte Bottom-Nav darunter).
+    // Per JS statt fixem calc(100vh - Xpx), da die Header-Höhe umbrechen kann
+    // (langer E-Mail-Text neben dem Logout-Button).
+    function sizeAnalyseTab() {
+      const tab = document.getElementById('analyse-tab');
+      if (!tab || !tab.classList.contains('active')) return;
+      const top = tab.getBoundingClientRect().top;
+      const nav = document.getElementById('bottom-nav');
+      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+      const available = window.innerHeight - top - navHeight;
+      tab.style.height = Math.max(300, available) + 'px';
+    }
+    window.sizeAnalyseTab = sizeAnalyseTab;
+    window.addEventListener('resize', sizeAnalyseTab);
+    window.addEventListener('orientationchange', () => setTimeout(sizeAnalyseTab, 200));
+
     function updateAnalyseKeyState() {
       const noKeyEl = document.getElementById('analyse-no-key');
       const chipRow = document.getElementById('analyse-chip-row');
@@ -6032,7 +6062,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         return;
       }
 
-      if (typeof presetText !== 'string' && input) input.value = '';
+      if (typeof presetText !== 'string' && input) { input.value = ''; input.style.height = 'auto'; }
       appendAnalysisMessage('user', text);
       analysisMessages.push({ role: 'user', content: text });
 

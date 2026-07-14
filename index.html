@@ -5889,7 +5889,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     // Baut komprimierte Datenzusammenfassung (keine rohen Firestore-Dokumente, keine Einzel-Lebensmittel)
     function buildAnalysisContextData() {
       const today = new Date();
-      const cutoffTraining = new Date(today); cutoffTraining.setDate(today.getDate() - 180);
+      const cutoffTraining = new Date(today); cutoffTraining.setDate(today.getDate() - 365);
       const cutoffNutrition = new Date(today); cutoffNutrition.setDate(today.getDate() - 90);
       const cutoffTrainingStr = cutoffTraining.toISOString().split('T')[0];
       const cutoffNutritionStr = cutoffNutrition.toISOString().split('T')[0];
@@ -5906,7 +5906,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         ziel_fett_g: settings.fatGoal || null
       };
 
-      // Trainingseinträge (ohne Tageslogs/Phonesteps), letzte 180 Tage
+      // Trainingseinträge (ohne Tageslogs/Phonesteps), letzte 365 Tage
       const trainingRows = trainingEntries
         .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && e.datum >= cutoffTrainingStr)
         .sort((a, b) => a.datum.localeCompare(b.datum))
@@ -5938,13 +5938,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         if (!entries.length) return;
         let kcal = 0, protein = 0, carbs = 0, fat = 0;
         entries.forEach(e => { kcal += e.kcal || 0; protein += e.protein || 0; carbs += e.carbs || 0; fat += e.fat || 0; });
-        dayMap[d] = { kcal: Math.round(kcal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) };
+        dayMap[d] = { kcal: Math.round(kcal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat), count: entries.length };
       });
       const nutritionRows = Object.keys(dayMap).sort().map(d => {
         const goal = window.calcHistoricalKcalGoal(d);
         const n = dayMap[d];
         const diff = n.kcal - Math.round(goal.total || 0);
-        return [d, n.kcal, n.protein, n.carbs, n.fat, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
+        return [d, n.kcal, n.protein, n.carbs, n.fat, n.count, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
       });
 
       // Tageslog: Gewicht & Schritte, letzte 90 Tage
@@ -5971,12 +5971,12 @@ Aktivitätsfaktor: ${p.aktivitaetsfaktor ?? '?'}
 TDEE: ${p.tdee_kcal ?? '?'} kcal
 Ziele: ${p.ziel_protein_g ?? '?'}g Protein, ${p.ziel_carbs_g ?? '?'}g Kohlenhydrate, ${p.ziel_fett_g ?? '?'}g Fett
 
-=== Trainingseinträge (letzte 180 Tage, ohne Tageslogs) ===
+=== Trainingseinträge (letzte 365 Tage, ohne Tageslogs) ===
 Format: Datum|Typ|Distanz(km)|Zeit|Pace(min/km)|Kcal|Notiz
 ${ctx.trainingRows.join('\n') || '(keine Einträge)'}
 
-=== Tägliche Ernährungsbilanz (letzte 90 Tage) ===
-Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|KcalZiel|Differenz
+=== Tägliche Ernährungsbilanz (letzte 90 Tage, aggregiert) ===
+Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|AnzahlMahlzeiten|KcalZiel|Differenz
 ${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
 
 === Tageslog: Gewicht & Schritte (letzte 90 Tage) ===
@@ -6037,7 +6037,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           },
           body: JSON.stringify({
             model: 'claude-sonnet-5',
-            max_tokens: 4096,
+            max_tokens: 8192,
             system: systemPrompt,
             messages: analysisMessages
           })

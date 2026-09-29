@@ -3977,6 +3977,18 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       return hours > 0 ? Math.round(met * weight * hours) : 0;
     }
 
+    // Aktivitätskalorien für manuell geloggte Einträge (Loggen-Tab): keine Dauer-Eingabe dort,
+    // daher Dauer aus Sets/Wdh schätzen (gleiche Formel wie beim Plan-Abhaken: 3s/Wdh + Pause zwischen Sets)
+    function calcManualActivityKcal(entry) {
+      const repsList = (entry.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
+      if (repsList.length > 0) {
+        const dauerMin = calcSetsDauerMin(repsList, PLAN_DEFAULT_SET_PAUSE_SEC) || 0;
+        return calcPlanActivityKcal({ ...entry, zeit: planMinToZeit(dauerMin) });
+      }
+      if (entry.zeit) return calcPlanActivityKcal(entry);
+      return 0;
+    }
+
     // Zählt ein Trainingseintrag zu den Aktivitätskalorien (Kalorienziel/Statistik)?
     // Garmin/Google Fit/Strava immer; Plan-Einträge nur, wenn am selben Tag kein
     // automatisch importierter Eintrag gleichen Typs existiert (sonst doppelt gezählt).
@@ -3985,6 +3997,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     }
     function countsAsActivity(e, list) {
       if (isAutoActivity(e)) return true;
+      if (e.source === 'manual') return true;
       if (e.source !== 'plan') return false;
       return !(list || trainingEntries).some(o => isAutoActivity(o) && o.datum === e.datum && o.typ === e.typ);
     }
@@ -5676,15 +5689,18 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         sets: sets,
         notiz: notiz,
         garminTime: timeVal,
-        timestamp: date + 'T' + (timeVal || new Date().toTimeString().slice(0,8))
+        timestamp: date + 'T' + (timeVal || new Date().toTimeString().slice(0,8)),
+        source: 'manual'
       };
-      
+      entry.act_kcal_calc = calcManualActivityKcal(entry);
+
       try {
         await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
         trainingEntries.push(entry);
         window.trainingEntries = trainingEntries;
         saveToCache();
 
+        renderFoodLog();          // Kalorienziel aktualisieren
         renderTrainingHistory();
         renderDataStats();
 
@@ -7561,6 +7577,48 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       } catch(e) {
         status.textContent = '❌ Fehler: ' + e.message;
         console.error('Migration error:', e);
+      }
+    };
+
+    // Einmalige Migration: alte Kraft/Bodyweight-Einträge ohne source (vor dem
+    // source='manual'-Fix) bekommen source + act_kcal_calc nachgetragen.
+    // Läuft über die komplette Firestore-Collection, nicht nur die geladenen letzten 365 Tage.
+    window.migrateManualTrainings = async function() {
+      const EXCLUDED_TYPES = ['laufen', 'rad', 'gehen', 'wandern', 'schwimmen', 'tageslog', 'phonesteps'];
+      try {
+        const snap = await getDocs(userTrainingCol());
+        const toMigrate = [];
+        snap.forEach(d => {
+          const data = d.data();
+          const hasSource = data.source !== undefined && data.source !== null && data.source !== '';
+          if (hasSource || EXCLUDED_TYPES.includes(data.typ)) return;
+          toMigrate.push({ id: d.id, data });
+        });
+
+        console.log(`Migriere ${toMigrate.length} Einträge...`);
+        let done = 0;
+        for (const { id, data } of toMigrate) {
+          const updated = { ...data, source: 'manual' };
+          updated.act_kcal_calc = calcManualActivityKcal(updated);
+          await setDoc(doc(userTrainingCol(), id), updated, { merge: true });
+
+          const idx = trainingEntries.findIndex(e => e.id === id);
+          if (idx >= 0) trainingEntries[idx] = { ...trainingEntries[idx], ...updated };
+
+          done++;
+          if (done % 10 === 0 || done === toMigrate.length) {
+            console.log(`Migriere ${done}/${toMigrate.length} Einträge...`);
+          }
+        }
+
+        window.trainingEntries = trainingEntries;
+        saveToCache();
+        renderFoodLog();
+        console.log(`✓ Migration abgeschlossen: ${done} Einträge repariert.`);
+        showToast(`✓ ${done} Trainings migriert`);
+      } catch (e) {
+        console.error('migrateManualTrainings error:', e);
+        showToast('❌ Migration fehlgeschlagen');
       }
     };
 

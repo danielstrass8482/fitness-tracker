@@ -4282,16 +4282,23 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     };
 
     window.setAddFoodMode = function(mode) {
+      // Suchbegriff des bisher sichtbaren Tabs merken, um ihn zu übernehmen
+      const foodSearchEl = document.getElementById('food-search');
+      const recipeSearchEl = document.getElementById('recipe-search-modal');
+      const prevMode = document.getElementById('mode-food')?.style.display === 'none' ? 'recipe' : 'food';
+      const term = (prevMode === 'recipe' ? recipeSearchEl?.value : foodSearchEl?.value) || '';
+
       document.getElementById('mode-food').style.display = mode === 'food' ? 'block' : 'none';
       document.getElementById('mode-recipe').style.display = mode === 'recipe' ? 'block' : 'none';
       document.getElementById('mode-tab-food').style.background = mode === 'food' ? 'var(--primary)' : 'none';
       document.getElementById('mode-tab-food').style.color = mode === 'food' ? 'white' : 'var(--muted)';
       document.getElementById('mode-tab-recipe').style.background = mode === 'recipe' ? 'var(--primary)' : 'none';
       document.getElementById('mode-tab-recipe').style.color = mode === 'recipe' ? 'white' : 'var(--muted)';
-      // Suchfeld leeren und passende Vorschläge laden
-      const searchEl = document.getElementById('food-search');
-      if (searchEl) { searchEl.value = ''; }
-      if (typeof showFoodSuggestions === 'function') showFoodSuggestions();
+      // Suchbegriff in beiden Tabs setzen und im aktiven Tab suchen
+      if (foodSearchEl) foodSearchEl.value = term;
+      if (recipeSearchEl) recipeSearchEl.value = term;
+      if (mode === 'recipe') searchRecipeModal();
+      else if (typeof showFoodSuggestions === 'function') showFoodSuggestions();
     };
 
     let selectedRecipe = null;
@@ -5579,30 +5586,23 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       updateHiddenSets();
     }
 
+    // Vordefinierte Varianten je Typ: [key, Label] – genutzt vom Loggen-Formular und Plan-Editor
+    const TRAINING_VARIANTS = {
+      pullups: [['regulaer', 'Regulär'], ['reverse', 'Reverse'], ['hammer', 'Hammer Grip']],
+      pushups: [['weit', 'Weit'], ['eng', 'Eng'], ['diamond', 'Diamond']],
+      lunges: [['normal', 'Normal'], ['elevated_feet', 'Elevated Feet'], ['weighted', 'Mit Gewichten']],
+      terraband_knie: [['gerade', 'Gerade'], ['seitlich', 'Seitlich']]
+    };
+
     window.updateVariantOptions = function() {
       const type = document.getElementById('training-type').value;
       const variantSel = document.getElementById('training-variant');
-      if (type === 'pullups') {
-        variantSel.innerHTML = `
-          <option value="regulaer">Regulär</option>
-          <option value="reverse">Reverse</option>
-          <option value="hammer">Hammer Grip</option>`;
-      } else if (type === 'lunges') {
-        variantSel.innerHTML = `
-          <option value="normal">Normal</option>
-          <option value="elevated_feet">Elevated Feet</option>
-          <option value="weighted">Mit Gewichten</option>`;
-      } else if (type === 'terraband_knie') {
-        variantSel.innerHTML = `
-          <option value="gerade">Gerade</option>
-          <option value="seitlich">Seitlich</option>`;
-      } else if (type.startsWith('custom_')) {
+      if (type.startsWith('custom_')) {
         variantSel.innerHTML = '<option value="">—</option>';
       } else {
-        variantSel.innerHTML = `
-          <option value="weit">Weit</option>
-          <option value="eng">Eng</option>
-          <option value="diamond">Diamond</option>`;
+        // Unbekannte Typen fallen (wie bisher) auf die Push-up-Varianten zurück
+        const list = TRAINING_VARIANTS[type] || TRAINING_VARIANTS.pushups;
+        variantSel.innerHTML = list.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
       }
     };
 
@@ -6420,7 +6420,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           id: u.id || ('p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
           typ: u.typ || '',
           typLabel: u.typLabel || '',
-          variant: u.variant || '',
+          variant: String(u.variant || '').trim(),
           distanzKm: u.distanzKm != null && u.distanzKm !== '' ? Number(u.distanzKm) : null,
           dauerMin: u.dauerMin != null && u.dauerMin !== '' ? Number(u.dauerMin) : null,
           notiz: u.notiz || ''
@@ -6609,6 +6609,36 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigener Typ…</option>`;
     }
 
+    // Varianten für einen Typ: vordefinierte (Loggen-Formular) + in trainingEntries/Plan vorkommende
+    function planKnownVariants(typ) {
+      const labels = [];
+      const add = v => {
+        v = String(v || '').trim();
+        if (v && !labels.some(l => l.toLowerCase() === v.toLowerCase())) labels.push(v);
+      };
+      (TRAINING_VARIANTS[typ] || []).forEach(([, label]) => add(label));
+      const keyToLabel = Object.fromEntries(Object.values(TRAINING_VARIANTS).flat());
+      const oldTypeMap = { push: 'pushups', pull: 'pullups' };
+      const extra = [];
+      trainingEntries.forEach(e => {
+        if ((e.typ || oldTypeMap[e.type] || e.type) !== typ) return;
+        const raw = e.variantLabel || e.variante || e.variant;
+        extra.push(keyToLabel[raw] || raw);
+      });
+      PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => { if (u.typ === typ && !u._variantCustom) extra.push(u.variant); }));
+      extra.filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'de')).forEach(add);
+      return labels;
+    }
+
+    function planVariantOptions(u) {
+      const opts = planKnownVariants(u.typ);
+      if (u.variant && !opts.some(o => o.toLowerCase() === u.variant.toLowerCase())) opts.push(u.variant);
+      const sel = u._variantCustom ? PLAN_CUSTOM_OPTION : (opts.find(o => o.toLowerCase() === (u.variant || '').toLowerCase()) || '');
+      return `<option value=""${sel === '' ? ' selected' : ''}>—</option>`
+        + opts.map(o => `<option value="${planEsc(o)}"${o === sel ? ' selected' : ''}>${planEsc(o)}</option>`).join('')
+        + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigene…</option>`;
+    }
+
     function renderPlanEditor(container) {
       const inp = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
       const lbl = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
@@ -6634,7 +6664,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             ${isCustom ? `<div style="margin-bottom:8px;"><label style="${lbl}">Name des neuen Typs</label>
               <input type="text" value="${planEsc(u.typLabel)}" placeholder="z.B. Mobility" oninput="planEditField('${key}',${idx},'typLabel',this.value)" style="${inp}"></div>` : ''}
             <div style="margin-bottom:8px;"><label style="${lbl}">Variante (optional)</label>
-              <input type="text" value="${planEsc(u.variant)}" placeholder="z.B. Intervall, Tempo, Bulgarian Split Squat" oninput="planEditField('${key}',${idx},'variant',this.value)" style="${inp}"></div>
+              <select onchange="planEditVariant('${key}',${idx},this.value)" style="${inp}">${planVariantOptions(u)}</select>
+              ${u._variantCustom ? `<input type="text" value="${planEsc(u.variant)}" placeholder="z.B. Intervall, Tempo, Bulgarian Split Squat" oninput="planEditField('${key}',${idx},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
               <div><label style="${lbl}">Zieldistanz (km)</label>
                 <input type="number" min="0" step="0.1" inputmode="decimal" value="${u.distanzKm ?? ''}" oninput="planEditField('${key}',${idx},'distanzKm',this.value)" style="${inp}"></div>
@@ -6687,6 +6718,16 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const u = planDraft[key][idx];
       u.typ = value;
       if (value !== PLAN_CUSTOM_OPTION) u.typLabel = '';
+      // Varianten gehören zum Typ → zurücksetzen
+      u.variant = '';
+      u._variantCustom = false;
+      renderTrainingPlan(true); // Freitextfeld ein-/ausblenden
+    };
+
+    window.planEditVariant = function(key, idx, value) {
+      const u = planDraft[key][idx];
+      u._variantCustom = value === PLAN_CUSTOM_OPTION;
+      u.variant = u._variantCustom ? '' : value;
       renderTrainingPlan(true); // Freitextfeld ein-/ausblenden
     };
 

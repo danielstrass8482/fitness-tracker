@@ -322,6 +322,10 @@
       border-bottom-color: var(--primary);
     }
     
+    /* Kompakte Eingabezeilen (Trainingsplan) – bleiben auch mobil nebeneinander */
+    .plan-row { display: flex; gap: 8px; }
+    .plan-row > * { flex: 1 1 0; min-width: 0; }
+
     .subtab-content { display: none; }
     .subtab-content.active { display: block; }
 
@@ -1286,7 +1290,7 @@
       <!-- Nur bei Zirkel -->
       <div id="plan-complete-zirkel" style="display:none;">
         <div id="plan-complete-zirkel-list" style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="plan-row" style="gap:12px;margin-bottom:12px;">
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Runden</label>
             <input type="number" id="plan-complete-runden" min="1" step="1" inputmode="numeric" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
@@ -1299,15 +1303,19 @@
       </div>
       <!-- Nur bei Kraft/Bodyweight-Einzeleinheiten -->
       <div id="plan-complete-sets-wrap" style="display:none;margin-bottom:12px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="plan-row" style="gap:12px;">
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Anzahl Sets</label>
             <input type="number" id="plan-complete-sets" min="1" max="20" step="1" inputmode="numeric" oninput="renderPlanCompleteReps()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause zw. Sets (Sek)</label>
+            <input type="number" id="plan-complete-setpause" min="0" step="5" inputmode="numeric" oninput="planStrengthRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          </div>
         </div>
         <div id="plan-complete-reps" style="margin-top:10px;"></div>
       </div>
-      <div id="plan-complete-dauer-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div id="plan-complete-dauer-grid" class="plan-row" style="gap:12px;margin-bottom:12px;">
         <div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Dauer (min)</label>
           <input type="number" id="plan-complete-dauer" min="0" step="1" inputmode="numeric" oninput="onPlanCompleteDauerInput()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
@@ -6441,16 +6449,28 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     const PLAN_DISTANCE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen'];
     const PLAN_TIME_TYPES = ['yoga', 'cardio'];
     const PLAN_SEC_PER_REP = 3;
+    const PLAN_DEFAULT_SET_PAUSE_SEC = 90; // Default-Pause zwischen Sets (Krafttraining)
     // Feld-Kategorie einer Einheit: Ausdauer (km + min), Zeit (min), Kraft/Bodyweight inkl. custom (Sets × Wdh)
     function planUnitKind(typ) {
       if (PLAN_DISTANCE_TYPES.includes(typ)) return 'endurance';
       if (PLAN_TIME_TYPES.includes(typ)) return 'time';
       return 'strength';
     }
-    // Kraft: Zieldauer = ceil(Sets × Wdh × 3s / 60)
-    function calcStrengthDauerMin(sets, reps) {
+    // Kraft: Dauer = ceil((Σ Wdh × 3s + (Sets − 1) × Pause) / 60)
+    function calcSetsDauerMin(repsList, pauseSec) {
+      const reps = repsList.filter(r => r > 0);
+      if (!reps.length) return null;
+      const sum = reps.reduce((a, b) => a + b, 0);
+      const pause = Math.max(0, Number(pauseSec) || 0);
+      return Math.ceil((sum * PLAN_SEC_PER_REP + (reps.length - 1) * pause) / 60);
+    }
+    // Plan: alle Sets mit gleicher Wdh-Zahl
+    function calcStrengthDauerMin(sets, reps, pauseSec) {
       const s = parseInt(sets) || 0, r = parseInt(reps) || 0;
-      return s > 0 && r > 0 ? Math.ceil(s * r * PLAN_SEC_PER_REP / 60) : null;
+      return s > 0 && r > 0 ? calcSetsDauerMin(Array(s).fill(r), pauseSec) : null;
+    }
+    function planPauseSec(u) {
+      return u.pauseSec != null && u.pauseSec !== '' && !isNaN(Number(u.pauseSec)) ? Math.max(0, Number(u.pauseSec)) : PLAN_DEFAULT_SET_PAUSE_SEC;
     }
     const PLAN_CUSTOM_OPTION = '__custom__';
     const ZIRKEL_BASE_TYPES = ['pullups', 'pushups', 'kraft', 'terraband_knie', 'lunges'];
@@ -6506,10 +6526,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         dauerMin: num(u.dauerMin),
         sets: kind === 'strength' ? (parseInt(u.sets) || null) : null,
         repsPerSet: kind === 'strength' ? (parseInt(u.repsPerSet) || null) : null,
+        pauseSec: kind === 'strength' ? planPauseSec(u) : null,
         notiz: u.notiz || ''
       };
       // Kraft mit Sets × Wdh: Dauer berechnet; ältere Einheiten ohne Sets behalten ihre Zieldauer
-      if (kind === 'strength') unit.dauerMin = calcStrengthDauerMin(unit.sets, unit.repsPerSet) ?? unit.dauerMin;
+      if (kind === 'strength') unit.dauerMin = calcStrengthDauerMin(unit.sets, unit.repsPerSet, unit.pauseSec) ?? unit.dauerMin;
       return unit;
     }
 
@@ -6649,7 +6670,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     function planTarget(u) {
       return [
-        u.sets > 0 && u.repsPerSet > 0 ? `${u.sets} × ${u.repsPerSet} Wdh` : '',
+        u.sets > 0 && u.repsPerSet > 0 ? `${u.sets} × ${u.repsPerSet} Wdh` + (u.sets > 1 && u.pauseSec > 0 ? ` · ${u.pauseSec} s Pause` : '') : '',
         u.distanzKm > 0 ? String(u.distanzKm).replace('.', ',') + ' km' : '',
         u.dauerMin > 0 ? u.dauerMin + ' min' : ''
       ].filter(Boolean).join(' · ');
@@ -6911,7 +6932,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <span style="font-weight:600;">🔄 Zirkel</span>
           <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">🗑</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Runden</label>
             <input type="number" min="1" step="1" inputmode="numeric" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
           <div><label style="${lbl}">Pause zw. Runden (min)</label>
@@ -6940,7 +6961,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     }
 
     function planStrengthDauerText(u) {
-      const d = calcStrengthDauerMin(u.sets, u.repsPerSet) ?? u.dauerMin;
+      const d = calcStrengthDauerMin(u.sets, u.repsPerSet, planPauseSec(u)) ?? u.dauerMin;
       return d > 0 ? `⏱ Zieldauer: ${d} min` : '⏱ Zieldauer: – (Sets und Wdh eintragen)';
     }
 
@@ -6950,20 +6971,22 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <input type="number" min="0" step="1" inputmode="numeric" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>`;
       const kind = planUnitKind(u.typ);
       if (kind === 'endurance') {
-        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">
             <div><label style="${lbl}">Zieldistanz (km)</label>
               <input type="number" min="0" step="0.1" inputmode="decimal" value="${u.distanzKm ?? ''}" oninput="planEditField('${key}',${idx},'distanzKm',this.value)" style="${inp}"></div>
             ${dauerField}
           </div>`;
       }
       if (kind === 'time') {
-        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">${dauerField}</div>`;
+        return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">${dauerField}<div></div></div>`;
       }
-      return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;">
-          <div><label style="${lbl}">Anzahl Sets</label>
+      return `<div class="plan-row" style="gap:8px;margin-bottom:4px;">
+          <div><label style="${lbl}">Sets</label>
             <input type="number" min="0" step="1" inputmode="numeric" value="${u.sets ?? ''}" oninput="planEditField('${key}',${idx},'sets',this.value)" style="${inp}"></div>
           <div><label style="${lbl}">Wdh pro Set</label>
             <input type="number" min="0" step="1" inputmode="numeric" value="${u.repsPerSet ?? ''}" oninput="planEditField('${key}',${idx},'repsPerSet',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Pause (Sek)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" value="${planPauseSec(u)}" oninput="planEditField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
         </div>
         <div id="udauer-${key}-${idx}" style="font-size:12px;color:var(--muted);margin-bottom:8px;">${planStrengthDauerText(u)}</div>`;
     }
@@ -7081,7 +7104,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.planAddUnit = function(key) {
       planDraft[key].push({
         id: newPlanUnitId(),
-        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, sets: null, repsPerSet: null, notiz: ''
+        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, sets: null, repsPerSet: null, pauseSec: null, notiz: ''
       });
       renderTrainingPlan(true);
     };
@@ -7102,6 +7125,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       u.dauerMin = null;
       u.sets = null;
       u.repsPerSet = null;
+      u.pauseSec = null; // → Default 90 s bei Kraft
       renderTrainingPlan(true); // Felder je nach Typ umschalten
     };
 
@@ -7117,8 +7141,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (field === 'distanzKm' || field === 'dauerMin') {
         const n = parseFloat(String(value).replace(',', '.'));
         u[field] = isNaN(n) || n <= 0 ? null : n;
-      } else if (field === 'sets' || field === 'repsPerSet') {
-        u[field] = parseInt(value) > 0 ? parseInt(value) : null;
+      } else if (field === 'sets' || field === 'repsPerSet' || field === 'pauseSec') {
+        const n = parseInt(value);
+        u[field] = field === 'pauseSec' ? (n >= 0 ? n : null) : (n > 0 ? n : null);
         // berechnete Dauer ohne Re-render aktualisieren (Fokus behalten)
         const el = document.getElementById(`udauer-${key}-${idx}`);
         if (el) el.textContent = planStrengthDauerText(u);
@@ -7212,6 +7237,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const setsStr = setsVisible ? planCompleteRepValues().filter(v => v > 0).join('-') : '';
       return {
         ...(setsStr ? { sets: setsStr } : {}), // "12-10-8" wie im Loggen-Tab
+        ...(setsVisible ? { pauseSec: planCompleteSetPauseSec() } : {}),
         datum: ds,
         typ: unit.typ,
         variant: unit.variant || '',
@@ -7254,6 +7280,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       document.getElementById('plan-complete-sets-wrap').style.display = isStrength ? '' : 'none';
       document.getElementById('plan-complete-reps').innerHTML = '';
       document.getElementById('plan-complete-sets').value = isStrength && unit.sets ? unit.sets : '';
+      document.getElementById('plan-complete-setpause').value = isStrength ? planPauseSec(unit) : '';
       if (isStrength) renderPlanCompleteReps(); // ruft auch updatePlanCompletePreview()
       else updatePlanCompletePreview();
       pushModalState();
@@ -7295,12 +7322,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       planStrengthRecalcDauer();
     };
 
-    // Dauer = ceil(Σ Wdh × 3s / 60), solange nicht manuell überschrieben
+    function planCompleteSetPauseSec() {
+      const v = parseInt(document.getElementById('plan-complete-setpause').value);
+      return v >= 0 ? v : 0;
+    }
+
+    // Dauer = ceil((Σ Wdh × 3s + (Sets − 1) × Pause) / 60), solange nicht manuell überschrieben
     window.planStrengthRecalcDauer = function() {
       if (!planCompleteCtx) return;
-      const sum = planCompleteRepValues().reduce((a, b) => a + b, 0);
-      if (!planCompleteCtx.dauerManual && sum > 0) {
-        document.getElementById('plan-complete-dauer').value = Math.ceil(sum * PLAN_SEC_PER_REP / 60);
+      const dauer = calcSetsDauerMin(planCompleteRepValues(), planCompleteSetPauseSec());
+      if (!planCompleteCtx.dauerManual && dauer != null) {
+        document.getElementById('plan-complete-dauer').value = dauer;
       }
       updatePlanCompletePreview();
     };

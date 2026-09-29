@@ -6432,7 +6432,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // TRAININGSPLAN
     // Plan-Versionen: users/{uid}/trainingplans/{Montag} = { mo: [unit], ..., so: [unit], datum, updatedAt }
     //   (früher users/{uid}/settings/trainingplan – wird beim ersten Laden migriert)
-    // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, sets, repsPerSet, notiz }
+    // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, sets ("12-11-10", Kraft), pauseSec (Kraft), notiz }
     // zirkel: { id, typ:'zirkel', runden, pauseMin, uebungen:[{typ, variant, wdh}], dauerMin (berechnet), notiz }
     // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet (planMatchDay):
     //  - Eintrag mit source:'plan' + planUnitId am Tag  → manuell abgehakt
@@ -6464,10 +6464,16 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const pause = Math.max(0, Number(pauseSec) || 0);
       return Math.ceil((sum * PLAN_SEC_PER_REP + (reps.length - 1) * pause) / 60);
     }
-    // Plan: alle Sets mit gleicher Wdh-Zahl
-    function calcStrengthDauerMin(sets, reps, pauseSec) {
-      const s = parseInt(sets) || 0, r = parseInt(reps) || 0;
-      return s > 0 && r > 0 ? calcSetsDauerMin(Array(s).fill(r), pauseSec) : null;
+    // Wdh je Set einer Plan-Einheit als Zahlen-Array.
+    // Quellen (in dieser Reihenfolge): Editor-Arbeitswert _reps · sets-String "12-11-10" ·
+    // Altformat sets (Anzahl) + repsPerSet → Migration: 3 × 12 → [12, 12, 12]
+    function planRepsList(u) {
+      if (Array.isArray(u._reps)) return u._reps.map(r => parseInt(r) || 0);
+      if (typeof u.sets === 'string' && !u.repsPerSet) {
+        return u.sets.split('-').map(r => parseInt(r) || 0).filter(r => r > 0);
+      }
+      const count = parseInt(u.sets) || 0, reps = parseInt(u.repsPerSet) || 0;
+      return count > 0 && reps > 0 ? Array(count).fill(reps) : [];
     }
     function planPauseSec(u) {
       return u.pauseSec != null && u.pauseSec !== '' && !isNaN(Number(u.pauseSec)) ? Math.max(0, Number(u.pauseSec)) : PLAN_DEFAULT_SET_PAUSE_SEC;
@@ -6524,13 +6530,12 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         variant: String(u.variant || '').trim(),
         distanzKm: kind === 'endurance' ? num(u.distanzKm) : null,
         dauerMin: num(u.dauerMin),
-        sets: kind === 'strength' ? (parseInt(u.sets) || null) : null,
-        repsPerSet: kind === 'strength' ? (parseInt(u.repsPerSet) || null) : null,
+        sets: kind === 'strength' ? (planRepsList(u).filter(r => r > 0).join('-') || null) : null,
         pauseSec: kind === 'strength' ? planPauseSec(u) : null,
         notiz: u.notiz || ''
       };
-      // Kraft mit Sets × Wdh: Dauer berechnet; ältere Einheiten ohne Sets behalten ihre Zieldauer
-      if (kind === 'strength') unit.dauerMin = calcStrengthDauerMin(unit.sets, unit.repsPerSet, unit.pauseSec) ?? unit.dauerMin;
+      // Kraft mit Sets: Dauer berechnet; ältere Einheiten ohne Sets behalten ihre Zieldauer
+      if (kind === 'strength') unit.dauerMin = calcSetsDauerMin(planRepsList(unit), unit.pauseSec) ?? unit.dauerMin;
       return unit;
     }
 
@@ -6668,9 +6673,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(dauerMin) });
     }
 
+    // "3 × 12 Wdh" bei gleichen Sets, sonst "12-11-10 Wdh"; plus Pause
+    function planSetsText(u) {
+      const reps = planRepsList(u).filter(r => r > 0);
+      if (!reps.length) return '';
+      const txt = reps.every(r => r === reps[0]) ? `${reps.length} × ${reps[0]} Wdh` : `${reps.join('-')} Wdh`;
+      return txt + (reps.length > 1 && u.pauseSec > 0 ? ` · ${u.pauseSec} s Pause` : '');
+    }
+
     function planTarget(u) {
       return [
-        u.sets > 0 && u.repsPerSet > 0 ? `${u.sets} × ${u.repsPerSet} Wdh` + (u.sets > 1 && u.pauseSec > 0 ? ` · ${u.pauseSec} s Pause` : '') : '',
+        planSetsText(u),
         u.distanzKm > 0 ? String(u.distanzKm).replace('.', ',') + ' km' : '',
         u.dauerMin > 0 ? u.dauerMin + ' min' : ''
       ].filter(Boolean).join(' · ');
@@ -6961,7 +6974,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     }
 
     function planStrengthDauerText(u) {
-      const d = calcStrengthDauerMin(u.sets, u.repsPerSet, planPauseSec(u)) ?? u.dauerMin;
+      const d = calcSetsDauerMin(planRepsList(u), planPauseSec(u)) ?? u.dauerMin;
       return d > 0 ? `⏱ Zieldauer: ${d} min` : '⏱ Zieldauer: – (Sets und Wdh eintragen)';
     }
 
@@ -6980,20 +6993,33 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (kind === 'time') {
         return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">${dauerField}<div></div></div>`;
       }
+      if (!Array.isArray(u._reps)) u._reps = planRepsList(u);
       return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Anzahl Sets</label>
-            <input type="number" min="0" step="1" inputmode="numeric" value="${u.sets ?? ''}" oninput="planEditField('${key}',${idx},'sets',this.value)" style="${inp}"></div>
-          <div><label style="${lbl}">Wdh pro Set</label>
-            <input type="number" min="0" step="1" inputmode="numeric" value="${u.repsPerSet ?? ''}" oninput="planEditField('${key}',${idx},'repsPerSet',this.value)" style="${inp}"></div>
+            <input type="number" min="0" max="20" step="1" inputmode="numeric" value="${u._reps.length || ''}" oninput="planEditSetCount('${key}',${idx},this.value)" style="${inp}"></div>
+          <div></div>
         </div>
+        <div id="usets-${key}-${idx}">${renderPlanSetFields(key, idx, u, inp, lbl)}</div>
         <div style="margin-bottom:4px;"><label style="${lbl}">Pause zw. Sets (Sek)</label>
           <input type="number" min="0" step="5" inputmode="numeric" value="${planPauseSec(u)}" oninput="planEditField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
         <div id="udauer-${key}-${idx}" style="font-size:12px;color:var(--muted);margin-bottom:8px;">${planStrengthDauerText(u)}</div>`;
     }
 
+    const PLAN_INP_STYLE = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
+    const PLAN_LBL_STYLE = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
+
+    // Set 1: __ Set 2: __ … (je 3 pro Zeile)
+    function renderPlanSetFields(key, idx, u, inp = PLAN_INP_STYLE, lbl = PLAN_LBL_STYLE) {
+      if (!u._reps.length) return '';
+      return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">` + u._reps.map((r, j) => `
+          <div style="flex:0 0 calc((100% - 16px) / 3);min-width:0;"><label style="${lbl}">Set ${j + 1}</label>
+            <input type="number" min="0" max="999" step="1" inputmode="numeric" placeholder="Wdh" value="${r > 0 ? r : ''}" oninput="planEditSetRep('${key}',${idx},${j},this.value)" onfocus="this.select()" style="${inp}"></div>`).join('')
+        + `</div>`;
+    }
+
     function renderPlanEditor(container) {
-      const inp = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
-      const lbl = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
+      const inp = PLAN_INP_STYLE;
+      const lbl = PLAN_LBL_STYLE;
       let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
           <h3 style="margin:0;">Plan bearbeiten</h3>
           <button onclick="cancelPlanEditor()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">Abbrechen</button>
@@ -7104,7 +7130,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.planAddUnit = function(key) {
       planDraft[key].push({
         id: newPlanUnitId(),
-        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, sets: null, repsPerSet: null, pauseSec: null, notiz: ''
+        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, sets: null, pauseSec: null, notiz: ''
       });
       renderTrainingPlan(true);
     };
@@ -7124,7 +7150,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       u.distanzKm = null;
       u.dauerMin = null;
       u.sets = null;
-      u.repsPerSet = null;
+      u._reps = undefined;
       u.pauseSec = null; // → Default 90 s bei Kraft
       renderTrainingPlan(true); // Felder je nach Typ umschalten
     };
@@ -7141,15 +7167,35 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (field === 'distanzKm' || field === 'dauerMin') {
         const n = parseFloat(String(value).replace(',', '.'));
         u[field] = isNaN(n) || n <= 0 ? null : n;
-      } else if (field === 'sets' || field === 'repsPerSet' || field === 'pauseSec') {
+      } else if (field === 'pauseSec') {
         const n = parseInt(value);
-        u[field] = field === 'pauseSec' ? (n >= 0 ? n : null) : (n > 0 ? n : null);
-        // berechnete Dauer ohne Re-render aktualisieren (Fokus behalten)
-        const el = document.getElementById(`udauer-${key}-${idx}`);
-        if (el) el.textContent = planStrengthDauerText(u);
+        u.pauseSec = n >= 0 ? n : null;
+        updatePlanStrengthDauer(key, idx);
       } else {
         u[field] = value;
       }
+    };
+
+    // berechnete Dauer ohne Re-render aktualisieren (Fokus behalten)
+    function updatePlanStrengthDauer(key, idx) {
+      const el = document.getElementById(`udauer-${key}-${idx}`);
+      if (el) el.textContent = planStrengthDauerText(planDraft[key][idx]);
+    }
+
+    // Anzahl Sets geändert → Set-Felder neu (vorhandene Werte bleiben, neue = letzter Wert)
+    window.planEditSetCount = function(key, idx, value) {
+      const u = planDraft[key][idx];
+      const n = Math.min(20, Math.max(0, parseInt(value) || 0));
+      const last = [...u._reps].reverse().find(r => r > 0) || 0;
+      u._reps = Array.from({ length: n }, (_, j) => u._reps[j] > 0 ? u._reps[j] : last);
+      const box = document.getElementById(`usets-${key}-${idx}`);
+      if (box) box.innerHTML = renderPlanSetFields(key, idx, u);
+      updatePlanStrengthDauer(key, idx);
+    };
+
+    window.planEditSetRep = function(key, idx, j, value) {
+      planDraft[key][idx]._reps[j] = parseInt(value) > 0 ? parseInt(value) : 0;
+      updatePlanStrengthDauer(key, idx);
     };
 
     window.saveTrainingPlan = async function() {
@@ -7279,7 +7325,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const isStrength = !isZirkel && planUnitKind(unit.typ) === 'strength';
       document.getElementById('plan-complete-sets-wrap').style.display = isStrength ? '' : 'none';
       document.getElementById('plan-complete-reps').innerHTML = '';
-      document.getElementById('plan-complete-sets').value = isStrength && unit.sets ? unit.sets : '';
+      planCompleteCtx.planReps = isStrength ? planRepsList(unit) : [];
+      document.getElementById('plan-complete-sets').value = planCompleteCtx.planReps.length || '';
       document.getElementById('plan-complete-setpause').value = isStrength ? planPauseSec(unit) : '';
       if (isStrength) renderPlanCompleteReps(); // ruft auch updatePlanCompletePreview()
       else updatePlanCompletePreview();
@@ -7303,15 +7350,16 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return [...document.querySelectorAll('#plan-complete-reps input')].map(i => parseInt(i.value) || 0);
     }
 
-    // Sets geändert → N Wdh-Felder (vorhandene Werte bleiben, neue vorbelegt mit Plan-Wdh bzw. letztem Wert)
+    // Sets geändert → N Wdh-Felder (vorhandene Werte bleiben, sonst Plan-Wert des Sets bzw. letzter Wert)
     window.renderPlanCompleteReps = function() {
       if (!planCompleteCtx) return;
       const n = Math.min(20, Math.max(0, parseInt(document.getElementById('plan-complete-sets').value) || 0));
       const prev = planCompleteRepValues();
-      const fallback = planCompleteCtx.unit.repsPerSet || prev.filter(v => v > 0).pop() || '';
-      let html = '';
+      const planReps = planCompleteCtx.planReps || [];
+      let html = '', last = '';
       for (let i = 0; i < n; i++) {
-        const val = prev[i] > 0 ? prev[i] : fallback;
+        const val = prev[i] > 0 ? prev[i] : (planReps[i] > 0 ? planReps[i] : last);
+        last = val;
         html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i + 1}</span>
           <input type="number" min="0" max="999" step="1" inputmode="numeric" placeholder="Wdh." value="${val}" oninput="planStrengthRecalcDauer()" onfocus="this.select()"

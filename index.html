@@ -487,6 +487,13 @@
     </div>
     
     <div id="training-tab" class="tab-content">
+      <!-- Sub-Tabs -->
+      <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);">
+        <button class="sub-tab active" data-subtab="training-log">Loggen</button>
+        <button class="sub-tab" data-subtab="training-plan">Plan</button>
+      </div>
+
+      <div id="training-log-subtab" class="subtab-content active">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;">
         <!-- Training Entry -->
         <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
@@ -574,6 +581,12 @@
       <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
         <h3 style="margin-bottom:20px;">Letzte Einträge</h3>
         <div id="training-history" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+      </div><!-- /training-log-subtab -->
+
+      <!-- Trainingsplan -->
+      <div id="training-plan-subtab" class="subtab-content">
+        <div id="training-plan-container"></div>
       </div>
     </div>
     
@@ -1265,6 +1278,33 @@
     </div>
   </div>
 
+  <!-- Plan-Einheit abhaken Modal -->
+  <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+      <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
+      <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Dauer (min)</label>
+          <input type="number" id="plan-complete-dauer" min="0" step="1" inputmode="numeric" oninput="updatePlanCompletePreview()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+        </div>
+        <div id="plan-complete-distanz-wrap">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Distanz (km)</label>
+          <input type="number" id="plan-complete-distanz" min="0" step="0.1" inputmode="decimal" oninput="updatePlanCompletePreview()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Notiz (optional)</label>
+        <input type="text" id="plan-complete-notiz" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+      </div>
+      <div id="plan-complete-preview" style="font-size:13px;color:#f97316;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closePlanComplete()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+        <button id="plan-complete-save" onclick="savePlanComplete()" class="btn" style="flex:2;padding:12px;">Eintragen</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
@@ -1536,6 +1576,7 @@
     let trainingEntries = [];
     let favorites = new Set(); // Set von IDs: 'food_123' oder 'recipe_456'
     let dayLogs = [];
+    let trainingPlan = {}; // { mo: [unit], di: [...], ... } – settings/trainingplan
     
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -1596,13 +1637,14 @@
       try {
         cacheDB = await openCacheDB();
         if (!cacheDB) return false;
-        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings] = await Promise.all([
+        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings, cachedPlan] = await Promise.all([
           cacheGet('foodDB'),
           cacheGet('recipes'),
           cacheGet('foodLogEntries'),
           cacheGet('trainingEntries'),
           cacheGet('favorites'),
           cacheGet('settings'),
+          cacheGet('trainingplan'),
         ]);
         let hasCache = false;
         if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
@@ -1628,6 +1670,7 @@
         }
         if (cachedFavs) { favorites = new Set(cachedFavs); hasCache = true; }
         if (cachedSettings) { settings = { ...settings, ...cachedSettings }; }
+        if (cachedPlan) { trainingPlan = cachedPlan; }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -1645,6 +1688,7 @@
         cachePut('trainingEntries', trainingEntries),
         cachePut('favorites', [...favorites]),
         cachePut('settings', settings),
+        cachePut('trainingplan', trainingPlan),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -1764,6 +1808,10 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
+        // Load Trainingsplan
+        const planSnap = await getDoc(doc(db, 'users', userId, 'settings', 'trainingplan'));
+        trainingPlan = planSnap.exists() ? normalizeTrainingPlan(planSnap.data()) : {};
+
         console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
         if (backgroundSync) showToast(`✓ Synchronisiert`);
         else showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`);
@@ -1812,9 +1860,9 @@
 
         const base = Math.round(bmr * 1.375);
 
-        const dayActivity = (allTrainingEntries || trainingEntries)
-          .filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-            && e.datum === date)
+        const actList = allTrainingEntries || trainingEntries;
+        const dayActivity = actList
+          .filter(e => e.datum === date && countsAsActivity(e, actList))
           .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
@@ -1890,8 +1938,7 @@
         if (dayLog?.weight) weights.push(dayLog.weight);
         if (dayLog?.steps) steps_total += parseInt(String(dayLog.steps).replace(/\D/g, '')) || 0;
 
-        trainingEntries.filter(e => (e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava')
-          && e.datum === wd).forEach(e => {
+        trainingEntries.filter(e => e.datum === wd && countsAsActivity(e)).forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
@@ -2060,7 +2107,7 @@
       });
 
       // Garmin training
-      trainingEntries.filter(e => e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava').forEach(e => {
+      trainingEntries.filter(e => countsAsActivity(e)).forEach(e => {
         if (!days[e.datum]) return;
         const calcKcal = calcActivityKcal(e);
         days[e.datum].act_kcal_calc += calcKcal;
@@ -3790,21 +3837,32 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     };
     
 
+    // Anzeige-Labels (Emoji + Name) für Aktivitätstypen
+    const TYP_LABELS = {
+      laufen: '🏃 Laufen', rad: '🚴 Rad', rad_ebike: '⚡ E-Bike',
+      gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
+      kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio',
+      pullups: '💪 Pull-ups', pushups: '💪 Push-ups',
+      lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie'
+    };
+
     // ── Aktivitätskalorien-Berechnung ────────────────────────────────────────
+    // Zeit in Stunden aus "HH:MM:SS" oder "MM:SS"
+    function parseHours(timeStr) {
+      if (!timeStr || timeStr === '--') return 0;
+      // Strip sub-seconds e.g. "00:51:06.5" → "00:51:06"
+      const clean = timeStr.split('.')[0];
+      const parts = clean.split(':').map(Number);
+      if (parts.length === 3) return parts[0] + parts[1] / 60 + parts[2] / 3600;
+      if (parts.length === 2) return parts[0] / 60 + parts[1] / 3600;
+      return 0;
+    }
+
     function calcActivityKcal(entry) {
+      // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
+      if (entry.source === 'plan') return calcPlanActivityKcal(entry);
+
       const weight = settings.weight || 75;
-
-      // Zeit in Stunden aus "HH:MM:SS" oder "MM:SS"
-      function parseHours(timeStr) {
-        if (!timeStr || timeStr === '--') return 0;
-        // Strip sub-seconds e.g. "00:51:06.5" → "00:51:06"
-        const clean = timeStr.split('.')[0];
-        const parts = clean.split(':').map(Number);
-        if (parts.length === 3) return parts[0] + parts[1] / 60 + parts[2] / 3600;
-        if (parts.length === 2) return parts[0] / 60 + parts[1] / 3600;
-        return 0;
-      }
-
       const hours = parseHours(entry.zeit || '');
       const distanz = parseFloat(entry.distanz) || 0;
 
@@ -3844,6 +3902,52 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           // Fallback für unbekannte Typen mit Zeit: MET 5
           return hours > 0 ? Math.round(5.0 * weight * hours) : 0;
       }
+    }
+
+    // MET-Werte für abgehakte Plan-Einheiten (MET × kg × h)
+    const PLAN_MET = {
+      pullups: 4.5, pushups: 4.5,
+      kraft: 3.5, lunges: 3.5, terraband_knie: 3.5,
+      yoga: 2.5, mobility: 2.5, dehnen: 2.5,
+      gehen: 3.5, wandern: 3.5,
+      cardio: 6.0, crosstraining: 6.0,
+      laufen: 9.0, rad: 6.0
+    };
+    const PLAN_MET_DEFAULT = 3.5; // unbekannte/eigene Typen → wie Kraft
+
+    function calcPlanActivityKcal(entry) {
+      const weight = settings.weight || 75;
+      const hours = parseHours(entry.zeit || '');
+      const distanz = parseFloat(entry.distanz) || 0;
+      // Für die bestehenden Formeln: Kopie ohne source (sonst Rekursion),
+      // Variante in die Notiz, damit "Intervall"/"Tempo" den Lauf-Faktor 1,1 triggert
+      const asBase = { ...entry, source: undefined, notiz: [entry.variant, entry.notiz].filter(Boolean).join(' ') };
+
+      switch (entry.typ) {
+        case 'laufen':
+          if (distanz > 0) return calcActivityKcal(asBase);
+          break;
+        case 'rad':
+          if (distanz > 0 && hours > 0) return calcActivityKcal(asBase);
+          break;
+        case 'rad_ebike':
+        case 'schwimmen':
+          return calcActivityKcal(asBase);
+      }
+      const met = PLAN_MET[entry.typ] ?? PLAN_MET_DEFAULT;
+      return hours > 0 ? Math.round(met * weight * hours) : 0;
+    }
+
+    // Zählt ein Trainingseintrag zu den Aktivitätskalorien (Kalorienziel/Statistik)?
+    // Garmin/Google Fit/Strava immer; Plan-Einträge nur, wenn am selben Tag kein
+    // automatisch importierter Eintrag gleichen Typs existiert (sonst doppelt gezählt).
+    function isAutoActivity(e) {
+      return e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
+    }
+    function countsAsActivity(e, list) {
+      if (isAutoActivity(e)) return true;
+      if (e.source !== 'plan') return false;
+      return !(list || trainingEntries).some(o => isAutoActivity(o) && o.datum === e.datum && o.typ === e.typ);
     }
 
     // Render Food Log
@@ -3965,14 +4069,6 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const dayActivities = trainingEntries.filter(e =>
           e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
         ).sort((a, b) => (a.garminTime || '').localeCompare(b.garminTime || ''));
-
-        const TYP_LABELS = {
-          laufen: '🏃 Laufen', rad: '🚴 Rad', rad_ebike: '⚡ E-Bike',
-          gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
-          kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio',
-          pullups: '💪 Pull-ups', pushups: '💪 Push-ups',
-          lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie'
-        };
 
         let html = '<div style="padding:0 0 8px;">';
 
@@ -5158,6 +5254,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       'bulk-kategorie-modal',
       'bulk-time-modal',
       'copy-entry-modal',
+      'plan-complete-modal',
       'barcode-container',
       'confirm-dialog'
     ];
@@ -5346,6 +5443,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
           loadCustomTypes();
+          renderTrainingPlan();
           setTimeout(() => {
             // Nur initSetsUI aufrufen wenn noch keine Werte eingegeben wurden
             const hasValues = Array.from({length: setsCount}, (_, i) => document.getElementById('set-reps-' + i))
@@ -5405,6 +5503,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         
         e.target.classList.add('active');
         document.getElementById(target + '-subtab').classList.add('active');
+
+        if (target === 'training-plan') renderTrainingPlan();
 
         if (target === 'export') {
           loadDriveStatus();
@@ -5637,6 +5737,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       
       if (sorted.length === 0) {
         container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Einträge</div>';
+        renderTrainingPlan();
         return;
       }
       
@@ -5656,7 +5757,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
         const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
-        const isManual = !isGarmin;
+        const isPlan = e.source === 'plan';
+        const isManual = !isGarmin && !isPlan;
         // Parse sets string "11-10-7" only for manual entries; Garmin/GFit use sets as plain info text
         let setsArr = [], setsTotal = 0, setsDisplay = '';
         if (isManual) {
@@ -5668,7 +5770,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         } else {
           setsDisplay = `<span style="font-size:12px;color:var(--muted);">${e.sets || ''}</span>`;
         }
-        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : '';
+        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
+          : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
+        if (isPlan) setsDisplay = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -5682,11 +5786,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
           <div style="display:flex;gap:6px;">
-            ${!isGarmin ? `<button onclick="editTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:13px;">Ändern</button>` : ''}
+            ${isManual ? `<button onclick="editTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:13px;">Ändern</button>` : ''}
             <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
           </div>
         </div>
       `}).join('');
+      renderTrainingPlan();
     }
     
 
@@ -6282,6 +6387,464 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       }
     };
 
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRAININGSPLAN
+    // Plan: users/{uid}/settings/trainingplan = { mo: [unit], ..., so: [unit], updatedAt }
+    // unit: { id, typ, typLabel?, variant, distanzKm, dauerMin, notiz }
+    // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet:
+    //  - Eintrag mit source:'plan' + planUnitId am Tag  → manuell abgehakt
+    //  - sonstiger Eintrag gleichen Typs am Tag         → erfüllt (z.B. via Garmin)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const PLAN_DAYS = [
+      { key: 'mo', label: 'Montag' }, { key: 'di', label: 'Dienstag' },
+      { key: 'mi', label: 'Mittwoch' }, { key: 'do', label: 'Donnerstag' },
+      { key: 'fr', label: 'Freitag' }, { key: 'sa', label: 'Samstag' },
+      { key: 'so', label: 'Sonntag' }
+    ];
+    const PLAN_BASE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen',
+      'kraft', 'yoga', 'cardio', 'pullups', 'pushups', 'lunges', 'terraband_knie'];
+    const PLAN_DISTANCE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen'];
+    const PLAN_CUSTOM_OPTION = '__custom__';
+
+    let planWeekOffset = 0;   // 0 = aktuelle Woche
+    let planEditMode = false;
+    let planDraft = null;     // Arbeitskopie im Editor
+    let planOpenDays = new Set(); // im Editor aufgeklappte Tage
+    let planCompleteCtx = null;
+
+    function normalizeTrainingPlan(data) {
+      const plan = {};
+      PLAN_DAYS.forEach(({ key }) => {
+        plan[key] = Array.isArray(data?.[key]) ? data[key].map(u => ({
+          id: u.id || ('p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+          typ: u.typ || '',
+          typLabel: u.typLabel || '',
+          variant: u.variant || '',
+          distanzKm: u.distanzKm != null && u.distanzKm !== '' ? Number(u.distanzKm) : null,
+          dauerMin: u.dauerMin != null && u.dauerMin !== '' ? Number(u.dauerMin) : null,
+          notiz: u.notiz || ''
+        })) : [];
+      });
+      return plan;
+    }
+
+    function planEsc(str) {
+      return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Lokales Datum → "yyyy-mm-dd" (kein toISOString, sonst UTC-Versatz)
+    function planYmd(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function planWeekDates(offset) {
+      const now = new Date();
+      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) + offset * 7);
+      return PLAN_DAYS.map((_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+    }
+
+    function planIsoWeek(d) {
+      const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7)); // Donnerstag der Woche
+      const jan4 = new Date(t.getFullYear(), 0, 4);
+      return 1 + Math.round(((t - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+    }
+
+    function planTypLabel(typ, fallbackLabel) {
+      if (TYP_LABELS[typ]) return TYP_LABELS[typ];
+      const custom = customTrainingTypes.find(t => t.id === typ);
+      return '🏅 ' + (custom?.label || fallbackLabel || typ || 'Aktivität');
+    }
+
+    function planMinToZeit(min) {
+      const totalSec = Math.round((Number(min) || 0) * 60);
+      const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), sec = totalSec % 60;
+      return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':');
+    }
+
+    function planTarget(u) {
+      return [
+        u.distanzKm > 0 ? String(u.distanzKm).replace('.', ',') + ' km' : '',
+        u.dauerMin > 0 ? u.dauerMin + ' min' : ''
+      ].filter(Boolean).join(' · ');
+    }
+
+    // Ordnet Plan-Einheiten eines Tages den vorhandenen Einträgen zu
+    function planMatchDay(units, dayEntries) {
+      const used = new Set();
+      const result = units.map(u => ({ unit: u, entry: null, via: null }));
+      // 1. Manuell abgehakte Einheiten (planUnitId)
+      result.forEach(r => {
+        const e = dayEntries.find(e => !used.has(e) && e.source === 'plan' && e.planUnitId === r.unit.id);
+        if (e) { r.entry = e; r.via = 'plan'; used.add(e); }
+      });
+      // 2. Sonstige Einträge gleichen Typs (Garmin/Google Fit/manuell geloggt)
+      result.forEach(r => {
+        if (r.entry) return;
+        const e = dayEntries.find(e => !used.has(e) && e.source !== 'plan' && e.typ === r.unit.typ);
+        if (e) { r.entry = e; r.via = isAutoActivity(e) ? 'garmin' : 'log'; used.add(e); }
+      });
+      const extra = dayEntries.filter(e => !used.has(e));
+      return { result, extra };
+    }
+
+    function renderTrainingPlan(force) {
+      const container = document.getElementById('training-plan-container');
+      if (!container) return;
+      // Nur rendern wenn sichtbar; Editor nicht durch Hintergrund-Sync zurücksetzen
+      if (!force && !document.getElementById('training-plan-subtab')?.classList.contains('active')) return;
+      if (planEditMode) {
+        if (force) renderPlanEditor(container);
+        return;
+      }
+      renderPlanWeek(container);
+    }
+    window.renderTrainingPlan = renderTrainingPlan;
+
+    function renderPlanWeek(container) {
+      const dates = planWeekDates(planWeekOffset);
+      const todayStr = planYmd(new Date());
+      const fmtShort = d => d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+      const navBtn = 'width:40px;height:40px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;cursor:pointer;';
+      const hasPlan = PLAN_DAYS.some(({ key }) => (trainingPlan[key] || []).length > 0);
+
+      let totalPlanned = 0, totalDone = 0;
+      let daysHtml = '';
+
+      dates.forEach((d, i) => {
+        const { key, label } = PLAN_DAYS[i];
+        const ds = planYmd(d);
+        const isToday = ds === todayStr;
+        const isFuture = ds > todayStr;
+        const units = trainingPlan[key] || [];
+        const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
+        const { result, extra } = planMatchDay(units, dayEntries);
+        totalPlanned += result.length;
+        totalDone += result.filter(r => r.entry).length;
+
+        let rows = '';
+        result.forEach(({ unit: u, entry: e, via }) => {
+          const title = planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
+          const target = planTarget(u);
+          let left, status = '';
+          if (e) {
+            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:var(--primary);color:#fff;font-size:14px;flex-shrink:0;">✓</span>`;
+            const actual = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
+            const kcal = calcActivityKcal(e);
+            const viaText = via === 'garmin' ? '✓ via Garmin' : via === 'log' ? '✓ erfasst' : '✓ abgehakt';
+            status = `<div style="font-size:12px;color:var(--primary);">${viaText}${actual ? ' · ' + actual : ''}${kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : ''}</div>`;
+            if (via === 'plan') {
+              status += `<button onclick="undoPlanUnit('${planEsc(e.id)}')" style="margin-top:4px;padding:2px 8px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;cursor:pointer;">Rückgängig</button>`;
+            }
+          } else if (isFuture) {
+            left = `<span style="width:24px;height:24px;display:inline-block;border-radius:6px;border:2px dashed var(--border);flex-shrink:0;"></span>`;
+          } else {
+            left = `<button onclick="openPlanComplete('${ds}','${u.id}')" title="Abhaken" style="width:44px;height:44px;margin:-10px -10px -10px -10px;padding:10px;border:none;background:none;cursor:pointer;flex-shrink:0;"><span style="display:block;width:24px;height:24px;box-sizing:border-box;border-radius:6px;border:2px solid var(--primary);"></span></button>`;
+          }
+          rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);">
+            ${left}
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:500;font-size:14px;${e ? 'opacity:.75;' : ''}">${title}</div>
+              ${target ? `<div style="font-size:12px;color:var(--muted);">Ziel: ${target}</div>` : ''}
+              ${u.notiz ? `<div style="font-size:12px;color:var(--muted);">${planEsc(u.notiz)}</div>` : ''}
+              ${status}
+            </div>
+          </div>`;
+        });
+
+        extra.forEach(e => {
+          const title = planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
+          const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
+          const kcal = calcActivityKcal(e);
+          rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);opacity:.6;">
+            <span style="width:24px;text-align:center;flex-shrink:0;font-size:12px;color:var(--muted);">+</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;">${title}</div>
+              <div style="font-size:12px;color:var(--muted);">${meta}${kcal > 0 ? ` · ${fmt(kcal)} kcal` : ''}</div>
+            </div>
+          </div>`;
+        });
+
+        if (!rows) rows = `<div style="padding:8px 0;border-top:1px solid var(--border);font-size:13px;color:var(--muted);">Ruhetag</div>`;
+
+        daysHtml += `<div style="background:var(--surface);border:1px solid ${isToday ? 'var(--primary)' : 'var(--border)'};border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+            <span style="font-weight:600;${isToday ? 'color:var(--primary);' : ''}">${label}${isToday ? ' · Heute' : ''}</span>
+            <span style="font-size:12px;color:var(--muted);">${fmtShort(d)}</span>
+          </div>
+          ${rows}
+        </div>`;
+      });
+
+      container.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+          <button onclick="shiftPlanWeek(-1)" style="${navBtn}">‹</button>
+          <div style="text-align:center;">
+            <div style="font-weight:600;">KW ${planIsoWeek(dates[0])} · ${fmtShort(dates[0])}–${fmtShort(dates[6])}</div>
+            <div style="font-size:12px;color:var(--muted);">${totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : ''}${planWeekOffset !== 0 ? ` · <a href="#" onclick="shiftPlanWeek(0);return false;" style="color:var(--primary);">Heute</a>` : ''}</div>
+          </div>
+          <button onclick="shiftPlanWeek(1)" style="${navBtn}">›</button>
+        </div>
+        ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">Noch kein Trainingsplan angelegt.</div>`}
+        ${daysHtml}
+        <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">✏️ Plan bearbeiten</button>`;
+    }
+
+    window.shiftPlanWeek = function(dir) {
+      planWeekOffset = dir === 0 ? 0 : planWeekOffset + dir;
+      renderTrainingPlan(true);
+    };
+
+    // ── Editor ────────────────────────────────────────────────────────────────
+    function planTypeOptions(selected) {
+      const opts = PLAN_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
+      customTrainingTypes.forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      // Typen aus dem Plan, die (noch) nicht in den Listen sind
+      PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
+        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: '🏅 ' + (u.typLabel || u.typ) });
+      }));
+      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
+        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigener Typ…</option>`;
+    }
+
+    function renderPlanEditor(container) {
+      const inp = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
+      const lbl = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
+      let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="margin:0;">Plan bearbeiten</h3>
+          <button onclick="cancelPlanEditor()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;">Abbrechen</button>
+        </div>`;
+
+      PLAN_DAYS.forEach(({ key, label }) => {
+        const units = planDraft[key];
+        html += `<details ${planOpenDays.has(key) ? 'open' : ''} ontoggle="planToggleDay('${key}',this.open)" style=""background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:10px;">
+          <summary style="cursor:pointer;font-weight:600;padding:4px 0;">${label} <span style="font-weight:400;font-size:12px;color:var(--muted);">${units.length ? units.length + ' Einheit' + (units.length > 1 ? 'en' : '') : 'Ruhetag'}</span></summary>`;
+        units.forEach((u, idx) => {
+          const isCustom = u.typ === PLAN_CUSTOM_OPTION;
+          html += `<div style="border-top:1px solid var(--border);padding:10px 0;">
+            <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
+              <div style="flex:1;">
+                <label style="${lbl}">Typ</label>
+                <select onchange="planEditType('${key}',${idx},this.value)" style="${inp}">${planTypeOptions(u.typ)}</select>
+              </div>
+              <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">🗑</button>
+            </div>
+            ${isCustom ? `<div style="margin-bottom:8px;"><label style="${lbl}">Name des neuen Typs</label>
+              <input type="text" value="${planEsc(u.typLabel)}" placeholder="z.B. Mobility" oninput="planEditField('${key}',${idx},'typLabel',this.value)" style="${inp}"></div>` : ''}
+            <div style="margin-bottom:8px;"><label style="${lbl}">Variante (optional)</label>
+              <input type="text" value="${planEsc(u.variant)}" placeholder="z.B. Intervall, Tempo, Bulgarian Split Squat" oninput="planEditField('${key}',${idx},'variant',this.value)" style="${inp}"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div><label style="${lbl}">Zieldistanz (km)</label>
+                <input type="number" min="0" step="0.1" inputmode="decimal" value="${u.distanzKm ?? ''}" oninput="planEditField('${key}',${idx},'distanzKm',this.value)" style="${inp}"></div>
+              <div><label style="${lbl}">Zieldauer (min)</label>
+                <input type="number" min="0" step="1" inputmode="numeric" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>
+            </div>
+            <div><label style="${lbl}">Notiz (optional)</label>
+              <input type="text" value="${planEsc(u.notiz)}" oninput="planEditField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
+          </div>`;
+        });
+        html += `<button onclick="planAddUnit('${key}')" style="width:100%;margin-top:6px;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Einheit</button>
+        </details>`;
+      });
+
+      html += `<button id="plan-save-btn" class="btn" onclick="saveTrainingPlan()" style="width:100%;margin-top:6px;">💾 Speichern</button>`;
+      container.innerHTML = html;
+    }
+
+    window.openPlanEditor = function() {
+      planDraft = JSON.parse(JSON.stringify(normalizeTrainingPlan(trainingPlan)));
+      planOpenDays = new Set(PLAN_DAYS.filter(({ key }) => planDraft[key].length > 0).map(({ key }) => key));
+      planEditMode = true;
+      renderTrainingPlan(true);
+    };
+
+    window.cancelPlanEditor = function() {
+      planEditMode = false;
+      planDraft = null;
+      renderTrainingPlan(true);
+    };
+
+    window.planToggleDay = function(key, open) {
+      if (open) planOpenDays.add(key); else planOpenDays.delete(key);
+    };
+
+    window.planAddUnit = function(key) {
+      planDraft[key].push({
+        id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, notiz: ''
+      });
+      renderTrainingPlan(true);
+    };
+
+    window.planRemoveUnit = function(key, idx) {
+      planDraft[key].splice(idx, 1);
+      renderTrainingPlan(true);
+    };
+
+    window.planEditType = function(key, idx, value) {
+      const u = planDraft[key][idx];
+      u.typ = value;
+      if (value !== PLAN_CUSTOM_OPTION) u.typLabel = '';
+      renderTrainingPlan(true); // Freitextfeld ein-/ausblenden
+    };
+
+    window.planEditField = function(key, idx, field, value) {
+      const u = planDraft[key][idx];
+      if (field === 'distanzKm' || field === 'dauerMin') {
+        const n = parseFloat(String(value).replace(',', '.'));
+        u[field] = isNaN(n) || n <= 0 ? null : n;
+      } else {
+        u[field] = value;
+      }
+    };
+
+    window.saveTrainingPlan = async function() {
+      // Eigene Freitext-Typen validieren und als Trainingsart registrieren
+      const newTypes = [];
+      for (const { key, label } of PLAN_DAYS) {
+        for (const u of planDraft[key]) {
+          if (u.typ !== PLAN_CUSTOM_OPTION) continue;
+          const name = (u.typLabel || '').trim();
+          if (!name) { showToast(`❌ ${label}: Namen für eigenen Typ eingeben`); return; }
+          const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          u.typ = id;
+          u.typLabel = name;
+          if (!customTrainingTypes.find(t => t.id === id) && !newTypes.find(t => t.id === id)) newTypes.push({ id, label: name });
+        }
+      }
+
+      const btn = document.getElementById('plan-save-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Speichere...'; }
+      try {
+        for (const t of newTypes) {
+          await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, addedBy: userId });
+          customTrainingTypes.push(t);
+        }
+        if (newTypes.length) {
+          customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+          renderCustomTypes();
+          updateTrainingTypeSelect();
+        }
+
+        const plan = normalizeTrainingPlan(planDraft);
+        await setDoc(doc(db, 'users', userId, 'settings', 'trainingplan'), { ...plan, updatedAt: new Date().toISOString() });
+        trainingPlan = plan;
+        cachePut('trainingplan', trainingPlan);
+        planEditMode = false;
+        planDraft = null;
+        renderTrainingPlan(true);
+        showToast('✓ Trainingsplan gespeichert');
+      } catch (err) {
+        console.error('Plan save error:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+        // Gespeicherte Typ-IDs im Draft lassen; Editor neu zeichnen
+        renderTrainingPlan(true);
+      }
+    };
+
+    // ── Abhaken ───────────────────────────────────────────────────────────────
+    function planCompleteEntryFromInputs() {
+      const { ds, unit } = planCompleteCtx;
+      const dauer = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
+      const distWrapVisible = document.getElementById('plan-complete-distanz-wrap').style.display !== 'none';
+      const distanz = distWrapVisible ? (parseFloat(String(document.getElementById('plan-complete-distanz').value).replace(',', '.')) || 0) : 0;
+      const notiz = document.getElementById('plan-complete-notiz').value.trim();
+      return {
+        datum: ds,
+        typ: unit.typ,
+        variant: unit.variant || '',
+        variantLabel: unit.variant || '',
+        distanz: distanz > 0 ? Math.round(distanz * 100) / 100 : 0,
+        zeit: planMinToZeit(dauer),
+        notiz,
+        source: 'plan',
+        planUnitId: unit.id
+      };
+    }
+
+    window.openPlanComplete = function(ds, unitId) {
+      const dayIdx = (new Date(ds + 'T12:00:00').getDay() + 6) % 7;
+      const unit = (trainingPlan[PLAN_DAYS[dayIdx].key] || []).find(u => u.id === unitId);
+      if (!unit) return;
+      planCompleteCtx = { ds, unit };
+      const d = new Date(ds + 'T12:00:00');
+      document.getElementById('plan-complete-title').textContent =
+        planTypLabel(unit.typ, unit.typLabel) + (unit.variant ? ' · ' + unit.variant : '') + ' — ' +
+        d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+      document.getElementById('plan-complete-dauer').value = unit.dauerMin ?? '';
+      const showDist = PLAN_DISTANCE_TYPES.includes(unit.typ) || unit.distanzKm > 0;
+      document.getElementById('plan-complete-distanz-wrap').style.display = showDist ? '' : 'none';
+      document.getElementById('plan-complete-distanz').value = unit.distanzKm ?? '';
+      document.getElementById('plan-complete-notiz').value = '';
+      updatePlanCompletePreview();
+      pushModalState();
+      document.getElementById('plan-complete-modal').style.display = 'flex';
+    };
+
+    window.closePlanComplete = function() {
+      document.getElementById('plan-complete-modal').style.display = 'none';
+      planCompleteCtx = null;
+    };
+
+    window.updatePlanCompletePreview = function() {
+      if (!planCompleteCtx) return;
+      const kcal = calcActivityKcal(planCompleteEntryFromInputs());
+      document.getElementById('plan-complete-preview').textContent = kcal > 0 ? `≈ ${fmt(kcal)} kcal Aktivität` : '';
+    };
+
+    window.savePlanComplete = async function() {
+      if (!planCompleteCtx) return;
+      const base = planCompleteEntryFromInputs();
+      if (base.zeit === '00:00:00' && !(base.distanz > 0)) {
+        showToast('❌ Bitte Dauer angeben');
+        return;
+      }
+      const timeNow = new Date().toTimeString().slice(0, 8);
+      const entry = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        ...base,
+        timestamp: base.datum + 'T' + timeNow
+      };
+      entry.act_kcal_calc = calcActivityKcal(entry);
+
+      const btn = document.getElementById('plan-complete-save');
+      btn.disabled = true;
+      try {
+        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        trainingEntries.push(entry);
+        window.trainingEntries = trainingEntries;
+        saveToCache();
+        closePlanComplete();
+        renderFoodLog();          // Kalorienziel + Aktivitäten
+        renderTrainingHistory();  // rendert auch den Plan neu
+        renderDataStats();
+        showToast('✓ Einheit eingetragen');
+      } catch (err) {
+        console.error('Plan complete error:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    window.undoPlanUnit = async function(entryId) {
+      if (!await showConfirm('Abhaken rückgängig?', 'Der zugehörige Trainingseintrag wird gelöscht.')) return;
+      try {
+        await deleteDoc(doc(userTrainingCol(), String(entryId)));
+        trainingEntries = trainingEntries.filter(e => String(e.id) !== String(entryId));
+        window.trainingEntries = trainingEntries;
+        saveToCache();
+        renderFoodLog();
+        renderTrainingHistory();
+        renderDataStats();
+        showToast('✓ Rückgängig gemacht');
+      } catch (err) {
+        console.error('Plan undo error:', err);
+        showToast('❌ Löschen fehlgeschlagen');
+      }
+    };
 
     // ── Eigene Trainingsarten ─────────────────────────────────────────────────
     let customTrainingTypes = [];

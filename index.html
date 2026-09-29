@@ -1280,7 +1280,7 @@
 
   <!-- Plan-Einheit abhaken Modal -->
   <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
       <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
       <!-- Nur bei Zirkel -->
@@ -1296,6 +1296,16 @@
             <input type="number" id="plan-complete-pause" min="0" step="0.5" inputmode="decimal" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
         </div>
+      </div>
+      <!-- Nur bei Kraft/Bodyweight-Einzeleinheiten -->
+      <div id="plan-complete-sets-wrap" style="display:none;margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Anzahl Sets</label>
+            <input type="number" id="plan-complete-sets" min="1" max="20" step="1" inputmode="numeric" oninput="renderPlanCompleteReps()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          </div>
+        </div>
+        <div id="plan-complete-reps" style="margin-top:10px;"></div>
       </div>
       <div id="plan-complete-dauer-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
@@ -5783,7 +5793,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const isManual = !isGarmin && !isPlan;
         // Parse sets string "11-10-7" only for manual entries; Garmin/GFit use sets as plain info text
         let setsArr = [], setsTotal = 0, setsDisplay = '';
-        if (isManual) {
+        if (isManual || (isPlan && e.sets)) {
           setsArr = (e.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
           setsTotal = setsArr.reduce((s, n) => s + n, 0);
           setsDisplay = setsArr.length > 0
@@ -5794,7 +5804,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         }
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
-        if (isPlan) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
+        if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -7198,7 +7208,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const distWrapVisible = document.getElementById('plan-complete-distanz-wrap').style.display !== 'none';
       const distanz = distWrapVisible ? (parseFloat(String(document.getElementById('plan-complete-distanz').value).replace(',', '.')) || 0) : 0;
       const notiz = document.getElementById('plan-complete-notiz').value.trim();
+      const setsVisible = document.getElementById('plan-complete-sets-wrap').style.display !== 'none';
+      const setsStr = setsVisible ? planCompleteRepValues().filter(v => v > 0).join('-') : '';
       return {
+        ...(setsStr ? { sets: setsStr } : {}), // "12-10-8" wie im Loggen-Tab
         datum: ds,
         typ: unit.typ,
         variant: unit.variant || '',
@@ -7237,7 +7250,12 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       document.getElementById('plan-complete-distanz-wrap').style.display = showDist ? '' : 'none';
       document.getElementById('plan-complete-distanz').value = unit.distanzKm ?? '';
       document.getElementById('plan-complete-notiz').value = '';
-      updatePlanCompletePreview();
+      const isStrength = !isZirkel && planUnitKind(unit.typ) === 'strength';
+      document.getElementById('plan-complete-sets-wrap').style.display = isStrength ? '' : 'none';
+      document.getElementById('plan-complete-reps').innerHTML = '';
+      document.getElementById('plan-complete-sets').value = isStrength && unit.sets ? unit.sets : '';
+      if (isStrength) renderPlanCompleteReps(); // ruft auch updatePlanCompletePreview()
+      else updatePlanCompletePreview();
       pushModalState();
       document.getElementById('plan-complete-modal').style.display = 'flex';
     };
@@ -7249,6 +7267,40 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
         const pauseMin = Math.max(0, parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0);
         document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseMin, uebungen: planCompleteCtx.unit.uebungen });
+      }
+      updatePlanCompletePreview();
+    };
+
+    // ── Kraft-Einzeleinheit: Wdh je Set ──────────────────────────────────────
+    function planCompleteRepValues() {
+      return [...document.querySelectorAll('#plan-complete-reps input')].map(i => parseInt(i.value) || 0);
+    }
+
+    // Sets geändert → N Wdh-Felder (vorhandene Werte bleiben, neue vorbelegt mit Plan-Wdh bzw. letztem Wert)
+    window.renderPlanCompleteReps = function() {
+      if (!planCompleteCtx) return;
+      const n = Math.min(20, Math.max(0, parseInt(document.getElementById('plan-complete-sets').value) || 0));
+      const prev = planCompleteRepValues();
+      const fallback = planCompleteCtx.unit.repsPerSet || prev.filter(v => v > 0).pop() || '';
+      let html = '';
+      for (let i = 0; i < n; i++) {
+        const val = prev[i] > 0 ? prev[i] : fallback;
+        html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i + 1}</span>
+          <input type="number" min="0" max="999" step="1" inputmode="numeric" placeholder="Wdh." value="${val}" oninput="planStrengthRecalcDauer()" onfocus="this.select()"
+            style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+        </div>`;
+      }
+      document.getElementById('plan-complete-reps').innerHTML = html;
+      planStrengthRecalcDauer();
+    };
+
+    // Dauer = ceil(Σ Wdh × 3s / 60), solange nicht manuell überschrieben
+    window.planStrengthRecalcDauer = function() {
+      if (!planCompleteCtx) return;
+      const sum = planCompleteRepValues().reduce((a, b) => a + b, 0);
+      if (!planCompleteCtx.dauerManual && sum > 0) {
+        document.getElementById('plan-complete-dauer').value = Math.ceil(sum * PLAN_SEC_PER_REP / 60);
       }
       updatePlanCompletePreview();
     };

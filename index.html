@@ -1590,7 +1590,9 @@
     let trainingEntries = [];
     let favorites = new Set(); // Set von IDs: 'food_123' oder 'recipe_456'
     let dayLogs = [];
-    let trainingPlan = {}; // { mo: [unit], di: [...], ... } – settings/trainingplan
+    let trainingPlan = {};        // aktueller Plan { mo: [unit], di: [...], ... } – users/{uid}/trainingplans/{Montag}
+    let trainingPlanFrom = null;  // Montag (yyyy-mm-dd), ab dem die aktuelle Version gilt
+    let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
     
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -1606,6 +1608,7 @@
     const userLogCol = () => collection(db, 'users', userId, 'logEntries');
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
+    const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
     // Weekly stats state
     let weeklyStats = {};
 
@@ -1660,6 +1663,7 @@
           cacheGet('settings'),
           cacheGet('trainingplan'),
         ]);
+        const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         let hasCache = false;
         if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
         if (cachedRecipes?.length) { recipes = cachedRecipes; window.recipes = recipes; hasCache = true; }
@@ -1684,7 +1688,8 @@
         }
         if (cachedFavs) { favorites = new Set(cachedFavs); hasCache = true; }
         if (cachedSettings) { settings = { ...settings, ...cachedSettings }; }
-        if (cachedPlan) { trainingPlan = cachedPlan; }
+        if (cachedPlan) { trainingPlan = normalizeTrainingPlan(cachedPlan); trainingPlanFrom = cachedPlanFrom || null; }
+        if (cachedPlanWeeks) { planWeekPlans = cachedPlanWeeks; }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -1703,6 +1708,7 @@
         cachePut('favorites', [...favorites]),
         cachePut('settings', settings),
         cachePut('trainingplan', trainingPlan),
+        cachePut('trainingplan_from', trainingPlanFrom),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -1822,9 +1828,8 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
-        // Load Trainingsplan
-        const planSnap = await getDoc(doc(db, 'users', userId, 'settings', 'trainingplan'));
-        trainingPlan = planSnap.exists() ? normalizeTrainingPlan(planSnap.data()) : {};
+        // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan)
+        await loadCurrentTrainingPlan();
 
         console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
         if (backgroundSync) showToast(`✓ Synchronisiert`);
@@ -6407,8 +6412,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TRAININGSPLAN
-    // Plan: users/{uid}/settings/trainingplan = { mo: [unit], ..., so: [unit], updatedAt }
-    // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, notiz }
+    // Plan-Versionen: users/{uid}/trainingplans/{Montag} = { mo: [unit], ..., so: [unit], datum, updatedAt }
+    //   (früher users/{uid}/settings/trainingplan – wird beim ersten Laden migriert)
+    // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, sets, repsPerSet, notiz }
     // zirkel: { id, typ:'zirkel', runden, pauseMin, uebungen:[{typ, variant, wdh}], dauerMin (berechnet), notiz }
     // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet (planMatchDay):
     //  - Eintrag mit source:'plan' + planUnitId am Tag  → manuell abgehakt
@@ -6423,6 +6429,19 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     const PLAN_BASE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen',
       'kraft', 'yoga', 'cardio', 'pullups', 'pushups', 'lunges', 'terraband_knie'];
     const PLAN_DISTANCE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen'];
+    const PLAN_TIME_TYPES = ['yoga', 'cardio'];
+    const PLAN_SEC_PER_REP = 3;
+    // Feld-Kategorie einer Einheit: Ausdauer (km + min), Zeit (min), Kraft/Bodyweight inkl. custom (Sets × Wdh)
+    function planUnitKind(typ) {
+      if (PLAN_DISTANCE_TYPES.includes(typ)) return 'endurance';
+      if (PLAN_TIME_TYPES.includes(typ)) return 'time';
+      return 'strength';
+    }
+    // Kraft: Zieldauer = ceil(Sets × Wdh × 3s / 60)
+    function calcStrengthDauerMin(sets, reps) {
+      const s = parseInt(sets) || 0, r = parseInt(reps) || 0;
+      return s > 0 && r > 0 ? Math.ceil(s * r * PLAN_SEC_PER_REP / 60) : null;
+    }
     const PLAN_CUSTOM_OPTION = '__custom__';
     const ZIRKEL_BASE_TYPES = ['pullups', 'pushups', 'kraft', 'terraband_knie', 'lunges'];
     const ZIRKEL_SEC_PER_WDH = 3;
@@ -6466,15 +6485,22 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         z.dauerMin = calcZirkelDauerMin(z);
         return z;
       }
-      return {
+      const num = v => v != null && v !== '' && !isNaN(Number(v)) && Number(v) > 0 ? Number(v) : null;
+      const kind = planUnitKind(u.typ);
+      const unit = {
         id,
         typ: u.typ || '',
         typLabel: u.typLabel || '',
         variant: String(u.variant || '').trim(),
-        distanzKm: u.distanzKm != null && u.distanzKm !== '' ? Number(u.distanzKm) : null,
-        dauerMin: u.dauerMin != null && u.dauerMin !== '' ? Number(u.dauerMin) : null,
+        distanzKm: kind === 'endurance' ? num(u.distanzKm) : null,
+        dauerMin: num(u.dauerMin),
+        sets: kind === 'strength' ? (parseInt(u.sets) || null) : null,
+        repsPerSet: kind === 'strength' ? (parseInt(u.repsPerSet) || null) : null,
         notiz: u.notiz || ''
       };
+      // Kraft mit Sets × Wdh: Dauer berechnet; ältere Einheiten ohne Sets behalten ihre Zieldauer
+      if (kind === 'strength') unit.dauerMin = calcStrengthDauerMin(unit.sets, unit.repsPerSet) ?? unit.dauerMin;
+      return unit;
     }
 
     function normalizeTrainingPlan(data) {
@@ -6483,6 +6509,77 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         plan[key] = Array.isArray(data?.[key]) ? data[key].map(normalizePlanUnit) : [];
       });
       return plan;
+    }
+
+    // ── Plan-Versionen ────────────────────────────────────────────────────────
+    // users/{uid}/trainingplans/{Montag} = { mo..so, datum: Montag, updatedAt }
+    // Gültig für eine Woche ist die Version mit dem größten datum ≤ Montag dieser Woche.
+    function planCurrentMonday() {
+      return planYmd(planWeekDates(0)[0]);
+    }
+
+    async function fetchPlanVersion(monday) {
+      const snap = await getDocs(query(userPlanCol(), where('datum', '<=', monday), orderBy('datum', 'desc'), limit(1)));
+      if (snap.empty) return null;
+      const d = snap.docs[0];
+      return { plan: normalizeTrainingPlan(d.data()), from: d.data().datum || d.id };
+    }
+
+    async function loadCurrentTrainingPlan() {
+      const monday = planCurrentMonday();
+      try {
+        const current = await fetchPlanVersion(monday);
+        if (current) {
+          trainingPlan = current.plan;
+          trainingPlanFrom = current.from;
+          return;
+        }
+        // Migration: altes Einzeldokument als erste Version ab dieser Woche übernehmen.
+        // settings/trainingplan bleibt als Backup stehen und wird danach ignoriert.
+        const legacySnap = await getDoc(doc(db, 'users', userId, 'settings', 'trainingplan'));
+        if (legacySnap.exists()) {
+          const plan = normalizeTrainingPlan(legacySnap.data());
+          await setDoc(doc(userPlanCol(), monday), {
+            ...plan, datum: monday,
+            updatedAt: legacySnap.data().updatedAt || new Date().toISOString(),
+            migratedFrom: 'settings/trainingplan'
+          });
+          trainingPlan = plan;
+          trainingPlanFrom = monday;
+          console.log('✓ Trainingsplan nach trainingplans/' + monday + ' migriert');
+        } else {
+          trainingPlan = {};
+          trainingPlanFrom = null;
+        }
+      } catch (err) {
+        console.warn('Trainingsplan-Versionen nicht ladbar, nutze settings/trainingplan:', err);
+        const legacySnap = await getDoc(doc(db, 'users', userId, 'settings', 'trainingplan')).catch(() => null);
+        if (legacySnap?.exists()) { trainingPlan = normalizeTrainingPlan(legacySnap.data()); trainingPlanFrom = null; }
+      }
+    }
+
+    // Plan für die Woche ab `monday`: null = muss erst geladen werden
+    function planForWeek(monday) {
+      if (monday >= planCurrentMonday() || (trainingPlanFrom && monday >= trainingPlanFrom)) return trainingPlan;
+      return planWeekPlans[monday]?.plan ?? null;
+    }
+
+    const planWeekLoading = new Set();
+    async function loadPlanForWeek(monday) {
+      if (planWeekLoading.has(monday)) return;
+      planWeekLoading.add(monday);
+      try {
+        const v = await fetchPlanVersion(monday);
+        // Vergangene Versionen ändern sich nie (gespeichert wird nur der aktuelle Montag) → dauerhaft cachebar
+        planWeekPlans[monday] = v || { plan: {}, from: null };
+        cachePut('trainingplan_weeks', planWeekPlans);
+      } catch (err) {
+        console.warn('Plan-Version laden fehlgeschlagen:', err);
+        planWeekPlans[monday] = { plan: {}, from: null, error: true };
+      } finally {
+        planWeekLoading.delete(monday);
+        renderTrainingPlan(true);
+      }
     }
 
     function planEsc(str) {
@@ -6542,6 +6639,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     function planTarget(u) {
       return [
+        u.sets > 0 && u.repsPerSet > 0 ? `${u.sets} × ${u.repsPerSet} Wdh` : '',
         u.distanzKm > 0 ? String(u.distanzKm).replace('.', ',') + ' km' : '',
         u.dauerMin > 0 ? u.dauerMin + ' min' : ''
       ].filter(Boolean).join(' · ');
@@ -6609,7 +6707,24 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const todayStr = planYmd(new Date());
       const fmtShort = d => d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
       const navBtn = 'width:40px;height:40px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;cursor:pointer;';
-      const hasPlan = PLAN_DAYS.some(({ key }) => (trainingPlan[key] || []).length > 0);
+      const weekMonday = planYmd(dates[0]);
+      const weekPlan = planForWeek(weekMonday);
+      const weekHeader = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+          <button onclick="shiftPlanWeek(-1)" style="${navBtn}">‹</button>
+          <div style="text-align:center;">
+            <div style="font-weight:600;">KW ${planIsoWeek(dates[0])} · ${fmtShort(dates[0])}–${fmtShort(dates[6])}</div>
+            <div style="font-size:12px;color:var(--muted);">%STATUS%${planWeekOffset !== 0 ? ` · <a href="#" onclick="shiftPlanWeek(0);return false;" style="color:var(--primary);">Heute</a>` : ''}</div>
+          </div>
+          <button onclick="shiftPlanWeek(1)" style="${navBtn}">›</button>
+        </div>`;
+      if (!weekPlan) {
+        container.innerHTML = weekHeader.replace('%STATUS%', '') +
+          `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:14px;">⏳ Lade Plan dieser Woche…</div>`;
+        loadPlanForWeek(weekMonday);
+        return;
+      }
+      const hasPlan = PLAN_DAYS.some(({ key }) => (weekPlan[key] || []).length > 0);
 
       let totalPlanned = 0, totalDone = 0;
       let daysHtml = '';
@@ -6619,7 +6734,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         const ds = planYmd(d);
         const isToday = ds === todayStr;
         const isFuture = ds > todayStr;
-        const units = trainingPlan[key] || [];
+        const units = weekPlan[key] || [];
         const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
         const { result, extra } = planMatchDay(units, dayEntries);
         totalPlanned += result.length;
@@ -6704,16 +6819,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         </div>`;
       });
 
-      container.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
-          <button onclick="shiftPlanWeek(-1)" style="${navBtn}">‹</button>
-          <div style="text-align:center;">
-            <div style="font-weight:600;">KW ${planIsoWeek(dates[0])} · ${fmtShort(dates[0])}–${fmtShort(dates[6])}</div>
-            <div style="font-size:12px;color:var(--muted);">${totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : ''}${planWeekOffset !== 0 ? ` · <a href="#" onclick="shiftPlanWeek(0);return false;" style="color:var(--primary);">Heute</a>` : ''}</div>
-          </div>
-          <button onclick="shiftPlanWeek(1)" style="${navBtn}">›</button>
-        </div>
-        ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">Noch kein Trainingsplan angelegt.</div>`}
+      const isPastWeek = weekMonday < planCurrentMonday();
+      const emptyText = isPastWeek ? 'Für diese Woche gab es noch keinen Trainingsplan.' : 'Noch kein Trainingsplan angelegt.';
+      container.innerHTML = weekHeader.replace('%STATUS%', totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : '') + `
+        ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">${emptyText}</div>`}
         ${daysHtml}
         <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">✏️ Plan bearbeiten</button>`;
     }
@@ -6820,6 +6929,35 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return html;
     }
 
+    function planStrengthDauerText(u) {
+      const d = calcStrengthDauerMin(u.sets, u.repsPerSet) ?? u.dauerMin;
+      return d > 0 ? `⏱ Zieldauer: ${d} min` : '⏱ Zieldauer: – (Sets und Wdh eintragen)';
+    }
+
+    // Zielfelder je nach Typ: Ausdauer km + min · Zeit nur min · Kraft/Bodyweight Sets × Wdh (Dauer berechnet)
+    function renderPlanUnitTargetFields(key, idx, u, inp, lbl) {
+      const dauerField = `<div><label style="${lbl}">Zieldauer (min)</label>
+          <input type="number" min="0" step="1" inputmode="numeric" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>`;
+      const kind = planUnitKind(u.typ);
+      if (kind === 'endurance') {
+        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><label style="${lbl}">Zieldistanz (km)</label>
+              <input type="number" min="0" step="0.1" inputmode="decimal" value="${u.distanzKm ?? ''}" oninput="planEditField('${key}',${idx},'distanzKm',this.value)" style="${inp}"></div>
+            ${dauerField}
+          </div>`;
+      }
+      if (kind === 'time') {
+        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">${dauerField}</div>`;
+      }
+      return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;">
+          <div><label style="${lbl}">Anzahl Sets</label>
+            <input type="number" min="0" step="1" inputmode="numeric" value="${u.sets ?? ''}" oninput="planEditField('${key}',${idx},'sets',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Wdh pro Set</label>
+            <input type="number" min="0" step="1" inputmode="numeric" value="${u.repsPerSet ?? ''}" oninput="planEditField('${key}',${idx},'repsPerSet',this.value)" style="${inp}"></div>
+        </div>
+        <div id="udauer-${key}-${idx}" style="font-size:12px;color:var(--muted);margin-bottom:8px;">${planStrengthDauerText(u)}</div>`;
+    }
+
     function renderPlanEditor(container) {
       const inp = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
       const lbl = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
@@ -6848,12 +6986,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             <div style="margin-bottom:8px;"><label style="${lbl}">Variante (optional)</label>
               <select onchange="planEditVariant('${key}',${idx},this.value)" style="${inp}">${planVariantOptions(u)}</select>
               ${u._variantCustom ? `<input type="text" value="${planEsc(u.variant)}" placeholder="z.B. Intervall, Tempo, Bulgarian Split Squat" oninput="planEditField('${key}',${idx},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-              <div><label style="${lbl}">Zieldistanz (km)</label>
-                <input type="number" min="0" step="0.1" inputmode="decimal" value="${u.distanzKm ?? ''}" oninput="planEditField('${key}',${idx},'distanzKm',this.value)" style="${inp}"></div>
-              <div><label style="${lbl}">Zieldauer (min)</label>
-                <input type="number" min="0" step="1" inputmode="numeric" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>
-            </div>
+            ${renderPlanUnitTargetFields(key, idx, u, inp, lbl)}
             <div><label style="${lbl}">Notiz (optional)</label>
               <input type="text" value="${planEsc(u.notiz)}" oninput="planEditField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
           </div>`;
@@ -6865,7 +6998,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         </details>`;
       });
 
-      html += `<button id="plan-save-btn" class="btn" onclick="saveTrainingPlan()" style="width:100%;margin-top:6px;">💾 Speichern</button>`;
+      const fromEarlierWeek = trainingPlanFrom && trainingPlanFrom < planCurrentMonday();
+      html += `<button id="plan-save-btn" class="btn" onclick="saveTrainingPlan()" style="width:100%;margin-top:6px;">💾 ${fromEarlierWeek ? 'Speichern (gilt ab dieser Woche)' : 'Speichern'}</button>`;
       container.innerHTML = html;
     }
 
@@ -6937,7 +7071,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.planAddUnit = function(key) {
       planDraft[key].push({
         id: newPlanUnitId(),
-        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, notiz: ''
+        typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, sets: null, repsPerSet: null, notiz: ''
       });
       renderTrainingPlan(true);
     };
@@ -6951,10 +7085,14 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const u = planDraft[key][idx];
       u.typ = value;
       if (value !== PLAN_CUSTOM_OPTION) u.typLabel = '';
-      // Varianten gehören zum Typ → zurücksetzen
+      // Varianten und Zielwerte gehören zum Typ → zurücksetzen
       u.variant = '';
       u._variantCustom = false;
-      renderTrainingPlan(true); // Freitextfeld ein-/ausblenden
+      u.distanzKm = null;
+      u.dauerMin = null;
+      u.sets = null;
+      u.repsPerSet = null;
+      renderTrainingPlan(true); // Felder je nach Typ umschalten
     };
 
     window.planEditVariant = function(key, idx, value) {
@@ -6969,6 +7107,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (field === 'distanzKm' || field === 'dauerMin') {
         const n = parseFloat(String(value).replace(',', '.'));
         u[field] = isNaN(n) || n <= 0 ? null : n;
+      } else if (field === 'sets' || field === 'repsPerSet') {
+        u[field] = parseInt(value) > 0 ? parseInt(value) : null;
+        // berechnete Dauer ohne Re-render aktualisieren (Fokus behalten)
+        const el = document.getElementById(`udauer-${key}-${idx}`);
+        if (el) el.textContent = planStrengthDauerText(u);
       } else {
         u[field] = value;
       }
@@ -7007,10 +7150,14 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           updateTrainingTypeSelect();
         }
 
+        // Version ab Montag dieser Woche: existiert sie schon → überschreiben, sonst neu anlegen
         const plan = normalizeTrainingPlan(planDraft);
-        await setDoc(doc(db, 'users', userId, 'settings', 'trainingplan'), { ...plan, updatedAt: new Date().toISOString() });
+        const monday = planCurrentMonday();
+        await setDoc(doc(userPlanCol(), monday), { ...plan, datum: monday, updatedAt: new Date().toISOString() });
         trainingPlan = plan;
+        trainingPlanFrom = monday;
         cachePut('trainingplan', trainingPlan);
+        cachePut('trainingplan_from', trainingPlanFrom);
         planEditMode = false;
         planDraft = null;
         renderTrainingPlan(true);
@@ -7065,8 +7212,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     }
 
     window.openPlanComplete = function(ds, unitId) {
-      const dayIdx = (new Date(ds + 'T12:00:00').getDay() + 6) % 7;
-      const unit = (trainingPlan[PLAN_DAYS[dayIdx].key] || []).find(u => u.id === unitId);
+      const dayDate = new Date(ds + 'T12:00:00');
+      const dayIdx = (dayDate.getDay() + 6) % 7;
+      const monday = planYmd(new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate() - dayIdx));
+      const unit = ((planForWeek(monday) || {})[PLAN_DAYS[dayIdx].key] || []).find(u => u.id === unitId);
       if (!unit) return;
       planCompleteCtx = { ds, unit };
       const d = new Date(ds + 'T12:00:00');

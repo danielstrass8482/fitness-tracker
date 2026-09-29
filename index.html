@@ -1296,8 +1296,8 @@
             <input type="number" id="plan-complete-runden" min="1" step="1" inputmode="numeric" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
           <div>
-            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause (min)</label>
-            <input type="number" id="plan-complete-pause" min="0" step="0.5" inputmode="decimal" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause zw. Runden (Sek)</label>
+            <input type="number" id="plan-complete-pause" min="0" step="5" inputmode="numeric" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
         </div>
       </div>
@@ -6433,7 +6433,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // Plan-Versionen: users/{uid}/trainingplans/{Montag} = { mo: [unit], ..., so: [unit], datum, updatedAt }
     //   (früher users/{uid}/settings/trainingplan – wird beim ersten Laden migriert)
     // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, sets ("12-11-10", Kraft), pauseSec (Kraft), notiz }
-    // zirkel: { id, typ:'zirkel', runden, pauseMin, uebungen:[{typ, variant, wdh}], dauerMin (berechnet), notiz }
+    // zirkel: { id, typ:'zirkel', runden, pauseSec, uebungen:[{typ, variant, wdh}], dauerMin (berechnet), notiz }
     // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet (planMatchDay):
     //  - Eintrag mit source:'plan' + planUnitId am Tag  → manuell abgehakt
     //  - sonstiger Eintrag gleichen Typs am Tag         → erfüllt/abgewichen (z.B. via Garmin; nie bei Zirkel)
@@ -6496,7 +6496,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // Dauer = ceil((Runden × Σ(Wdh × 3s) + (Runden − 1) × Pause) / 60) Minuten
     function calcZirkelDauerMin(z) {
       const runden = Math.max(0, parseInt(z.runden) || 0);
-      const pauseSec = Math.max(0, Number(z.pauseMin) || 0) * 60;
+      const pauseSec = Math.max(0, Number(z.pauseSec) || 0);
       const wdhSum = (z.uebungen || []).reduce((sum, x) => sum + Math.max(0, parseInt(x.wdh) || 0), 0);
       if (runden === 0 || wdhSum === 0) return 0;
       const sec = runden * wdhSum * ZIRKEL_SEC_PER_WDH + (runden - 1) * pauseSec;
@@ -6510,7 +6510,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           id,
           typ: 'zirkel',
           runden: Math.max(1, parseInt(u.runden) || 1),
-          pauseMin: Math.max(0, parseFloat(String(u.pauseMin ?? 0).replace(',', '.')) || 0),
+          // Migration: ältere Zirkel-Einträge speicherten pauseMin (Minuten) statt pauseSec
+          pauseSec: u.pauseSec != null && u.pauseSec !== '' && !isNaN(Number(u.pauseSec))
+            ? Math.max(0, Math.round(Number(u.pauseSec)))
+            : Math.max(0, Math.round((parseFloat(String(u.pauseMin ?? 0).replace(',', '.')) || 0) * 60)),
           uebungen: (Array.isArray(u.uebungen) ? u.uebungen : []).map(x => ({
             typ: x.typ || '',
             variant: String(x.variant || '').trim(),
@@ -6657,6 +6660,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return String(Math.round(km * 100) / 100).replace('.', ',') + ' km';
     }
 
+    function planFmtPause(sec) {
+      const s = Math.max(0, Math.round(Number(sec) || 0));
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }
+
     function planUebungLabel(x) {
       return planTypLabel(x.typ) + (x.variant ? ' · ' + x.variant : '');
     }
@@ -6794,7 +6802,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u.dauerMin))} kcal`].join(' · ')
             : planTarget(u);
           const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
-              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseMin > 0 ? ` · ${String(u.pauseMin).replace('.', ',')} min Pause` : ''}</summary>
+              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
               ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 12px;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('')}
             </details>` : '';
           const deviated = matchStatus === 'deviated';
@@ -6948,8 +6956,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Runden</label>
             <input type="number" min="1" step="1" inputmode="numeric" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
-          <div><label style="${lbl}">Pause zw. Runden (min)</label>
-            <input type="number" min="0" step="0.5" inputmode="decimal" value="${z.pauseMin ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseMin',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Pause zw. Runden (Sek)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" value="${z.pauseSec ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
         </div>
         <label style="${lbl}">Übungen</label>`;
       z.uebungen.forEach((x, j) => {
@@ -7081,7 +7089,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     window.planAddZirkel = function(key) {
       planDraft[key].push({
-        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseMin: 2,
+        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150,
         uebungen: [{ typ: 'kraft', variant: '', wdh: 10 }], notiz: ''
       });
       renderTrainingPlan(true);
@@ -7091,7 +7099,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.planZirkelField = function(key, idx, field, value) {
       const z = planDraft[key][idx];
       if (field === 'runden') z.runden = parseInt(value) || 0;
-      else if (field === 'pauseMin') z.pauseMin = parseFloat(String(value).replace(',', '.')) || 0;
+      else if (field === 'pauseSec') z.pauseSec = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
       else z[field] = value;
       updatePlanZirkelSummary(key, idx);
     };
@@ -7256,7 +7264,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const { ds, unit } = planCompleteCtx;
       if (unit.typ === 'zirkel') {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
-        const pauseMin = Math.max(0, parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0);
+        const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
         const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, wdh: x.wdh }));
         // Vorbelegt mit berechneter Dauer, vom User überschreibbar (längere Pausen etc.)
         const dauerMin = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
@@ -7271,7 +7279,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           source: 'plan',
           planUnitId: unit.id,
           runden,
-          pauseMin,
+          pauseSec,
           uebungen
         };
       }
@@ -7314,7 +7322,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         document.getElementById('plan-complete-zirkel-list').innerHTML = unit.uebungen
           .map(x => `<div style="padding:2px 0;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('');
         document.getElementById('plan-complete-runden').value = unit.runden;
-        document.getElementById('plan-complete-pause').value = unit.pauseMin;
+        document.getElementById('plan-complete-pause').value = unit.pauseSec;
       }
       // Bei Zirkel ist unit.dauerMin der berechnete Wert (normalizePlanUnit)
       document.getElementById('plan-complete-dauer').value = unit.dauerMin ?? '';
@@ -7339,8 +7347,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (!planCompleteCtx) return;
       if (!planCompleteCtx.dauerManual) {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
-        const pauseMin = Math.max(0, parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0);
-        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseMin, uebungen: planCompleteCtx.unit.uebungen });
+        const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
+        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseSec, uebungen: planCompleteCtx.unit.uebungen });
       }
       updatePlanCompletePreview();
     };

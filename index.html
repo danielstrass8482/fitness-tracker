@@ -1283,7 +1283,21 @@
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
       <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
       <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <!-- Nur bei Zirkel -->
+      <div id="plan-complete-zirkel" style="display:none;">
+        <div id="plan-complete-zirkel-list" style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Runden</label>
+            <input type="number" id="plan-complete-runden" min="1" step="1" inputmode="numeric" oninput="updatePlanCompletePreview()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause (min)</label>
+            <input type="number" id="plan-complete-pause" min="0" step="0.5" inputmode="decimal" oninput="updatePlanCompletePreview()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+      <div id="plan-complete-dauer-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Dauer (min)</label>
           <input type="number" id="plan-complete-dauer" min="0" step="1" inputmode="numeric" oninput="updatePlanCompletePreview()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
@@ -2779,7 +2793,7 @@
         terraband_knie: '🦵 Terraband Knie',
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
-        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining'
+        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining', zirkel: '🔄 Zirkel'
       };
       const recentContainer = document.getElementById('recent-activity');
       if (recentContainer) {
@@ -3843,7 +3857,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
       kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio',
       pullups: '💪 Pull-ups', pushups: '💪 Push-ups',
-      lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie'
+      lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie',
+      zirkel: '🔄 Zirkel'
     };
 
     // ── Aktivitätskalorien-Berechnung ────────────────────────────────────────
@@ -3911,7 +3926,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       yoga: 2.5, mobility: 2.5, dehnen: 2.5,
       gehen: 3.5, wandern: 3.5,
       cardio: 6.0, crosstraining: 6.0,
-      laufen: 9.0, rad: 6.0
+      laufen: 9.0, rad: 6.0,
+      zirkel: 4.0 // Zirkeltraining: kaum Pause zwischen den Übungen einer Runde
     };
     const PLAN_MET_DEFAULT = 3.5; // unbekannte/eigene Typen → wie Kraft
 
@@ -5747,7 +5763,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
         rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
         schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining',
-        yoga: '🧘 Yoga', crosstraining: '⚡ Crosstraining', cardio: '❤️ Cardio'
+        yoga: '🧘 Yoga', crosstraining: '⚡ Crosstraining', cardio: '❤️ Cardio',
+        zirkel: '🔄 Zirkel'
       };
       container.innerHTML = sorted.map(e => {
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
@@ -5772,7 +5789,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         }
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
-        if (isPlan) setsDisplay = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
+        if (isPlan) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -6391,10 +6408,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // ═══════════════════════════════════════════════════════════════════════════
     // TRAININGSPLAN
     // Plan: users/{uid}/settings/trainingplan = { mo: [unit], ..., so: [unit], updatedAt }
-    // unit: { id, typ, typLabel?, variant, distanzKm, dauerMin, notiz }
-    // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet:
+    // unit:   { id, typ, typLabel?, variant, distanzKm, dauerMin, notiz }
+    // zirkel: { id, typ:'zirkel', runden, pauseMin, uebungen:[{typ, variant, wdh}], dauerMin (berechnet), notiz }
+    // Erledigt-Status wird NICHT gespeichert, sondern aus trainingEntries abgeleitet (planMatchDay):
     //  - Eintrag mit source:'plan' + planUnitId am Tag  → manuell abgehakt
-    //  - sonstiger Eintrag gleichen Typs am Tag         → erfüllt (z.B. via Garmin)
+    //  - sonstiger Eintrag gleichen Typs am Tag         → erfüllt/abgewichen (z.B. via Garmin; nie bei Zirkel)
     // ═══════════════════════════════════════════════════════════════════════════
     const PLAN_DAYS = [
       { key: 'mo', label: 'Montag' }, { key: 'di', label: 'Dienstag' },
@@ -6406,6 +6424,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       'kraft', 'yoga', 'cardio', 'pullups', 'pushups', 'lunges', 'terraband_knie'];
     const PLAN_DISTANCE_TYPES = ['laufen', 'rad', 'rad_ebike', 'gehen', 'wandern', 'schwimmen'];
     const PLAN_CUSTOM_OPTION = '__custom__';
+    const ZIRKEL_BASE_TYPES = ['pullups', 'pushups', 'kraft', 'terraband_knie', 'lunges'];
+    const ZIRKEL_SEC_PER_WDH = 3;
+    const PLAN_DEVIATION_LIMIT = 0.2; // >20% Abweichung von Zieldistanz/-dauer → "abgewichen"
 
     let planWeekOffset = 0;   // 0 = aktuelle Woche
     let planEditMode = false;
@@ -6413,18 +6434,53 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     let planOpenDays = new Set(); // im Editor aufgeklappte Tage
     let planCompleteCtx = null;
 
+    function newPlanUnitId() {
+      return 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    }
+
+    // Dauer = ceil((Runden × Σ(Wdh × 3s) + (Runden − 1) × Pause) / 60) Minuten
+    function calcZirkelDauerMin(z) {
+      const runden = Math.max(0, parseInt(z.runden) || 0);
+      const pauseSec = Math.max(0, Number(z.pauseMin) || 0) * 60;
+      const wdhSum = (z.uebungen || []).reduce((sum, x) => sum + Math.max(0, parseInt(x.wdh) || 0), 0);
+      if (runden === 0 || wdhSum === 0) return 0;
+      const sec = runden * wdhSum * ZIRKEL_SEC_PER_WDH + (runden - 1) * pauseSec;
+      return Math.ceil(Math.round(sec) / 60);
+    }
+
+    function normalizePlanUnit(u) {
+      const id = u.id || newPlanUnitId();
+      if (u.typ === 'zirkel') {
+        const z = {
+          id,
+          typ: 'zirkel',
+          runden: Math.max(1, parseInt(u.runden) || 1),
+          pauseMin: Math.max(0, parseFloat(String(u.pauseMin ?? 0).replace(',', '.')) || 0),
+          uebungen: (Array.isArray(u.uebungen) ? u.uebungen : []).map(x => ({
+            typ: x.typ || '',
+            variant: String(x.variant || '').trim(),
+            wdh: Math.max(0, parseInt(x.wdh) || 0)
+          })),
+          notiz: u.notiz || ''
+        };
+        z.dauerMin = calcZirkelDauerMin(z);
+        return z;
+      }
+      return {
+        id,
+        typ: u.typ || '',
+        typLabel: u.typLabel || '',
+        variant: String(u.variant || '').trim(),
+        distanzKm: u.distanzKm != null && u.distanzKm !== '' ? Number(u.distanzKm) : null,
+        dauerMin: u.dauerMin != null && u.dauerMin !== '' ? Number(u.dauerMin) : null,
+        notiz: u.notiz || ''
+      };
+    }
+
     function normalizeTrainingPlan(data) {
       const plan = {};
       PLAN_DAYS.forEach(({ key }) => {
-        plan[key] = Array.isArray(data?.[key]) ? data[key].map(u => ({
-          id: u.id || ('p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
-          typ: u.typ || '',
-          typLabel: u.typLabel || '',
-          variant: String(u.variant || '').trim(),
-          distanzKm: u.distanzKm != null && u.distanzKm !== '' ? Number(u.distanzKm) : null,
-          dauerMin: u.dauerMin != null && u.dauerMin !== '' ? Number(u.dauerMin) : null,
-          notiz: u.notiz || ''
-        })) : [];
+        plan[key] = Array.isArray(data?.[key]) ? data[key].map(normalizePlanUnit) : [];
       });
       return plan;
     }
@@ -6464,6 +6520,26 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':');
     }
 
+    function planFmtKm(km) {
+      return String(Math.round(km * 100) / 100).replace('.', ',') + ' km';
+    }
+
+    function planUebungLabel(x) {
+      return planTypLabel(x.typ) + (x.variant ? ' · ' + x.variant : '');
+    }
+
+    // Kurzbeschreibung für die auto-generierte Notiz, z.B. "Push-ups Weit"
+    const ZIRKEL_SHORT_NAMES = { terraband_knie: 'Terraband' };
+    function planUebungShort(x) {
+      if (x.typ === 'kraft' && x.variant) return x.variant;
+      const name = ZIRKEL_SHORT_NAMES[x.typ] || planTypLabel(x.typ).split(' ').slice(1).join(' ');
+      return x.variant ? name + ' ' + x.variant : name;
+    }
+
+    function planZirkelKcal(dauerMin) {
+      return calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(dauerMin) });
+    }
+
     function planTarget(u) {
       return [
         u.distanzKm > 0 ? String(u.distanzKm).replace('.', ',') + ' km' : '',
@@ -6471,20 +6547,45 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       ].filter(Boolean).join(' · ');
     }
 
-    // Ordnet Plan-Einheiten eines Tages den vorhandenen Einträgen zu
+    // Soll/Ist-Vergleich eines Eintrags mit einer Plan-Einheit.
+    // Nur Ausdauer-Typen werden geprüft (Distanz vor Dauer); Kraft/Bodyweight: Typ reicht.
+    function planCompare(u, e) {
+      if (!PLAN_DISTANCE_TYPES.includes(u.typ)) return { status: 'fulfilled', cmp: null };
+      const dist = parseFloat(e.distanz) || 0;
+      const durMin = parseHours(e.zeit || '') * 60;
+      let cmp = null;
+      if (u.distanzKm > 0 && dist > 0) cmp = { kind: 'distanz', plan: u.distanzKm, actual: dist };
+      else if (u.dauerMin > 0 && durMin > 0) cmp = { kind: 'dauer', plan: u.dauerMin, actual: durMin };
+      if (!cmp) return { status: 'fulfilled', cmp: null };
+      const deviation = Math.abs(cmp.actual - cmp.plan) / cmp.plan;
+      return { status: deviation > PLAN_DEVIATION_LIMIT ? 'deviated' : 'fulfilled', cmp };
+    }
+
+    // Ordnet Plan-Einheiten eines Tages den vorhandenen Einträgen zu.
+    // Rückgabe: { result: [{ unit, entry, via: 'plan'|'garmin'|'log'|null,
+    //                        status: 'fulfilled'|'deviated'|'open', cmp }], extra: [entry] }
     function planMatchDay(units, dayEntries) {
       const used = new Set();
-      const result = units.map(u => ({ unit: u, entry: null, via: null }));
+      const result = units.map(u => ({ unit: u, entry: null, via: null, status: 'open', cmp: null }));
       // 1. Manuell abgehakte Einheiten (planUnitId)
       result.forEach(r => {
         const e = dayEntries.find(e => !used.has(e) && e.source === 'plan' && e.planUnitId === r.unit.id);
-        if (e) { r.entry = e; r.via = 'plan'; used.add(e); }
+        if (e) { r.entry = e; r.via = 'plan'; r.status = 'fulfilled'; used.add(e); }
       });
-      // 2. Sonstige Einträge gleichen Typs (Garmin/Google Fit/manuell geloggt)
+      // 2. Sonstige Einträge gleichen Typs (Garmin/Google Fit/manuell geloggt) – nur Typ, keine Variante.
+      //    Mehrere Kandidaten: längste Distanz, dann längste Dauer gewinnt. Zirkel: nie automatisch.
+      const score = e => [parseFloat(e.distanz) || 0, parseHours(e.zeit || '')];
       result.forEach(r => {
-        if (r.entry) return;
-        const e = dayEntries.find(e => !used.has(e) && e.source !== 'plan' && e.typ === r.unit.typ);
-        if (e) { r.entry = e; r.via = isAutoActivity(e) ? 'garmin' : 'log'; used.add(e); }
+        if (r.entry || r.unit.typ === 'zirkel') return;
+        const candidates = dayEntries.filter(e => !used.has(e) && e.source !== 'plan' && e.typ === r.unit.typ);
+        if (!candidates.length) return;
+        const e = candidates.reduce((best, c) => {
+          const [bd, bh] = score(best), [cd, ch] = score(c);
+          return cd > bd || (cd === bd && ch > bh) ? c : best;
+        });
+        const { status, cmp } = planCompare(r.unit, e);
+        Object.assign(r, { entry: e, via: isAutoActivity(e) ? 'garmin' : 'log', status, cmp });
+        used.add(e);
       });
       const extra = dayEntries.filter(e => !used.has(e));
       return { result, extra };
@@ -6522,19 +6623,43 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
         const { result, extra } = planMatchDay(units, dayEntries);
         totalPlanned += result.length;
-        totalDone += result.filter(r => r.entry).length;
+        totalDone += result.filter(r => r.status !== 'open').length;
 
         let rows = '';
-        result.forEach(({ unit: u, entry: e, via }) => {
-          const title = planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
-          const target = planTarget(u);
+        result.forEach(({ unit: u, entry: e, via, status: matchStatus, cmp }) => {
+          const isZirkel = u.typ === 'zirkel';
+          const title = isZirkel
+            ? `<span style="font-size:13px;background:var(--surface2);color:var(--primary);padding:2px 8px;border-radius:6px;">${TYP_LABELS.zirkel}</span>`
+            : planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
+          const target = isZirkel
+            ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u.dauerMin))} kcal`].join(' · ')
+            : planTarget(u);
+          const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseMin > 0 ? ` · ${String(u.pauseMin).replace('.', ',')} min Pause` : ''}</summary>
+              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 12px;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('')}
+            </details>` : '';
+          const deviated = matchStatus === 'deviated';
           let left, status = '';
           if (e) {
-            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:var(--primary);color:#fff;font-size:14px;flex-shrink:0;">✓</span>`;
-            const actual = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
+            const boxColor = deviated ? '#f59e0b' : 'var(--primary)';
+            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:#fff;font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
             const kcal = calcActivityKcal(e);
-            const viaText = via === 'garmin' ? '✓ via Garmin' : via === 'log' ? '✓ erfasst' : '✓ abgehakt';
-            status = `<div style="font-size:12px;color:var(--primary);">${viaText}${actual ? ' · ' + actual : ''}${kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : ''}</div>`;
+            const kcalHtml = kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : '';
+            const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
+            if (deviated) {
+              const DONE_VERBS = { laufen: 'Gelaufen', rad: 'Gefahren', rad_ebike: 'Gefahren', gehen: 'Gegangen', wandern: 'Gewandert', schwimmen: 'Geschwommen' };
+              const fmtVal = v => cmp.kind === 'distanz' ? planFmtKm(v) : Math.round(v) + ' min';
+              const istLabel = cmp.kind === 'distanz' ? (DONE_VERBS[u.typ] || 'Ist') : 'Dauer';
+              status = `<div style="font-size:12px;color:#f59e0b;">~ ${viaWord} · Geplant: ${fmtVal(cmp.plan)} · ${istLabel}: ${fmtVal(cmp.actual)}</div>`;
+              if (kcal > 0) status += `<div style="font-size:12px;color:#f97316;">${fmt(kcal)} kcal</div>`;
+            } else {
+              const actual = [
+                e.runden > 0 ? `${e.runden} Runde${e.runden === 1 ? '' : 'n'}` : '',
+                e.distanz > 0 ? planFmtKm(parseFloat(e.distanz)) : '',
+                e.zeit || ''
+              ].filter(Boolean).join(' · ');
+              status = `<div style="font-size:12px;color:var(--primary);">✓ ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
+            }
             if (via === 'plan') {
               status += `<button onclick="undoPlanUnit('${planEsc(e.id)}')" style="margin-top:4px;padding:2px 8px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;cursor:pointer;">Rückgängig</button>`;
             }
@@ -6547,7 +6672,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             ${left}
             <div style="flex:1;min-width:0;">
               <div style="font-weight:500;font-size:14px;${e ? 'opacity:.75;' : ''}">${title}</div>
-              ${target ? `<div style="font-size:12px;color:var(--muted);">Ziel: ${target}</div>` : ''}
+              ${target ? `<div style="font-size:12px;color:var(--muted);">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
+              ${zirkelList}
               ${u.notiz ? `<div style="font-size:12px;color:var(--muted);">${planEsc(u.notiz)}</div>` : ''}
               ${status}
             </div>
@@ -6603,7 +6729,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       customTrainingTypes.forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
       // Typen aus dem Plan, die (noch) nicht in den Listen sind
       PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
-        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: '🏅 ' + (u.typLabel || u.typ) });
+        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: '🏅 ' + (u.typLabel || u.typ) });
       }));
       return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
         + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigener Typ…</option>`;
@@ -6625,7 +6751,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         const raw = e.variantLabel || e.variante || e.variant;
         extra.push(keyToLabel[raw] || raw);
       });
-      PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => { if (u.typ === typ && !u._variantCustom) extra.push(u.variant); }));
+      trainingEntries.forEach(e => (Array.isArray(e.uebungen) ? e.uebungen : []).forEach(x => { if (x.typ === typ) extra.push(x.variant); }));
+      PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
+        if (u.typ === typ && !u._variantCustom) extra.push(u.variant);
+        (u.uebungen || []).forEach(x => { if (x.typ === typ && !x._variantCustom) extra.push(x.variant); });
+      }));
       extra.filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'de')).forEach(add);
       return labels;
     }
@@ -6639,6 +6769,57 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigene…</option>`;
     }
 
+    function planZirkelTypeOptions(selected) {
+      const opts = ZIRKEL_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
+      customTrainingTypes.forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      if (selected && !opts.find(o => o.id === selected)) opts.push({ id: selected, label: planTypLabel(selected) });
+      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
+    }
+
+    function planZirkelSummaryText(z) {
+      const dauer = calcZirkelDauerMin(z);
+      return dauer > 0 ? `⏱ ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : '⏱ Wiederholungen eintragen';
+    }
+
+    function updatePlanZirkelSummary(key, idx) {
+      const el = document.getElementById(`zsum-${key}-${idx}`);
+      if (el) el.textContent = planZirkelSummaryText(planDraft[key][idx]);
+    }
+
+    function renderPlanZirkelEditor(key, idx, z, inp, lbl) {
+      let html = `<div style="border-top:1px solid var(--border);padding:10px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:600;">🔄 Zirkel</span>
+          <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">🗑</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div><label style="${lbl}">Runden</label>
+            <input type="number" min="1" step="1" inputmode="numeric" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Pause zw. Runden (min)</label>
+            <input type="number" min="0" step="0.5" inputmode="decimal" value="${z.pauseMin ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseMin',this.value)" style="${inp}"></div>
+        </div>
+        <label style="${lbl}">Übungen</label>`;
+      z.uebungen.forEach((x, j) => {
+        html += `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <select onchange="planZirkelUebungType('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
+            <button onclick="planZirkelRemoveUebung('${key}',${idx},${j})" title="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">✕</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <select onchange="planZirkelUebungVariant('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planVariantOptions(x)}</select>
+            <input type="number" min="0" step="1" inputmode="numeric" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="planZirkelUebungField('${key}',${idx},${j},'wdh',this.value)" style="${inp}width:80px;">
+          </div>
+          ${x._variantCustom ? `<input type="text" value="${planEsc(x.variant)}" placeholder="Eigene Variante, z.B. Bulgarian Split Squat" oninput="planZirkelUebungField('${key}',${idx},${j},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}
+        </div>`;
+      });
+      html += `<button onclick="planZirkelAddUebung('${key}',${idx})" style="width:100%;margin-bottom:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Übung</button>
+        <div id="zsum-${key}-${idx}" style="font-size:13px;color:#f97316;margin-bottom:8px;">${planZirkelSummaryText(z)}</div>
+        <div><label style="${lbl}">Notiz (optional)</label>
+          <input type="text" value="${planEsc(z.notiz)}" oninput="planZirkelField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
+      </div>`;
+      return html;
+    }
+
     function renderPlanEditor(container) {
       const inp = 'width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;';
       const lbl = 'display:block;font-size:11px;color:var(--muted);margin-bottom:3px;';
@@ -6649,9 +6830,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       PLAN_DAYS.forEach(({ key, label }) => {
         const units = planDraft[key];
-        html += `<details ${planOpenDays.has(key) ? 'open' : ''} ontoggle="planToggleDay('${key}',this.open)" style=""background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:10px;">
+        html += `<details ${planOpenDays.has(key) ? 'open' : ''} ontoggle="planToggleDay('${key}',this.open)" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:10px;">
           <summary style="cursor:pointer;font-weight:600;padding:4px 0;">${label} <span style="font-weight:400;font-size:12px;color:var(--muted);">${units.length ? units.length + ' Einheit' + (units.length > 1 ? 'en' : '') : 'Ruhetag'}</span></summary>`;
         units.forEach((u, idx) => {
+          if (u.typ === 'zirkel') { html += renderPlanZirkelEditor(key, idx, u, inp, lbl); return; }
           const isCustom = u.typ === PLAN_CUSTOM_OPTION;
           html += `<div style="border-top:1px solid var(--border);padding:10px 0;">
             <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
@@ -6676,7 +6858,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
               <input type="text" value="${planEsc(u.notiz)}" oninput="planEditField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
           </div>`;
         });
-        html += `<button onclick="planAddUnit('${key}')" style="width:100%;margin-top:6px;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Einheit</button>
+        html += `<div style="display:flex;gap:8px;margin-top:6px;">
+            <button onclick="planAddUnit('${key}')" style="flex:1;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Einheit</button>
+            <button onclick="planAddZirkel('${key}')" style="flex:1;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Zirkel</button>
+          </div>
         </details>`;
       });
 
@@ -6701,9 +6886,57 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (open) planOpenDays.add(key); else planOpenDays.delete(key);
     };
 
+    window.planAddZirkel = function(key) {
+      planDraft[key].push({
+        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseMin: 2,
+        uebungen: [{ typ: 'kraft', variant: '', wdh: 10 }], notiz: ''
+      });
+      renderTrainingPlan(true);
+    };
+
+    // Runden/Pause/Notiz: kein Re-render (Fokus behalten), nur Dauer-Anzeige aktualisieren
+    window.planZirkelField = function(key, idx, field, value) {
+      const z = planDraft[key][idx];
+      if (field === 'runden') z.runden = parseInt(value) || 0;
+      else if (field === 'pauseMin') z.pauseMin = parseFloat(String(value).replace(',', '.')) || 0;
+      else z[field] = value;
+      updatePlanZirkelSummary(key, idx);
+    };
+
+    window.planZirkelAddUebung = function(key, idx) {
+      planDraft[key][idx].uebungen.push({ typ: 'kraft', variant: '', wdh: 10 });
+      renderTrainingPlan(true);
+    };
+
+    window.planZirkelRemoveUebung = function(key, idx, j) {
+      planDraft[key][idx].uebungen.splice(j, 1);
+      renderTrainingPlan(true);
+    };
+
+    window.planZirkelUebungType = function(key, idx, j, value) {
+      const x = planDraft[key][idx].uebungen[j];
+      x.typ = value;
+      x.variant = '';
+      x._variantCustom = false;
+      renderTrainingPlan(true);
+    };
+
+    window.planZirkelUebungVariant = function(key, idx, j, value) {
+      const x = planDraft[key][idx].uebungen[j];
+      x._variantCustom = value === PLAN_CUSTOM_OPTION;
+      x.variant = x._variantCustom ? '' : value;
+      renderTrainingPlan(true);
+    };
+
+    window.planZirkelUebungField = function(key, idx, j, field, value) {
+      const x = planDraft[key][idx].uebungen[j];
+      x[field] = field === 'wdh' ? (parseInt(value) || 0) : value;
+      updatePlanZirkelSummary(key, idx);
+    };
+
     window.planAddUnit = function(key) {
       planDraft[key].push({
-        id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        id: newPlanUnitId(),
         typ: 'laufen', typLabel: '', variant: '', distanzKm: null, dauerMin: null, notiz: ''
       });
       renderTrainingPlan(true);
@@ -6746,6 +6979,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const newTypes = [];
       for (const { key, label } of PLAN_DAYS) {
         for (const u of planDraft[key]) {
+          if (u.typ === 'zirkel') {
+            if (!(parseInt(u.runden) >= 1)) { showToast(`❌ ${label}: Zirkel braucht mind. 1 Runde`); return; }
+            if (!u.uebungen.some(x => parseInt(x.wdh) > 0)) { showToast(`❌ ${label}: Zirkel braucht Übungen mit Wiederholungen`); return; }
+            continue;
+          }
           if (u.typ !== PLAN_CUSTOM_OPTION) continue;
           const name = (u.typLabel || '').trim();
           if (!name) { showToast(`❌ ${label}: Namen für eigenen Typ eingeben`); return; }
@@ -6788,6 +7026,26 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // ── Abhaken ───────────────────────────────────────────────────────────────
     function planCompleteEntryFromInputs() {
       const { ds, unit } = planCompleteCtx;
+      if (unit.typ === 'zirkel') {
+        const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
+        const pauseMin = Math.max(0, parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0);
+        const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, wdh: x.wdh }));
+        const dauerMin = calcZirkelDauerMin({ runden, pauseMin, uebungen });
+        const userNotiz = document.getElementById('plan-complete-notiz').value.trim();
+        const autoNotiz = `${runden}× ` + uebungen.map(planUebungShort).join(' / ');
+        return {
+          datum: ds,
+          typ: 'zirkel',
+          distanz: 0,
+          zeit: planMinToZeit(dauerMin),
+          notiz: userNotiz ? autoNotiz + ' — ' + userNotiz : autoNotiz,
+          source: 'plan',
+          planUnitId: unit.id,
+          runden,
+          pauseMin,
+          uebungen
+        };
+      }
       const dauer = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
       const distWrapVisible = document.getElementById('plan-complete-distanz-wrap').style.display !== 'none';
       const distanz = distWrapVisible ? (parseFloat(String(document.getElementById('plan-complete-distanz').value).replace(',', '.')) || 0) : 0;
@@ -6814,8 +7072,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       document.getElementById('plan-complete-title').textContent =
         planTypLabel(unit.typ, unit.typLabel) + (unit.variant ? ' · ' + unit.variant : '') + ' — ' +
         d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+      const isZirkel = unit.typ === 'zirkel';
+      document.getElementById('plan-complete-zirkel').style.display = isZirkel ? '' : 'none';
+      document.getElementById('plan-complete-dauer-grid').style.display = isZirkel ? 'none' : 'grid';
+      if (isZirkel) {
+        document.getElementById('plan-complete-zirkel-list').innerHTML = unit.uebungen
+          .map(x => `<div style="padding:2px 0;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('');
+        document.getElementById('plan-complete-runden').value = unit.runden;
+        document.getElementById('plan-complete-pause').value = unit.pauseMin;
+      }
       document.getElementById('plan-complete-dauer').value = unit.dauerMin ?? '';
-      const showDist = PLAN_DISTANCE_TYPES.includes(unit.typ) || unit.distanzKm > 0;
+      const showDist = !isZirkel && (PLAN_DISTANCE_TYPES.includes(unit.typ) || unit.distanzKm > 0);
       document.getElementById('plan-complete-distanz-wrap').style.display = showDist ? '' : 'none';
       document.getElementById('plan-complete-distanz').value = unit.distanzKm ?? '';
       document.getElementById('plan-complete-notiz').value = '';
@@ -6831,8 +7098,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     window.updatePlanCompletePreview = function() {
       if (!planCompleteCtx) return;
-      const kcal = calcActivityKcal(planCompleteEntryFromInputs());
-      document.getElementById('plan-complete-preview').textContent = kcal > 0 ? `≈ ${fmt(kcal)} kcal Aktivität` : '';
+      const entry = planCompleteEntryFromInputs();
+      const kcal = calcActivityKcal(entry);
+      const dauerPrefix = entry.typ === 'zirkel' ? `⏱ ${Math.round(parseHours(entry.zeit) * 60)} min · ` : '';
+      document.getElementById('plan-complete-preview').textContent = kcal > 0 ? `${dauerPrefix}≈ ${fmt(kcal)} kcal Aktivität` : '';
     };
 
     window.savePlanComplete = async function() {

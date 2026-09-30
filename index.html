@@ -1910,15 +1910,8 @@
           .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
           .reduce((sum, e) => sum + (e.schritte || 0), 0);
 
-        // Alltagsschritte: Garmin hat Priorität, sonst rohe Handy-Schritte
-        // Aktivitäts-Schritte immer abziehen (egal welche Quelle)
-        let totalSteps = 0;
-        if (garminSteps > 0) {
-          totalSteps = Math.max(0, garminSteps - activitySteps);
-        } else {
-          const phoneRaw = window.phoneStepsToday?.[date] || 0;
-          totalSteps = Math.max(0, phoneRaw - activitySteps);
-        }
+        // Alltagsschritte: nur Garmin, Aktivitäts-Schritte werden abgezogen
+        const totalSteps = Math.max(0, garminSteps - activitySteps);
         const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);
 
@@ -4046,9 +4039,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       try {
         if (window.AndroidTokenBridge && typeof AndroidTokenBridge.updateWidgetData === 'function') {
           const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
-          const garminSteps = dayLog?.steps || 0;
-          const phoneSteps = window.phoneStepsToday?.[currentDate] || 0;
-          const steps = garminSteps > 0 ? garminSteps : phoneSteps;
+          const steps = dayLog?.steps || 0;
           AndroidTokenBridge.updateWidgetData(
             Math.round(totalKcal),
             Math.round(totalProtein * 10) / 10,
@@ -4113,10 +4104,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       const activityContainer = document.getElementById('daily-activity-summary');
       if (activityContainer) {
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
-        const garminSteps = dayLog?.steps || 0;
-        const phoneSteps = window.phoneStepsToday?.[currentDate] || 0;
-        const steps = garminSteps > 0 ? garminSteps : phoneSteps;
-        const stepsSource = garminSteps > 0 ? 'Garmin' : phoneSteps > 0 ? '📱' : '';
+        const steps = dayLog?.steps || 0;
 
         const dayActivities = trainingEntries.filter(e =>
           e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
@@ -4124,16 +4112,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         let html = '<div style="padding:0 0 8px;">';
 
-        // Debug-Zeile: Sensor-Status
-        const phoneDbg = window.phoneStepsToday?.[currentDate] || 0;
-        const isAndroid = navigator.userAgent.includes('FuelofitApp');
-        if (isAndroid) {
-          html += `<div id="phone-steps-debug" style="font-size:11px;color:var(--muted);padding:4px 0 0;">📱 Sensor: ${phoneDbg > 0 ? phoneDbg + ' Schritte' : 'warte auf Daten...'}</div>`;
-        }
-
         // Schritte
         if (steps > 0) {
-          const sourceText = stepsSource === 'Garmin' ? 'Garmin' : stepsSource === '📱' ? 'Samsung Sensor' : '';
+          const sourceText = 'Garmin';
           html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
             <span style="font-size:20px;">👟</span>
             <div>
@@ -5380,41 +5361,11 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     // Initial state damit der erste Back-Button-Druck korrekt verarbeitet wird
     history.replaceState(null, '');
 
-    // ── Handy-Schritte (Samsung Sensor) ─────────────────────────────────────
-    // Wird von MainActivity aufgerufen wenn neue Schritte vom Sensor kommen
-    window.phoneStepsToday = {};
-
-    window.onPhoneStepsUpdate = function(date, steps) {
-      if (!window.phoneStepsToday) window.phoneStepsToday = {};
-
-      // Rohe Schritte für Anzeige
-      window.phoneStepsToday[date] = steps;
-
-      // Samsung-Sensor-Schritte in Firestore speichern (alle 100 Schritte)
-      // damit wir später mit Garmin vergleichen können
-      if (steps % 100 === 0 && userId) {
-        const docId = 'phonesteps_' + date.replace(/-/g, '');
-        setDoc(doc(db, 'users', userId, 'entries', docId), {
-          id: docId, datum: date, typ: 'phonesteps',
-          steps: steps, source_steps: 'samsung_sensor',
-          updatedAt: new Date().toISOString()
-        }, { merge: true }).catch(e => console.warn('phonesteps save error:', e));
-      }
-
-      // Nur für heute relevant
-      if (date !== currentDate) return;
-
-      // Neu rendern damit Kalorienziel aktualisiert wird
-      renderFoodLog();
-    };
-
-    // Gibt Schritte für ein Datum zurück: Garmin hat Priorität, sonst Handy
+    // Gibt Schritte für ein Datum zurück (Garmin ist die einzige Quelle)
     window.getStepsForDate = function(date) {
       const entry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
       const garminSteps = entry?.steps || 0;
-      const phoneSteps = window.phoneStepsToday?.[date] || 0;
       if (garminSteps > 0) return { steps: garminSteps, source: 'garmin' };
-      if (phoneSteps > 0) return { steps: phoneSteps, source: 'phone' };
       return { steps: 0, source: 'none' };
     };
 

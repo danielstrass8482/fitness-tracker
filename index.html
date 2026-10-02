@@ -1337,6 +1337,26 @@
     </div>
   </div>
 
+  <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
+  <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
+      <h3 style="margin:0 0 16px;">🔄 Ad-hoc Zirkel starten</h3>
+      <select id="zirkel-adhoc-select" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px;"></select>
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('zirkel-adhoc-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+        <button onclick="startZirkelAdhoc()" class="btn" style="flex:2;padding:12px;">▶ Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zirkel Live-Timer: Vollbild, legt sich über die App während ein Zirkel läuft -->
+  <div id="zirkel-timer-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;flex-direction:column;">
+    <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
+      <button onclick="requestCloseZirkelTimer()" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;">✕</button>
+    </div>
+    <div id="zirkel-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px calc(24px + env(safe-area-inset-bottom, 0px));box-sizing:border-box;overflow-y:auto;"></div>
+  </div>
+
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
@@ -5296,7 +5316,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       'copy-entry-modal',
       'plan-complete-modal',
       'barcode-container',
-      'confirm-dialog'
+      'confirm-dialog',
+      'zirkel-adhoc-modal',
+      'zirkel-timer-modal'
     ];
 
     // Wenn ein Modal geöffnet wird, pushState damit Back-Button es schließen kann
@@ -5317,6 +5339,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         else if (openModal === 'confirm-dialog') {
           document.getElementById('confirm-dialog').style.display = 'none';
           if (window.confirmDialogResolve) window.confirmDialogResolve(false);
+        }
+        else if (openModal === 'zirkel-timer-modal') {
+          // Entry wiederherstellen (wurde vom Back-Button konsumiert) – bleibt der Timer offen
+          // (User bricht die Abfrage ab), funktioniert der nächste Back-Druck wieder normal.
+          pushModalState();
+          window.requestCloseZirkelTimer();
         }
         else document.getElementById(openModal).style.display = 'none';
       } else {
@@ -6808,6 +6836,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
               <div style="font-weight:500;font-size:14px;${e ? 'opacity:.75;' : ''}">${title}</div>
               ${target ? `<div style="font-size:12px;color:var(--muted);">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
               ${zirkelList}
+              ${isZirkel && !e && !isFuture ? `<button onclick="openZirkelTimer('${ds}','${u.id}')" class="btn" style="margin-top:6px;padding:7px 16px;width:auto;font-size:13px;">▶ Start</button>` : ''}
               ${u.notiz ? `<div style="font-size:12px;color:var(--muted);">${planEsc(u.notiz)}</div>` : ''}
               ${status}
             </div>
@@ -6843,6 +6872,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       container.innerHTML = weekHeader.replace('%STATUS%', totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : '') + `
         ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">${emptyText}</div>`}
         ${daysHtml}
+        <button class="btn" onclick="openZirkelAdhocPicker()" style="width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">🔄 Ad-hoc Zirkel starten</button>
         <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">✏️ Plan bearbeiten</button>`;
     }
 
@@ -7426,6 +7456,251 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       } catch (err) {
         console.error('Plan undo error:', err);
         showToast('❌ Löschen fehlgeschlagen');
+      }
+    };
+
+    // ── Zirkel Live-Timer ────────────────────────────────────────────────────
+    // zirkelTimerState: { unit, ds, planUnitId, phase: 'intro'|'exercise'|'pause'|'done',
+    //                      currentRound, elapsedSec, pauseRemainingSec, intervalId, wakeLock, audioCtx }
+    // ds/planUnitId sind null bei Ad-hoc-Start (kein Bezug zu einer konkreten Plan-Einheit eines Tages).
+    let zirkelTimerState = null;
+
+    function planZirkelAdhocLabel(u) {
+      return u.notiz || `${u.runden}× ` + u.uebungen.map(planUebungShort).join(' / ');
+    }
+
+    window.openZirkelTimer = function(ds, unitId) {
+      const dayDate = new Date(ds + 'T12:00:00');
+      const dayIdx = (dayDate.getDay() + 6) % 7;
+      const monday = planYmd(new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate() - dayIdx));
+      const unit = ((planForWeek(monday) || {})[PLAN_DAYS[dayIdx].key] || []).find(u => u.id === unitId);
+      if (!unit) return;
+      startZirkelTimerModal(unit, ds, unitId);
+    };
+
+    window.openZirkelAdhocPicker = function() {
+      const options = [];
+      PLAN_DAYS.forEach(({ key, label }) => {
+        (trainingPlan[key] || []).forEach(u => {
+          if (u.typ === 'zirkel') options.push({ unit: u, label: `${label}: ${planZirkelAdhocLabel(u)}` });
+        });
+      });
+      if (!options.length) { showToast('❌ Kein Zirkel im Trainingsplan angelegt'); return; }
+      window._zirkelAdhocOptions = options;
+      document.getElementById('zirkel-adhoc-select').innerHTML = options.map((o, i) => `<option value="${i}">${planEsc(o.label)}</option>`).join('');
+      pushModalState();
+      document.getElementById('zirkel-adhoc-modal').style.display = 'flex';
+    };
+
+    window.startZirkelAdhoc = function() {
+      const idx = parseInt(document.getElementById('zirkel-adhoc-select').value);
+      const opt = (window._zirkelAdhocOptions || [])[idx];
+      document.getElementById('zirkel-adhoc-modal').style.display = 'none';
+      if (!opt) return;
+      startZirkelTimerModal(opt.unit, null, null);
+    };
+
+    function startZirkelTimerModal(unit, ds, planUnitId) {
+      zirkelTimerState = {
+        unit, ds: ds || null, planUnitId: planUnitId || null,
+        phase: 'intro', currentRound: 0, elapsedSec: 0, pauseRemainingSec: 0,
+        intervalId: null, wakeLock: null, audioCtx: null
+      };
+      renderZirkelTimerIntro();
+      pushModalState();
+      document.getElementById('zirkel-timer-modal').style.display = 'flex';
+    }
+
+    function fmtZirkelTime(sec) {
+      sec = Math.max(0, Math.round(sec));
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+      return (h > 0 ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
+    }
+
+    function renderZirkelTimerIntro() {
+      const { unit } = zirkelTimerState;
+      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">💪 ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
+      document.getElementById('zirkel-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:360px;">
+          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">🔄 ${planEsc(unit.notiz || 'Zirkel')}</div>
+          <div style="color:var(--muted);margin-bottom:20px;">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'} · ${planFmtPause(unit.pauseSec)} Pause</div>
+          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;">${list}</div>
+          <button onclick="zirkelTimerBegin()" class="btn" style="width:100%;padding:18px;font-size:18px;">▶ Start</button>
+        </div>`;
+    }
+
+    function renderZirkelTimerExercise() {
+      const { unit, currentRound, elapsedSec } = zirkelTimerState;
+      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">💪 ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
+      const isLast = currentRound >= unit.runden;
+      document.getElementById('zirkel-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:360px;">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Gesamtzeit</div>
+          <div id="zirkel-elapsed" style="font-size:20px;font-weight:600;margin-bottom:18px;">${fmtZirkelTime(elapsedSec)}</div>
+          <div style="font-size:30px;font-weight:700;margin-bottom:16px;">Runde ${currentRound} von ${unit.runden}</div>
+          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;">${list}</div>
+          <button onclick="zirkelTimerRoundDone()" class="btn" style="width:100%;padding:18px;font-size:18px;">✓ ${isLast ? 'Letzte Runde fertig' : 'Runde fertig'}</button>
+        </div>`;
+    }
+
+    function renderZirkelTimerPause() {
+      const { currentRound, elapsedSec, pauseRemainingSec } = zirkelTimerState;
+      document.getElementById('zirkel-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:360px;">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Gesamtzeit ${fmtZirkelTime(elapsedSec)}</div>
+          <div id="zirkel-pause-countdown" style="font-size:52px;font-weight:700;margin:8px 0 12px;">${fmtZirkelTime(pauseRemainingSec)}</div>
+          <div style="color:var(--muted);margin-bottom:28px;">Pause · Runde ${currentRound} fertig</div>
+          <button onclick="zirkelTimerSkipPause()" style="width:100%;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Pause überspringen</button>
+        </div>`;
+    }
+
+    function renderZirkelTimerDone() {
+      const { unit, elapsedSec } = zirkelTimerState;
+      const kcal = calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(elapsedSec / 60) });
+      document.getElementById('zirkel-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:360px;">
+          <div style="font-size:24px;font-weight:600;margin-bottom:20px;">Zirkel abgeschlossen! 🎉</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Gesamtzeit</div>
+          <div style="font-size:26px;font-weight:700;margin-bottom:10px;">${fmtZirkelTime(elapsedSec)}</div>
+          <div style="margin-bottom:4px;">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'}</div>
+          <div style="color:#f97316;margin-bottom:28px;">≈ ${fmt(kcal)} kcal</div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="discardZirkelTimer()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Verwerfen</button>
+            <button id="zirkel-timer-save-btn" onclick="saveZirkelTimer()" class="btn" style="flex:2;padding:14px;">Speichern</button>
+          </div>
+        </div>`;
+    }
+
+    function zirkelBeep(freq, dur) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx || !zirkelTimerState) return;
+        if (!zirkelTimerState.audioCtx) zirkelTimerState.audioCtx = new AudioCtx();
+        const ctx = zirkelTimerState.audioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        gain.gain.value = 0.3;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + dur);
+      } catch (err) { /* Beep optional – Timer läuft unabhängig davon weiter */ }
+    }
+
+    function zirkelAdvanceRound() {
+      zirkelTimerState.currentRound++;
+      zirkelTimerState.phase = 'exercise';
+      renderZirkelTimerExercise();
+    }
+
+    function zirkelTimerTick() {
+      if (!zirkelTimerState) return;
+      zirkelTimerState.elapsedSec++;
+      const elapsedEl = document.getElementById('zirkel-elapsed');
+      if (elapsedEl) elapsedEl.textContent = fmtZirkelTime(zirkelTimerState.elapsedSec);
+      if (zirkelTimerState.phase === 'pause') {
+        zirkelTimerState.pauseRemainingSec--;
+        const r = zirkelTimerState.pauseRemainingSec;
+        if (r === 3 || r === 2) zirkelBeep(880, 0.1);
+        else if (r === 1) zirkelBeep(660, 0.3);
+        if (r <= 0) { zirkelAdvanceRound(); return; }
+        const cd = document.getElementById('zirkel-pause-countdown');
+        if (cd) cd.textContent = fmtZirkelTime(r);
+      }
+    }
+
+    window.zirkelTimerBegin = async function() {
+      if (!zirkelTimerState) return;
+      zirkelTimerState.phase = 'exercise';
+      zirkelTimerState.currentRound = 1;
+      zirkelTimerState.elapsedSec = 0;
+      try { zirkelTimerState.wakeLock = await navigator.wakeLock?.request('screen'); }
+      catch (err) { console.warn('WakeLock nicht verfügbar:', err); }
+      zirkelTimerState.intervalId = setInterval(zirkelTimerTick, 1000);
+      renderZirkelTimerExercise();
+    };
+
+    window.zirkelTimerRoundDone = function() {
+      if (!zirkelTimerState) return;
+      if (zirkelTimerState.currentRound >= zirkelTimerState.unit.runden) {
+        zirkelTimerFinish();
+      } else {
+        zirkelTimerState.phase = 'pause';
+        zirkelTimerState.pauseRemainingSec = zirkelTimerState.unit.pauseSec;
+        renderZirkelTimerPause();
+      }
+    };
+
+    window.zirkelTimerSkipPause = function() {
+      if (!zirkelTimerState || zirkelTimerState.phase !== 'pause') return;
+      zirkelAdvanceRound();
+    };
+
+    function zirkelTimerFinish() {
+      clearInterval(zirkelTimerState.intervalId);
+      zirkelTimerState.intervalId = null;
+      zirkelTimerState.wakeLock?.release?.().catch(() => {});
+      zirkelTimerState.wakeLock = null;
+      zirkelTimerState.phase = 'done';
+      renderZirkelTimerDone();
+    }
+
+    function closeZirkelTimerModal() {
+      if (zirkelTimerState) {
+        if (zirkelTimerState.intervalId) clearInterval(zirkelTimerState.intervalId);
+        zirkelTimerState.wakeLock?.release?.().catch(() => {});
+      }
+      document.getElementById('zirkel-timer-modal').style.display = 'none';
+      zirkelTimerState = null;
+    }
+
+    window.discardZirkelTimer = function() {
+      closeZirkelTimerModal();
+    };
+
+    window.requestCloseZirkelTimer = async function() {
+      if (!zirkelTimerState) return;
+      const submsg = zirkelTimerState.phase === 'done' ? 'Das Ergebnis wird nicht gespeichert.' : 'Dein Fortschritt geht verloren.';
+      const ok = await showConfirm('Zirkel abbrechen?', submsg, '⚠️', 'Abbrechen', true);
+      if (ok) closeZirkelTimerModal();
+    };
+
+    window.saveZirkelTimer = async function() {
+      if (!zirkelTimerState || zirkelTimerState.phase !== 'done') return;
+      const { unit, ds, planUnitId, elapsedSec } = zirkelTimerState;
+      const zeit = planMinToZeit(elapsedSec / 60);
+      const datum = ds || planYmd(new Date());
+      const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, wdh: x.wdh }));
+      const autoNotiz = `${unit.runden}× ` + uebungen.map(planUebungShort).join(' / ');
+      const timeNow = new Date().toTimeString().slice(0, 8);
+      const entry = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        datum, typ: 'zirkel', distanz: 0, zeit,
+        notiz: autoNotiz,
+        source: 'plan',
+        ...(planUnitId ? { planUnitId } : {}),
+        runden: unit.runden, pauseSec: unit.pauseSec, uebungen,
+        timestamp: datum + 'T' + timeNow
+      };
+      entry.act_kcal_calc = calcActivityKcal(entry);
+
+      const btn = document.getElementById('zirkel-timer-save-btn');
+      if (btn) btn.disabled = true;
+      try {
+        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        trainingEntries.push(entry);
+        window.trainingEntries = trainingEntries;
+        saveToCache();
+        closeZirkelTimerModal();
+        renderFoodLog();
+        renderTrainingHistory();
+        renderDataStats();
+        showToast('✓ Zirkel gespeichert');
+      } catch (err) {
+        console.error('Zirkel-Timer Speichern Fehler:', err);
+        showToast('❌ Speichern fehlgeschlagen');
+        if (btn) btn.disabled = false;
       }
     };
 

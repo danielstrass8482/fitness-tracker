@@ -647,6 +647,9 @@
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
 
+      <!-- Oura Ring: Schlaf / Readiness / Aktivität (nur wenn verbunden & Daten für den Tag vorhanden) -->
+      <div id="oura-daily-card" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:16px;"></div>
+
       <!-- Meals Container -->
       <div id="meals-container"></div>
     </div>
@@ -1094,6 +1097,27 @@
               <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
             </div>
             <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
+          </div>
+      </div>
+
+        <!-- Oura Ring Integration -->
+        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+            <div style="background:#1a1a2e;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
+            <h3 style="margin:0;">Oura Ring</h3>
+          </div>
+          <div id="oura-disconnected">
+            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
+            <button class="btn" onclick="connectOura()" style="background:#1a1a2e;border-color:#1a1a2e;width:100%;">Mit Oura verbinden</button>
+          </div>
+          <div id="oura-connected" style="display:none;">
+            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
+              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
+              <div style="font-size:12px;color:#f97316;margin-top:4px;display:none;" id="oura-error"></div>
+            </div>
+            <button class="btn" onclick="syncOuraNow()" style="width:100%;">🔄 Jetzt synchronisieren</button>
+            <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
           </div>
       </div>
 
@@ -1620,7 +1644,8 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const fbFunctions = getFunctions(app, 'us-central1');
-    
+    const fbFunctionsEU = getFunctions(app, 'europe-west1'); // Oura Functions laufen in europe-west1
+
     // Global State
     let userId = null;
     let foodDB = [];
@@ -1632,13 +1657,15 @@
     let trainingPlan = {};        // aktueller Plan { mo: [unit], di: [...], ... } – users/{uid}/trainingplans/{Montag}
     let trainingPlanFrom = null;  // Montag (yyyy-mm-dd), ab dem die aktuelle Version gilt
     let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
-    
+    let ouraDaily = {};           // { [date]: { sleepScore, sleepDurationSec, readinessScore, activityScore, steps, ... } }
+
     window.foodDB = foodDB;
     window.recipes = recipes;
     window.foodLog = foodLog;
     window.trainingEntries = trainingEntries;
     window.dayLogs = dayLogs;
-    
+    window.ouraDaily = ouraDaily;
+
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
     const userFoodCol = () => collection(db, 'foods');           // global shared
@@ -1648,6 +1675,7 @@
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
+    const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Anzeige-Cache aus Oura-Sync (Cloud Function), fließt NICHT ins Kalorienziel ein
     // Weekly stats state
     let weeklyStats = {};
 
@@ -1693,7 +1721,7 @@
       try {
         cacheDB = await openCacheDB();
         if (!cacheDB) return false;
-        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings, cachedPlan] = await Promise.all([
+        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings, cachedPlan, cachedOuraDaily] = await Promise.all([
           cacheGet('foodDB'),
           cacheGet('recipes'),
           cacheGet('foodLogEntries'),
@@ -1701,6 +1729,7 @@
           cacheGet('favorites'),
           cacheGet('settings'),
           cacheGet('trainingplan'),
+          cacheGet('ouraDaily'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         let hasCache = false;
@@ -1729,6 +1758,11 @@
         if (cachedSettings) { settings = { ...settings, ...cachedSettings }; }
         if (cachedPlan) { trainingPlan = normalizeTrainingPlan(cachedPlan); trainingPlanFrom = cachedPlanFrom || null; }
         if (cachedPlanWeeks) { planWeekPlans = cachedPlanWeeks; }
+        if (cachedOuraDaily?.length) {
+          ouraDaily = {};
+          for (const d of cachedOuraDaily) { if (d.date) ouraDaily[d.date] = d; }
+          window.ouraDaily = ouraDaily;
+        }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -1748,6 +1782,7 @@
         cachePut('settings', settings),
         cachePut('trainingplan', trainingPlan),
         cachePut('trainingplan_from', trainingPlanFrom),
+        cachePut('ouraDaily', Object.values(ouraDaily)),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -1768,6 +1803,9 @@
         } else {
           await loadAllData(false); // Erststart: blockierend laden
         }
+
+        handleOuraRedirectParams();
+        loadOuraStatus();
       } else {
         userId = null;
         document.getElementById('login-screen').style.display = 'flex';
@@ -1866,6 +1904,17 @@
         if (favSnap.exists()) {
           favorites = new Set(favSnap.data().ids || []);
         }
+
+        // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
+        try {
+          const ouraCutoff = new Date();
+          ouraCutoff.setDate(ouraCutoff.getDate() - 35);
+          const ouraCutoffStr = ouraCutoff.toISOString().split('T')[0];
+          const ouraSnap = await getDocs(query(userOuraDailyCol(), where('date', '>=', ouraCutoffStr)));
+          ouraDaily = {};
+          ouraSnap.forEach(d => { ouraDaily[d.id] = d.data(); });
+          window.ouraDaily = ouraDaily;
+        } catch(e) { console.warn('Oura daily load error:', e); }
 
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan)
         await loadCurrentTrainingPlan();
@@ -4180,7 +4229,10 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         html += '</div>';
         activityContainer.innerHTML = html;
       }
-      
+
+      // ── Oura Ring Karte (Schlaf / Readiness / Aktivität) ──────────────────
+      renderOuraDailyCard(currentDate);
+
       // Group by meal
       const mealOrder = ['Morgens (0-11h)', 'Mittags (11-14h)', 'Abends (14-21h)', 'Nachts (21-24h)'];
       const mealKeys = {
@@ -5457,6 +5509,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           const hcSection = document.getElementById('health-connect-section');
           if (hcSection) hcSection.style.display = 'block';
           loadDriveStatus();
+          loadOuraStatus();
         }
         if (target === 'ernaehrung' && userId) {
           // Silent background sync for last 2 days
@@ -6418,6 +6471,159 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         document.getElementById('gfit-disconnected').style.display = 'block';
         document.getElementById('gfit-connected').style.display = 'none';
         showToast('✓ Google Fit getrennt');
+      } catch(e) {
+        showToast('❌ Fehler: ' + e.message);
+      }
+    };
+
+
+    // ── Oura Ring Integration ────────────────────────────────────────────────
+    // OAuth-Flow läuft komplett serverseitig in Cloud Functions (europe-west1) –
+    // Client Secret landet nie im Frontend. Oura-Daten fließen NICHT ins Kalorienziel
+    // ein (siehe userOuraDailyCol/ouraDaily) – nur Anzeige, kein Merge mit Garmin.
+    const OURA_FUNCTIONS_BASE = 'https://europe-west1-fitness-tracker-c6f97.cloudfunctions.net';
+
+    function handleOuraRedirectParams() {
+      const params = new URLSearchParams(window.location.search);
+      const ouraParam = params.get('oura');
+      if (!ouraParam) return;
+      if (ouraParam === 'connected') {
+        showToast('✓ Oura Ring verbunden!');
+      } else if (ouraParam === 'error') {
+        showToast('❌ Oura-Verbindung fehlgeschlagen: ' + (params.get('reason') || 'unbekannt'));
+      }
+      params.delete('oura');
+      params.delete('reason');
+      const rest = params.toString();
+      history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : '') + window.location.hash);
+    }
+
+    // Zeigt Schlaf/Readiness/Aktivität für den aktuell angezeigten Tag (currentDate).
+    // Rein informativ – fließt nirgends in Kalorienziel/Aktivitäts-Listen ein.
+    function renderOuraDailyCard(date) {
+      const card = document.getElementById('oura-daily-card');
+      if (!card) return;
+      const d = ouraDaily[date];
+      if (!d) { card.style.display = 'none'; card.innerHTML = ''; return; }
+
+      const sleepMin = d.sleepDurationSec ? Math.round(d.sleepDurationSec / 60) : null;
+      const sleepText = sleepMin != null ? `${Math.floor(sleepMin / 60)}h ${sleepMin % 60}min` : null;
+
+      const rows = [];
+      if (sleepText || d.sleepScore != null) {
+        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:18px;">😴</span>
+          <div style="flex:1;">
+            <div style="font-weight:500;font-size:14px;">Schlaf</div>
+            <div style="font-size:12px;color:var(--muted);">${sleepText || '—'}${d.sleepScore != null ? ' · Score ' + d.sleepScore : ''}</div>
+          </div>
+        </div>`);
+      }
+      if (d.readinessScore != null) {
+        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:18px;">🔋</span>
+          <div style="flex:1;">
+            <div style="font-weight:500;font-size:14px;">Readiness</div>
+            <div style="font-size:12px;color:var(--muted);">Score ${d.readinessScore}</div>
+          </div>
+        </div>`);
+      }
+      if (d.activityScore != null || d.steps != null) {
+        const metaParts = [];
+        if (d.activityScore != null) metaParts.push('Score ' + d.activityScore);
+        if (d.steps != null) metaParts.push(fmt(d.steps) + ' Schritte');
+        if (d.totalCalories != null) metaParts.push(fmt(d.totalCalories) + ' kcal');
+        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+          <span style="font-size:18px;">💍</span>
+          <div style="flex:1;">
+            <div style="font-weight:500;font-size:14px;">Aktivität (Oura)</div>
+            <div style="font-size:12px;color:var(--muted);">${metaParts.join(' · ')}</div>
+          </div>
+        </div>`);
+      }
+
+      if (!rows.length) { card.style.display = 'none'; card.innerHTML = ''; return; }
+      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('');
+      card.style.display = 'block';
+    }
+
+    async function loadOuraStatus() {
+      try {
+        const ouraDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'oura'));
+        const connected = ouraDoc.exists() && ouraDoc.data().connected;
+        const disconnectedEl = document.getElementById('oura-disconnected');
+        const connectedEl = document.getElementById('oura-connected');
+        if (!disconnectedEl || !connectedEl) return; // Settings-Karte evtl. noch nicht im DOM
+        if (connected) {
+          disconnectedEl.style.display = 'none';
+          connectedEl.style.display = 'block';
+          const data = ouraDoc.data();
+          const lastSyncEl = document.getElementById('oura-last-sync');
+          if (data.lastSyncAt) {
+            const d = data.lastSyncAt.toDate ? data.lastSyncAt.toDate() : new Date(data.lastSyncAt);
+            lastSyncEl.textContent = 'Letzter Sync: ' + d.toLocaleDateString('de-DE') + ' ' +
+              d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) +
+              (data.lastSyncDays ? ' · ' + data.lastSyncDays + ' Tage' : '');
+          } else {
+            lastSyncEl.textContent = 'Noch nicht synchronisiert';
+          }
+          const errorEl = document.getElementById('oura-error');
+          if (data.lastSyncError) {
+            errorEl.style.display = 'block';
+            errorEl.textContent = '⚠️ Letzter Sync mit Fehlern: ' + data.lastSyncError;
+          } else {
+            errorEl.style.display = 'none';
+          }
+        } else {
+          disconnectedEl.style.display = 'block';
+          connectedEl.style.display = 'none';
+        }
+      } catch(e) { console.warn('Oura status error:', e); }
+    }
+
+    window.connectOura = async function() {
+      if (!auth.currentUser) return;
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        // Voller Redirect (kein Popup) – ouraCallback leitet den Browser zurück auf die App
+        window.location.href = OURA_FUNCTIONS_BASE + '/ouraAuthStart?idToken=' + encodeURIComponent(idToken);
+      } catch(e) {
+        showToast('❌ Fehler: ' + e.message);
+      }
+    };
+
+    window.syncOuraNow = async function() {
+      showToast('⏳ Oura wird synchronisiert...');
+      try {
+        const syncFn = httpsCallable(fbFunctionsEU, 'syncOuraManual');
+        const endMs = Date.now();
+        const startMs = endMs - (7 * 24 * 3600 * 1000);
+        const result = await syncFn({ startMs, endMs });
+        showToast('✓ ' + (result.data.days || 0) + ' Tage Oura-Daten synchronisiert');
+        // Anzeige-Daten neu laden
+        const ouraCutoff = new Date();
+        ouraCutoff.setDate(ouraCutoff.getDate() - 35);
+        const ouraSnap = await getDocs(query(userOuraDailyCol(), where('date', '>=', ouraCutoff.toISOString().split('T')[0])));
+        ouraDaily = {};
+        ouraSnap.forEach(d => { ouraDaily[d.id] = d.data(); });
+        window.ouraDaily = ouraDaily;
+        saveToCache();
+        renderFoodLog();
+      } catch(e) {
+        console.error('Oura sync error:', e);
+        showToast('❌ Sync fehlgeschlagen: ' + e.message);
+      }
+      await loadOuraStatus();
+    };
+
+    window.disconnectOura = async function() {
+      if (!await showConfirm('Oura Ring trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', '🔌', 'Trennen')) return;
+      try {
+        const disconnectFn = httpsCallable(fbFunctionsEU, 'ouraDisconnect');
+        await disconnectFn();
+        document.getElementById('oura-disconnected').style.display = 'block';
+        document.getElementById('oura-connected').style.display = 'none';
+        showToast('✓ Oura Ring getrennt');
       } catch(e) {
         showToast('❌ Fehler: ' + e.message);
       }

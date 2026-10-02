@@ -1659,6 +1659,7 @@
     let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
     let ouraDaily = {};           // { [date]: { sleepScore, sleepDurationSec, readinessScore, activityScore, steps, ... } }
     let ouraStatus = { connected: false, lastSyncAtMs: null, lastSyncDays: null, lastSyncError: null }; // Verbindungsstatus aus users/{uid}/integrations/oura, für Tagesüberblick-Karte + Settings
+    let ouraStepLogToday = null;  // { date, lastFetchAt } – nur heutiger Tag, 1 Dokumentlesen aus oura_step_log, bewusst NICHT in IndexedDB gecacht
 
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -1667,6 +1668,7 @@
     window.dayLogs = dayLogs;
     window.ouraDaily = ouraDaily;
     window.ouraStatus = ouraStatus;
+    window.ouraStepLogToday = ouraStepLogToday;
 
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
@@ -6519,8 +6521,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const sleepScoreText = d?.sleepScore != null ? String(d.sleepScore) : '–';
       const readinessScoreText = d?.readinessScore != null ? String(d.readinessScore) : '–';
       const activityScoreText = d?.activityScore != null ? String(d.activityScore) : '–';
-      const stepsText = d?.steps != null ? fmt(d.steps) + ' Schritte' : '–';
       const kcalText = d?.totalCalories != null ? fmt(d.totalCalories) + ' kcal' : '–';
+
+      // Oura-Schritte (vorläufig, da alle 15 Min nachgezogen) + Garmin-Tagesschritte – reine
+      // Anzeige für den mehrwöchigen Vergleich, keine Verrechnung/Zusammenführung der Quellen.
+      const todayStr = new Date().toISOString().split('T')[0];
+      const ouraStepsText = d?.steps != null ? fmt(d.steps) : null;
+      const stepStandText = (date === todayStr && ouraStepLogToday?.date === todayStr && ouraStepLogToday.lastFetchAt)
+        ? new Date(ouraStepLogToday.lastFetchAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+        : null;
+      const garminStepsInfo = (typeof window.getStepsForDate === 'function') ? window.getStepsForDate(date) : null;
+      const garminStepsText = (garminStepsInfo?.source === 'garmin' && garminStepsInfo.steps > 0) ? fmt(garminStepsInfo.steps) : null;
 
       const rows = [];
       rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
@@ -6537,13 +6548,25 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <div style="font-size:12px;color:var(--muted);">Score ${readinessScoreText}</div>
         </div>
       </div>`);
-      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;${(ouraStepsText != null || garminStepsText != null) ? 'border-bottom:1px solid var(--border);' : ''}">
         <span style="font-size:18px;">💍</span>
         <div style="flex:1;">
           <div style="font-weight:500;font-size:14px;">Aktivität (Oura)</div>
-          <div style="font-size:12px;color:var(--muted);">Score ${activityScoreText} · ${stepsText} · ${kcalText}</div>
+          <div style="font-size:12px;color:var(--muted);">Score ${activityScoreText} · ${kcalText}</div>
         </div>
       </div>`);
+      if (ouraStepsText != null || garminStepsText != null) {
+        const stepLines = [];
+        if (ouraStepsText != null) stepLines.push(`<div style="font-weight:500;font-size:14px;">Schritte (Oura, vorläufig): ${ouraStepsText}</div>`);
+        if (garminStepsText != null) stepLines.push(`<div style="font-weight:500;font-size:14px;${ouraStepsText != null ? 'margin-top:4px;' : ''}">Schritte (Garmin): ${garminStepsText}</div>`);
+        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+          <span style="font-size:18px;">👣</span>
+          <div style="flex:1;">
+            ${stepLines.join('')}
+            ${stepStandText ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">Stand: ${stepStandText} Uhr</div>` : ''}
+          </div>
+        </div>`);
+      }
 
       // Dezente Statuszeile(n) unter den Werten
       const statusLines = [];
@@ -6619,7 +6642,21 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         }
 
         renderOuraDailyCard(currentDate);
+        if (connected) loadOuraStepLogToday();
       } catch(e) { console.warn('Oura status error:', e); }
+    }
+
+    // Lädt NUR den Zeitstempel des letzten Oura-Schritt-Abrufs für HEUTE aus oura_step_log
+    // (ein einziges Dokumentlesen, bewusst nicht in IndexedDB gecacht – App-Start bleibt
+    // unverändert schnell). Für andere Tage wird keine "Stand"-Zeit angezeigt.
+    async function loadOuraStepLogToday() {
+      try {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const snap = await getDoc(doc(db, 'users', userId, 'oura_step_log', todayStr));
+        ouraStepLogToday = snap.exists() ? { date: todayStr, lastFetchAt: snap.data().lastFetchAt || null } : null;
+        window.ouraStepLogToday = ouraStepLogToday;
+        renderOuraDailyCard(currentDate);
+      } catch(e) { console.warn('Oura step log error:', e); }
     }
 
     window.connectOura = async function() {

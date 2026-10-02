@@ -647,7 +647,7 @@
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
 
-      <!-- Oura Ring: Schlaf / Readiness / Aktivität (nur wenn verbunden & Daten für den Tag vorhanden) -->
+      <!-- Oura Ring: Schlaf / Readiness / Aktivität (immer sichtbar wenn Oura verbunden ist, auch ohne Daten für den Tag) -->
       <div id="oura-daily-card" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:16px;"></div>
 
       <!-- Meals Container -->
@@ -1658,6 +1658,7 @@
     let trainingPlanFrom = null;  // Montag (yyyy-mm-dd), ab dem die aktuelle Version gilt
     let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
     let ouraDaily = {};           // { [date]: { sleepScore, sleepDurationSec, readinessScore, activityScore, steps, ... } }
+    let ouraStatus = { connected: false, lastSyncAtMs: null, lastSyncDays: null, lastSyncError: null }; // Verbindungsstatus aus users/{uid}/integrations/oura, für Tagesüberblick-Karte + Settings
 
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -1665,6 +1666,7 @@
     window.trainingEntries = trainingEntries;
     window.dayLogs = dayLogs;
     window.ouraDaily = ouraDaily;
+    window.ouraStatus = ouraStatus;
 
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
@@ -1721,7 +1723,7 @@
       try {
         cacheDB = await openCacheDB();
         if (!cacheDB) return false;
-        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings, cachedPlan, cachedOuraDaily] = await Promise.all([
+        const [cachedFoodDB, cachedRecipes, cachedFoodLogEntries, cachedTraining, cachedFavs, cachedSettings, cachedPlan, cachedOuraDaily, cachedOuraStatus] = await Promise.all([
           cacheGet('foodDB'),
           cacheGet('recipes'),
           cacheGet('foodLogEntries'),
@@ -1730,6 +1732,7 @@
           cacheGet('settings'),
           cacheGet('trainingplan'),
           cacheGet('ouraDaily'),
+          cacheGet('ouraStatus'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         let hasCache = false;
@@ -1763,6 +1766,7 @@
           for (const d of cachedOuraDaily) { if (d.date) ouraDaily[d.date] = d; }
           window.ouraDaily = ouraDaily;
         }
+        if (cachedOuraStatus) { ouraStatus = cachedOuraStatus; window.ouraStatus = ouraStatus; }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -1783,6 +1787,7 @@
         cachePut('trainingplan', trainingPlan),
         cachePut('trainingplan_from', trainingPlanFrom),
         cachePut('ouraDaily', Object.values(ouraDaily)),
+        cachePut('ouraStatus', ouraStatus),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -6500,84 +6505,120 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     // Zeigt Schlaf/Readiness/Aktivität für den aktuell angezeigten Tag (currentDate).
     // Rein informativ – fließt nirgends in Kalorienziel/Aktivitäts-Listen ein.
+    // Karte ist immer sichtbar solange Oura verbunden ist (ouraStatus.connected) – auch ohne
+    // Daten für den gewählten Tag, dann zeigen die Zeilen "–" statt ausgeblendet zu werden.
     function renderOuraDailyCard(date) {
       const card = document.getElementById('oura-daily-card');
       if (!card) return;
-      const d = ouraDaily[date];
-      if (!d) { card.style.display = 'none'; card.innerHTML = ''; return; }
+      if (!ouraStatus?.connected) { card.style.display = 'none'; card.innerHTML = ''; return; }
 
-      const sleepMin = d.sleepDurationSec ? Math.round(d.sleepDurationSec / 60) : null;
-      const sleepText = sleepMin != null ? `${Math.floor(sleepMin / 60)}h ${sleepMin % 60}min` : null;
+      const d = ouraDaily[date] || null;
+
+      const sleepMin = d?.sleepDurationSec ? Math.round(d.sleepDurationSec / 60) : null;
+      const sleepText = sleepMin != null ? `${Math.floor(sleepMin / 60)}h ${sleepMin % 60}min` : '–';
+      const sleepScoreText = d?.sleepScore != null ? String(d.sleepScore) : '–';
+      const readinessScoreText = d?.readinessScore != null ? String(d.readinessScore) : '–';
+      const activityScoreText = d?.activityScore != null ? String(d.activityScore) : '–';
+      const stepsText = d?.steps != null ? fmt(d.steps) + ' Schritte' : '–';
+      const kcalText = d?.totalCalories != null ? fmt(d.totalCalories) + ' kcal' : '–';
 
       const rows = [];
-      if (sleepText || d.sleepScore != null) {
-        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:18px;">😴</span>
-          <div style="flex:1;">
-            <div style="font-weight:500;font-size:14px;">Schlaf</div>
-            <div style="font-size:12px;color:var(--muted);">${sleepText || '—'}${d.sleepScore != null ? ' · Score ' + d.sleepScore : ''}</div>
-          </div>
-        </div>`);
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:18px;">😴</span>
+        <div style="flex:1;">
+          <div style="font-weight:500;font-size:14px;">Schlaf</div>
+          <div style="font-size:12px;color:var(--muted);">${sleepText} · Score ${sleepScoreText}</div>
+        </div>
+      </div>`);
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:18px;">🔋</span>
+        <div style="flex:1;">
+          <div style="font-weight:500;font-size:14px;">Readiness</div>
+          <div style="font-size:12px;color:var(--muted);">Score ${readinessScoreText}</div>
+        </div>
+      </div>`);
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+        <span style="font-size:18px;">💍</span>
+        <div style="flex:1;">
+          <div style="font-weight:500;font-size:14px;">Aktivität (Oura)</div>
+          <div style="font-size:12px;color:var(--muted);">Score ${activityScoreText} · ${stepsText} · ${kcalText}</div>
+        </div>
+      </div>`);
+
+      // Dezente Statuszeile(n) unter den Werten
+      const statusLines = [];
+      if (!d) {
+        statusLines.push('Noch keine Daten für diesen Tag. Oura-App öffnen, Ring synchronisieren, dann in Daten → Oura auf Jetzt synchronisieren tippen.');
       }
-      if (d.readinessScore != null) {
-        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:18px;">🔋</span>
-          <div style="flex:1;">
-            <div style="font-weight:500;font-size:14px;">Readiness</div>
-            <div style="font-size:12px;color:var(--muted);">Score ${d.readinessScore}</div>
-          </div>
-        </div>`);
-      }
-      if (d.activityScore != null || d.steps != null) {
-        const metaParts = [];
-        if (d.activityScore != null) metaParts.push('Score ' + d.activityScore);
-        if (d.steps != null) metaParts.push(fmt(d.steps) + ' Schritte');
-        if (d.totalCalories != null) metaParts.push(fmt(d.totalCalories) + ' kcal');
-        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
-          <span style="font-size:18px;">💍</span>
-          <div style="flex:1;">
-            <div style="font-weight:500;font-size:14px;">Aktivität (Oura)</div>
-            <div style="font-size:12px;color:var(--muted);">${metaParts.join(' · ')}</div>
-          </div>
-        </div>`);
+      const loadedDays = Object.keys(ouraDaily).length;
+      let syncLine = 'Letzter Sync: ' + (ouraStatus.lastSyncAtMs
+        ? new Date(ouraStatus.lastSyncAtMs).toLocaleDateString('de-DE') + ' ' + new Date(ouraStatus.lastSyncAtMs).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
+        : 'noch nicht synchronisiert');
+      if (loadedDays > 0) syncLine += ' · Geladene Tage: ' + loadedDays;
+      statusLines.push(syncLine);
+
+      let statusHtml = statusLines.map(line => `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${line}</div>`).join('');
+      if (ouraStatus.lastSyncError) {
+        statusHtml += `<div style="font-size:11px;color:#f97316;margin-top:4px;">⚠️ ${ouraStatus.lastSyncError}</div>`;
       }
 
-      if (!rows.length) { card.style.display = 'none'; card.innerHTML = ''; return; }
-      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('');
+      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('') + statusHtml;
       card.style.display = 'block';
     }
 
+    // Lädt den Oura-Verbindungsstatus aus Firestore, hält ihn in ouraStatus (cache-first über
+    // IndexedDB persistiert) und aktualisiert sowohl die Settings-Karte (Daten-Tab) als auch die
+    // Tagesüberblick-Karte. Läuft unabhängig davon, ob die Settings-Karte aktuell im DOM ist.
     async function loadOuraStatus() {
       try {
         const ouraDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'oura'));
-        const connected = ouraDoc.exists() && ouraDoc.data().connected;
+        const connected = !!(ouraDoc.exists() && ouraDoc.data().connected);
+        const data = connected ? ouraDoc.data() : null;
+        const lastSyncAtMs = data?.lastSyncAt
+          ? (data.lastSyncAt.toDate ? data.lastSyncAt.toDate().getTime() : new Date(data.lastSyncAt).getTime())
+          : null;
+        ouraStatus = {
+          connected,
+          lastSyncAtMs,
+          lastSyncDays: data?.lastSyncDays ?? null,
+          lastSyncError: data?.lastSyncError ?? null,
+        };
+        window.ouraStatus = ouraStatus;
+        saveToCache();
+
         const disconnectedEl = document.getElementById('oura-disconnected');
         const connectedEl = document.getElementById('oura-connected');
-        if (!disconnectedEl || !connectedEl) return; // Settings-Karte evtl. noch nicht im DOM
-        if (connected) {
-          disconnectedEl.style.display = 'none';
-          connectedEl.style.display = 'block';
-          const data = ouraDoc.data();
-          const lastSyncEl = document.getElementById('oura-last-sync');
-          if (data.lastSyncAt) {
-            const d = data.lastSyncAt.toDate ? data.lastSyncAt.toDate() : new Date(data.lastSyncAt);
-            lastSyncEl.textContent = 'Letzter Sync: ' + d.toLocaleDateString('de-DE') + ' ' +
-              d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) +
-              (data.lastSyncDays ? ' · ' + data.lastSyncDays + ' Tage' : '');
+        if (disconnectedEl && connectedEl) { // Settings-Karte evtl. noch nicht im DOM
+          if (connected) {
+            disconnectedEl.style.display = 'none';
+            connectedEl.style.display = 'block';
+            const lastSyncEl = document.getElementById('oura-last-sync');
+            if (lastSyncEl) {
+              if (lastSyncAtMs) {
+                const d = new Date(lastSyncAtMs);
+                lastSyncEl.textContent = 'Letzter Sync: ' + d.toLocaleDateString('de-DE') + ' ' +
+                  d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) +
+                  (ouraStatus.lastSyncDays ? ' · ' + ouraStatus.lastSyncDays + ' Tage' : '');
+              } else {
+                lastSyncEl.textContent = 'Noch nicht synchronisiert';
+              }
+            }
+            const errorEl = document.getElementById('oura-error');
+            if (errorEl) {
+              if (ouraStatus.lastSyncError) {
+                errorEl.style.display = 'block';
+                errorEl.textContent = '⚠️ Letzter Sync mit Fehlern: ' + ouraStatus.lastSyncError;
+              } else {
+                errorEl.style.display = 'none';
+              }
+            }
           } else {
-            lastSyncEl.textContent = 'Noch nicht synchronisiert';
+            disconnectedEl.style.display = 'block';
+            connectedEl.style.display = 'none';
           }
-          const errorEl = document.getElementById('oura-error');
-          if (data.lastSyncError) {
-            errorEl.style.display = 'block';
-            errorEl.textContent = '⚠️ Letzter Sync mit Fehlern: ' + data.lastSyncError;
-          } else {
-            errorEl.style.display = 'none';
-          }
-        } else {
-          disconnectedEl.style.display = 'block';
-          connectedEl.style.display = 'none';
         }
+
+        renderOuraDailyCard(currentDate);
       } catch(e) { console.warn('Oura status error:', e); }
     }
 
@@ -6621,8 +6662,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       try {
         const disconnectFn = httpsCallable(fbFunctionsEU, 'ouraDisconnect');
         await disconnectFn();
-        document.getElementById('oura-disconnected').style.display = 'block';
-        document.getElementById('oura-connected').style.display = 'none';
+        await loadOuraStatus(); // aktualisiert Settings-Karte, ouraStatus (Cache) und Tagesüberblick-Karte
         showToast('✓ Oura Ring getrennt');
       } catch(e) {
         showToast('❌ Fehler: ' + e.message);

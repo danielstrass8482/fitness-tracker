@@ -1200,7 +1200,7 @@
         <button onclick="closeRecipeModal()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
       </div>
       
-      <div style="padding:20px;">
+      <div style="padding:20px 20px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
         <input type="hidden" id="recipe-modal-id">
         
         <!-- Name + Portionen -->
@@ -1244,7 +1244,7 @@
   </div>
   <!-- Consolidate Modal - neues 3-Optionen Interface -->
   <div id="consolidate-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
-    <div style="max-width:760px;margin:0 auto;padding:20px;">
+    <div style="max-width:760px;margin:0 auto;padding:20px 20px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
         <div>
           <h3 style="margin:0 0 4px;">🔀 Duplikate bereinigen</h3>
@@ -1269,7 +1269,7 @@
 
   <!-- Bulk Zeit Modal -->
   <div id="bulk-time-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 16px;">🕐 Zeit ändern</h3>
       <div id="bulk-time-entry-list" style="max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
@@ -1285,7 +1285,7 @@
 
   <!-- Plan-Einheit abhaken Modal -->
   <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
       <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
       <!-- Nur bei Zirkel -->
@@ -1294,11 +1294,11 @@
         <div class="plan-row" style="gap:12px;margin-bottom:12px;">
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Runden</label>
-            <input type="number" id="plan-complete-runden" min="1" step="1" inputmode="numeric" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <input type="number" id="plan-complete-runden" min="1" step="1" inputmode="numeric" pattern="[0-9]*" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause zw. Runden (Sek)</label>
-            <input type="number" id="plan-complete-pause" min="0" step="5" inputmode="numeric" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <input type="number" id="plan-complete-pause" min="0" step="5" inputmode="numeric" pattern="[0-9]*" oninput="planZirkelRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
         </div>
       </div>
@@ -1307,11 +1307,11 @@
         <div class="plan-row" style="gap:12px;">
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Anzahl Sets</label>
-            <input type="number" id="plan-complete-sets" min="1" max="20" step="1" inputmode="numeric" oninput="renderPlanCompleteReps()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <input type="number" id="plan-complete-sets" min="1" max="20" step="1" inputmode="numeric" pattern="[0-9]*" oninput="renderPlanCompleteReps()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
           <div>
             <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Pause zw. Sets (Sek)</label>
-            <input type="number" id="plan-complete-setpause" min="0" step="5" inputmode="numeric" oninput="planStrengthRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <input type="number" id="plan-complete-setpause" min="0" step="5" inputmode="numeric" pattern="[0-9]*" oninput="planStrengthRecalcDauer()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
           </div>
         </div>
         <div id="plan-complete-reps" style="margin-top:10px;"></div>
@@ -1319,7 +1319,7 @@
       <div id="plan-complete-dauer-grid" class="plan-row" style="gap:12px;margin-bottom:12px;">
         <div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Dauer (min)</label>
-          <input type="number" id="plan-complete-dauer" min="0" step="1" inputmode="numeric" oninput="onPlanCompleteDauerInput()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          <input type="number" id="plan-complete-dauer" min="0" step="1" inputmode="numeric" pattern="[0-9]*" oninput="onPlanCompleteDauerInput()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
         </div>
         <div id="plan-complete-distanz-wrap">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Distanz (km)</label>
@@ -1340,7 +1340,7 @@
 
   <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
   <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 16px;">🔄 Ad-hoc Zirkel starten</h3>
       <select id="zirkel-adhoc-select" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px;"></select>
       <div style="display:flex;gap:8px;">
@@ -1355,12 +1355,12 @@
     <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
       <button onclick="requestCloseZirkelTimer()" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;">✕</button>
     </div>
-    <div id="zirkel-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px calc(24px + env(safe-area-inset-bottom, 0px));box-sizing:border-box;overflow-y:auto;"></div>
+    <div id="zirkel-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;overflow-y:auto;"></div>
   </div>
 
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">⧉ Eintrag kopieren</h3>
       <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
@@ -1383,7 +1383,7 @@
     </div>
   </div>
   <div id="bulk-kategorie-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
-    <div style="max-width:700px;margin:0 auto;padding:20px;">
+    <div style="max-width:700px;margin:0 auto;padding:20px 20px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
         <div>
           <h3 style="margin:0 0 4px;">🏷️ Kategorien zuweisen</h3>
@@ -1497,8 +1497,8 @@
         <h3 id="add-food-title" style="font-size:16px;">Essen hinzufügen</h3>
         <button onclick="closeAddFood()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
       </div>
-      
-      <div style="padding:12px 16px;">
+
+      <div style="padding:12px 16px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
         <!-- Mode Toggle: Lebensmittel | Rezepte -->
         <div id="add-food-mode-tabs" style="display:flex;gap:0;margin-bottom:12px;background:var(--bg);border-radius:8px;padding:4px;">
           <button id="mode-tab-food" onclick="setAddFoodMode('food')" style="flex:1;padding:8px;background:var(--primary);border:none;border-radius:6px;color:white;font-size:14px;font-weight:500;cursor:pointer;">Lebensmittel</button>
@@ -5568,7 +5568,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         div.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
         div.innerHTML = `
           <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i+1}</span>
-          <input type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." 
+          <input type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." inputmode="numeric" pattern="[0-9]*"
             style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;"
             oninput="updateHiddenSets()" onchange="updateHiddenSets()" onfocus="this.select()">
         `;
@@ -6961,9 +6961,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         </div>
         <div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Runden</label>
-            <input type="number" min="1" step="1" inputmode="numeric" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
+            <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
           <div><label style="${lbl}">Pause zw. Runden (Sek)</label>
-            <input type="number" min="0" step="5" inputmode="numeric" value="${z.pauseSec ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
+            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.pauseSec ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
         </div>
         <label style="${lbl}">Übungen</label>`;
       z.uebungen.forEach((x, j) => {
@@ -6974,7 +6974,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           </div>
           <div style="display:flex;gap:8px;">
             <select onchange="planZirkelUebungVariant('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planVariantOptions(x)}</select>
-            <input type="number" min="0" step="1" inputmode="numeric" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="planZirkelUebungField('${key}',${idx},${j},'wdh',this.value)" style="${inp}width:80px;">
+            <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="planZirkelUebungField('${key}',${idx},${j},'wdh',this.value)" style="${inp}width:80px;">
           </div>
           ${x._variantCustom ? `<input type="text" value="${planEsc(x.variant)}" placeholder="Eigene Variante, z.B. Bulgarian Split Squat" oninput="planZirkelUebungField('${key}',${idx},${j},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}
         </div>`;
@@ -6995,7 +6995,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // Zielfelder je nach Typ: Ausdauer km + min · Zeit nur min · Kraft/Bodyweight Sets × Wdh (Dauer berechnet)
     function renderPlanUnitTargetFields(key, idx, u, inp, lbl) {
       const dauerField = `<div><label style="${lbl}">Zieldauer (min)</label>
-          <input type="number" min="0" step="1" inputmode="numeric" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>`;
+          <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${u.dauerMin ?? ''}" oninput="planEditField('${key}',${idx},'dauerMin',this.value)" style="${inp}"></div>`;
       const kind = planUnitKind(u.typ);
       if (kind === 'endurance') {
         return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">
@@ -7010,12 +7010,12 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (!Array.isArray(u._reps)) u._reps = planRepsList(u);
       return `<div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Anzahl Sets</label>
-            <input type="number" min="0" max="20" step="1" inputmode="numeric" value="${u._reps.length || ''}" oninput="planEditSetCount('${key}',${idx},this.value)" style="${inp}"></div>
+            <input type="number" min="0" max="20" step="1" inputmode="numeric" pattern="[0-9]*" value="${u._reps.length || ''}" oninput="planEditSetCount('${key}',${idx},this.value)" style="${inp}"></div>
           <div></div>
         </div>
         <div id="usets-${key}-${idx}">${renderPlanSetFields(key, idx, u, inp, lbl)}</div>
         <div style="margin-bottom:4px;"><label style="${lbl}">Pause zw. Sets (Sek)</label>
-          <input type="number" min="0" step="5" inputmode="numeric" value="${planPauseSec(u)}" oninput="planEditField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
+          <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${planPauseSec(u)}" oninput="planEditField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
         <div id="udauer-${key}-${idx}" style="font-size:12px;color:var(--muted);margin-bottom:8px;">${planStrengthDauerText(u)}</div>`;
     }
 
@@ -7027,7 +7027,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (!u._reps.length) return '';
       return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">` + u._reps.map((r, j) => `
           <div style="flex:0 0 calc((100% - 16px) / 3);min-width:0;"><label style="${lbl}">Set ${j + 1}</label>
-            <input type="number" min="0" max="999" step="1" inputmode="numeric" placeholder="Wdh" value="${r > 0 ? r : ''}" oninput="planEditSetRep('${key}',${idx},${j},this.value)" onfocus="this.select()" style="${inp}"></div>`).join('')
+            <input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="Wdh" value="${r > 0 ? r : ''}" oninput="planEditSetRep('${key}',${idx},${j},this.value)" onfocus="this.select()" style="${inp}"></div>`).join('')
         + `</div>`;
     }
 
@@ -7376,7 +7376,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         last = val;
         html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i + 1}</span>
-          <input type="number" min="0" max="999" step="1" inputmode="numeric" placeholder="Wdh." value="${val}" oninput="planStrengthRecalcDauer()" onfocus="this.select()"
+          <input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="Wdh." value="${val}" oninput="planStrengthRecalcDauer()" onfocus="this.select()"
             style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
         </div>`;
       }

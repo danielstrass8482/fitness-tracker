@@ -550,6 +550,7 @@
           </div>
           
           <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
+          <button id="zirkel-adhoc-log-btn" class="btn" onclick="openZirkelAdhocPicker()" style="display:none;width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">🔄 Ad-hoc Zirkel starten</button>
         </div>
 
         <!-- Eigene Trainingsarten -->
@@ -6736,7 +6737,16 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return { result, extra };
     }
 
+    // Ad-hoc-Zirkel-Button im Loggen-Tab nur zeigen, wenn der Plan mind. einen Zirkel enthält
+    function updateZirkelAdhocVisibility() {
+      const btn = document.getElementById('zirkel-adhoc-log-btn');
+      if (!btn) return;
+      const hasZirkel = PLAN_DAYS.some(({ key }) => (trainingPlan[key] || []).some(u => u.typ === 'zirkel'));
+      btn.style.display = hasZirkel ? '' : 'none';
+    }
+
     function renderTrainingPlan(force) {
+      updateZirkelAdhocVisibility();
       const container = document.getElementById('training-plan-container');
       if (!container) return;
       // Nur rendern wenn sichtbar; Editor nicht durch Hintergrund-Sync zurücksetzen
@@ -6872,7 +6882,6 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       container.innerHTML = weekHeader.replace('%STATUS%', totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : '') + `
         ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">${emptyText}</div>`}
         ${daysHtml}
-        <button class="btn" onclick="openZirkelAdhocPicker()" style="width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">🔄 Ad-hoc Zirkel starten</button>
         <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">✏️ Plan bearbeiten</button>`;
     }
 

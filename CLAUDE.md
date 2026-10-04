@@ -42,6 +42,7 @@ Tech-Stack:
 
 - **Vollständige Dateien**: Bei jeder Änderung wird die komplette Datei geschrieben/committed, niemals nur Diffs/Snippets in der Erklärung (Commits selbst sind natürlich Diffs, das ist ok – gemeint ist: keine "füge diese Zeile ein"-Anweisungen an den User)
 - **`index.html` ist eine Monolith-Datei** mit `<script type="module">` – Vorsicht bei Refactoring in mehrere Dateien: GitHub Pages liefert nur statische Dateien, also wären zusätzliche `.js`-Module möglich (`<script type="module" src="...">`), aber das ändert Lade-Reihenfolge und CORS-Verhalten. Wenn aufgeteilt wird, gründlich testen.
+- **Backend-Speicherort**: `functions/index.js` und `firestore.rules` liegen **unversioniert** in `/home/daniel_strass/` (nicht im Repo `fitness-tracker`). `syncPhoneSteps` existiert nicht mehr (nicht deployt, Code entfernt).
 - **Cloud Functions (`index.js`)**: enthält den Platzhalter `GOOGLE_CLIENT_SECRET = 'HIER_DEIN_GOOGLE_SECRET'` – das ist **absichtlich** ein Platzhalter, der lokal/Daniel manuell mit dem echten Secret aus der Google Cloud Console ersetzt wird (Credentials → Fitness Tracker OAuth Client). **Niemals durch ein echtes Secret ersetzen oder committen.** Nach jedem Deploy von `index.js` muss Daniel daran erinnert werden, den Platzhalter zu ersetzen.
 - **Keine Breaking Changes an Firestore-Datenstruktur** ohne Migration. Bestehende Collections:
   - `users/{userId}/entries/{id}` – Diary-Einträge (`typ: 'food'|'recipe'`), Trainings (`typ: 'laufen'|'rad'|'pushups'|...`), Tageslogs (`typ: 'tageslog'`), Phone-Steps (`typ: 'phonesteps'`)
@@ -61,7 +62,7 @@ Tech-Stack:
 - `new Date("yyyy-mm-dd")` wird als UTC interpretiert → führt zu Off-by-one-Day-Bugs. Wo Datumsvergleiche/-arithmetik gemacht werden, wird explizit lokale Zeitzone behandelt (`new Date(y, m, d)` mit Zahlen statt String)
 
 ### Schritte-Berechnung (`calcHistoricalKcalGoal`)
-- Zwei Schritt-Quellen: Garmin (via Google Fit Sync, `tageslog.steps`, `source_steps: 'googlefit'`) und Samsung-Sensor (Android-App, `window.phoneStepsToday[date]`)
+- Zwei Schritt-Quellen: Garmin (via Google Fit Sync, `tageslog.steps`, `source_steps: 'googlefit'`) und Samsung-Sensor (Android-App, `window.phoneStepsToday[date]`, **ausgebaut**: Commit `9c646b1` am 30.09.2026, keine Schreibzugriffe mehr)
 - Garmin hat Priorität wenn vorhanden (`garminSteps > 0`)
 - **Alle Aktivitäts-Schritte** (Laufen, Rad, Gehen, Wandern, etc. – alles mit `schritte > 0` und `typ !== 'tageslog'` und `typ !== 'phonesteps'`) werden von den Gesamtschritten abgezogen, um Double-Counting mit den separat berechneten Aktivitätskalorien zu vermeiden
 - `calcHistoricalKcalGoal(date, allDayLogs?, allTrainingEntries?)` muss IMMER `{base, activity, daily, total}` zurückgeben (niemals eine bare number) – mehrere Call-Sites verlassen sich darauf
@@ -71,9 +72,10 @@ Tech-Stack:
 - MET-basierte Berechnung je nach `typ`: laufen (1.04-1.1 × distKm × Gewicht), gehen/wandern (3.5 MET), rad (4-10 MET je nach km/h), rad_ebike (2.5 MET), cardio/kraft (6 MET)
 - Gehen/Wandern fließen seit kurzem in die Aktivitätskalorien ein (vorher waren sie ausgeschlossen – diese Änderung ist neu und korrekt, NICHT zurückrollen)
 
-### Phonesteps
+### Phonesteps (historisch, Sensor ausgebaut)
+- Der Samsung-Schrittsensor ist seit 30.09.2026 entfernt. Die letzten `phonesteps`-Dokumente stammen vom 30.09.; für 02.–04.10. gibt es keine. Die Filter `typ !== 'phonesteps'` bleiben, bis die alten Dokumente bereinigt sind.
 - `typ: 'phonesteps'` Einträge (`entries/phonesteps_{datum}`) sind KEINE Aktivitäten – müssen aus allen Aktivitäts-Listen/Anzeigen gefiltert werden (`e.typ !== 'phonesteps'`)
-- Werden von der Android-App alle 100 Schritte via Samsung `TYPE_STEP_COUNTER` Sensor geschrieben (`source_steps: 'samsung_sensor'`)
+- Früher wurden sie von der Android-App via Samsung `TYPE_STEP_COUNTER` geschrieben (`source_steps: 'samsung_sensor'`). Dieser Schreibpfad existiert nicht mehr.
 - Bekannter offener Bug: Werte wirken manchmal eingefroren (z.B. exakt 3500 an mehreren Tagen) – wahrscheinlich weil der Sensor nur feuert während die App im Vordergrund ist. Aktuell als "gut genug" akzeptiert, da Gehen/Wandern jetzt separat getrackt wird. **Kein Punkt für dieses Refactoring**, aber wenn beim Code-Lesen die Ursache offensichtlich wird, gerne als Kommentar/Issue dokumentieren statt sofort zu fixen.
 
 ### 365-Tage-Limit
@@ -125,7 +127,7 @@ Tech-Stack:
 
 ## Bekannte offene Bugs / Beobachtungen (Prioritäten niedrig, bei Gelegenheit)
 
-1. **Samsung-Schritte eingefroren** (siehe oben, "Phonesteps") – Ursache wahrscheinlich `onPause`/`onResume` Sensor-Lifecycle in `MainActivity.kt`. Wenn beim Lesen offensichtlich, dokumentieren.
+1. ~~**Samsung-Schritte eingefroren**~~ – obsolet, der Sensor ist ausgebaut (siehe "Phonesteps").
 2. **GitHub Actions Storage** war zeitweise bei 100% (0.5 GB Limit) – falls der Build aus diesem Grund fehlschlägt, prüfen ob Artifact-Retention in `build.yml` reduziert werden kann (z.B. `retention-days: 7` statt Standard 90)
 
 ---
@@ -135,7 +137,7 @@ Tech-Stack:
 - Die grundsätzliche UI/UX-Struktur (Tabs: Ernährung, Training, Dashboard, Daten, Einstellungen)
 - Die Berechnungslogik für Kalorien/Makros (MET-Werte, BMR-Formel) – nur strukturell aufräumen, Werte/Formeln unverändert lassen
 - Firestore-Collection-Namen und Dokumentstruktur (siehe oben)
-- Die Cloud-Function-Endpunkte (`createCustomToken`, `googleFitCallback`, `googleFitSync`, `googleFitDailySync`, `googleFitDisconnect`, `syncPhoneSteps`, `googleDriveCallback`, `googleDriveRefresh`) – Namen und Signaturen bleiben stabil, da Android-App und PWA sie aufrufen
+- Die Cloud-Function-Endpunkte (`createCustomToken`, `googleFitCallback`, `googleFitSync`, `googleFitDailySync`, `googleFitDisconnect`, `googleDriveCallback`, `googleDriveRefresh`) – Namen und Signaturen bleiben stabil, da Android-App und PWA sie aufrufen
 
 ---
 

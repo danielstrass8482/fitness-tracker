@@ -1659,7 +1659,6 @@
     let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
     let ouraDaily = {};           // { [date]: { sleepScore, sleepDurationSec, readinessScore, activityScore, steps, ... } }
     let ouraStatus = { connected: false, lastSyncAtMs: null, lastSyncDays: null, lastSyncError: null }; // Verbindungsstatus aus users/{uid}/integrations/oura, für Tagesüberblick-Karte + Settings
-    let ouraStepLogToday = null;  // { date, lastFetchAt } – nur heutiger Tag, 1 Dokumentlesen aus oura_step_log, bewusst NICHT in IndexedDB gecacht
 
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -1668,7 +1667,6 @@
     window.dayLogs = dayLogs;
     window.ouraDaily = ouraDaily;
     window.ouraStatus = ouraStatus;
-    window.ouraStepLogToday = ouraStepLogToday;
 
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
@@ -1679,7 +1677,23 @@
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
-    const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Anzeige-Cache aus Oura-Sync (Cloud Function), fließt NICHT ins Kalorienziel ein
+    const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte fließen nur als Kalorien-Fallback ein (siehe getKcalStepsForDate)
+
+    // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
+    // zwischen 00:00 und 02:00 Berlin noch den Vortag.
+    const berlinTodayStr = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+
+    // Lädt die letzten 35 Tage aus oura_daily frisch aus Firestore und ersetzt damit den Stand
+    // aus dem IndexedDB-Cache. Wird bei jedem Start und nach dem manuellen Sync aufgerufen, damit
+    // verspätet synchronisierte Werte (Ring/3-Stunden-Sync) nie dauerhaft im Cache hängen bleiben.
+    async function refreshOuraDaily() {
+      const cutoff = new Date(Date.now() - 35 * 24 * 3600 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+      const snap = await getDocs(query(userOuraDailyCol(), where('date', '>=', cutoff)));
+      const next = {};
+      snap.forEach(d => { next[d.id] = d.data(); });
+      ouraDaily = next;
+      window.ouraDaily = ouraDaily;
+    }
     // Weekly stats state
     let weeklyStats = {};
 
@@ -1914,14 +1928,8 @@
 
         // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
         try {
-          const ouraCutoff = new Date();
-          ouraCutoff.setDate(ouraCutoff.getDate() - 35);
-          const ouraCutoffStr = ouraCutoff.toISOString().split('T')[0];
-          const ouraSnap = await getDocs(query(userOuraDailyCol(), where('date', '>=', ouraCutoffStr)));
-          ouraDaily = {};
-          ouraSnap.forEach(d => { ouraDaily[d.id] = d.data(); });
-          window.ouraDaily = ouraDaily;
-        } catch(e) { console.warn('Oura daily load error:', e); }
+          await refreshOuraDaily();
+        } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
 
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan)
         await loadCurrentTrainingPlan();
@@ -1953,6 +1961,22 @@
       return age;
     }
 
+    // Einzige Auflösung von Alltagsschritten pro Datum für das Kalorienziel:
+    // 1. Garmin (tageslog.steps > 0) hat immer Vorrang.
+    // 2. Fallback: Oura (oura_daily/{date}.steps), nur wenn kein Garmin-Wert vorliegt UND das Datum
+    //    vor heute liegt (Berlin). Oura liefert den Tageswert erst nach Mitternacht, daher nie für heute.
+    // Garmin und Oura werden nie addiert. Die Oura-Werte sind vorläufig und dienen ausschließlich
+    // der Kalorienzielberechnung, sie werden in keiner Anzeige ausgewiesen.
+    function getKcalStepsForDate(date, dayLog) {
+      const garminSteps = dayLog?.steps || 0;
+      if (garminSteps > 0) return garminSteps;
+      if (date < berlinTodayStr()) {
+        const ouraSteps = ouraDaily[date]?.steps || 0;
+        if (ouraSteps > 0) return ouraSteps;
+      }
+      return 0;
+    }
+
     window.calcHistoricalKcalGoal = function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       try {
         const s = settings;
@@ -1980,15 +2004,15 @@
           .reduce((sum, e) => sum + calcActivityKcal(e), 0);
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-        const garminSteps = dayLog?.steps || 0;
+        const daySteps = getKcalStepsForDate(date, dayLog);
 
         // Aktivitäts-Schritte für diesen Tag (alle Aktivitäten inkl. Gehen/Wandern abziehen)
         const activitySteps = trainingEntries
           .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
           .reduce((sum, e) => sum + (e.schritte || 0), 0);
 
-        // Alltagsschritte: nur Garmin, Aktivitäts-Schritte werden abgezogen
-        const totalSteps = Math.max(0, garminSteps - activitySteps);
+        // Alltagsschritte (Garmin, sonst Oura-Fallback), Aktivitäts-Schritte werden abgezogen
+        const totalSteps = Math.max(0, daySteps - activitySteps);
         const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);
 
@@ -6509,6 +6533,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // Rein informativ – fließt nirgends in Kalorienziel/Aktivitäts-Listen ein.
     // Karte ist immer sichtbar solange Oura verbunden ist (ouraStatus.connected) – auch ohne
     // Daten für den gewählten Tag, dann zeigen die Zeilen "–" statt ausgeblendet zu werden.
+    // Zeigt nur Erholungswerte. Oura-Schritte und Aktivitätswerte werden hier bewusst NICHT
+    // angezeigt (Oura-Schritte fließen nur als Kalorien-Fallback ein, siehe getKcalStepsForDate).
     function renderOuraDailyCard(date) {
       const card = document.getElementById('oura-daily-card');
       if (!card) return;
@@ -6516,62 +6542,63 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       const d = ouraDaily[date] || null;
 
-      const sleepMin = d?.sleepDurationSec ? Math.round(d.sleepDurationSec / 60) : null;
-      const sleepText = sleepMin != null ? `${Math.floor(sleepMin / 60)}h ${sleepMin % 60}min` : '–';
-      const sleepScoreText = d?.sleepScore != null ? String(d.sleepScore) : '–';
-      const readinessScoreText = d?.readinessScore != null ? String(d.readinessScore) : '–';
-      const activityScoreText = d?.activityScore != null ? String(d.activityScore) : '–';
-      const kcalText = d?.totalCalories != null ? fmt(d.totalCalories) + ' kcal' : '–';
+      const hhmm = (sec) => {
+        if (!sec) return null;
+        const min = Math.round(sec / 60);
+        return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')} h`;
+      };
+      const sleepText = hhmm(d?.sleepDurationSec) ?? '–';
+      const deepText = hhmm(d?.deepSleepSec) ?? '–';
+      const restingText = d?.restingHr != null ? `${Math.round(d.restingHr)} bpm` : '–';
 
-      // Oura-Schritte (vorläufig, da alle 15 Min nachgezogen) + Garmin-Tagesschritte – reine
-      // Anzeige für den mehrwöchigen Vergleich, keine Verrechnung/Zusammenführung der Quellen.
-      const todayStr = new Date().toISOString().split('T')[0];
-      const ouraStepsText = d?.steps != null ? fmt(d.steps) : null;
-      const stepStandText = (date === todayStr && ouraStepLogToday?.date === todayStr && ouraStepLogToday.lastFetchAt)
-        ? new Date(ouraStepLogToday.lastFetchAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-        : null;
-      const garminStepsInfo = (typeof window.getStepsForDate === 'function') ? window.getStepsForDate(date) : null;
-      const garminStepsText = (garminStepsInfo?.source === 'garmin' && garminStepsInfo.steps > 0) ? fmt(garminStepsInfo.steps) : null;
+      // HRV-Trend: Vergleich mit dem Schnitt der 7 Vortage. Mindestens 3 Vortageswerte nötig,
+      // sonst nur der Einzelwert. Pfeil ↑/↓ ab ±5 % Abweichung vom Schnitt, sonst →.
+      const HRV_TREND_THRESHOLD = 0.05;
+      const HRV_TREND_MIN_VALUES = 3;
+      let hrvText = '–';
+      if (d?.hrvAvg != null) {
+        hrvText = `${Math.round(d.hrvAvg)} ms`;
+        const prev = [];
+        for (let i = 1; i <= 7; i++) {
+          const p = new Date(date + 'T12:00:00');
+          p.setDate(p.getDate() - i);
+          const v = ouraDaily[p.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' })]?.hrvAvg;
+          if (v != null) prev.push(v);
+        }
+        if (prev.length >= HRV_TREND_MIN_VALUES) {
+          const avg = prev.reduce((a, b) => a + b, 0) / prev.length;
+          const arrow = d.hrvAvg > avg * (1 + HRV_TREND_THRESHOLD) ? '↑'
+            : d.hrvAvg < avg * (1 - HRV_TREND_THRESHOLD) ? '↓' : '→';
+          hrvText += ` ${arrow} <span style="font-size:11px;color:var(--muted);">Ø 7 Tage: ${Math.round(avg)} ms</span>`;
+        }
+      }
 
-      const rows = [];
-      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:18px;">😴</span>
-        <div style="flex:1;">
-          <div style="font-weight:500;font-size:14px;">Schlaf</div>
-          <div style="font-size:12px;color:var(--muted);">${sleepText} · Score ${sleepScoreText}</div>
-        </div>
-      </div>`);
-      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:18px;">🔋</span>
-        <div style="flex:1;">
-          <div style="font-weight:500;font-size:14px;">Readiness</div>
-          <div style="font-size:12px;color:var(--muted);">Score ${readinessScoreText}</div>
-        </div>
-      </div>`);
-      rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;${(ouraStepsText != null || garminStepsText != null) ? 'border-bottom:1px solid var(--border);' : ''}">
-        <span style="font-size:18px;">💍</span>
-        <div style="flex:1;">
-          <div style="font-weight:500;font-size:14px;">Aktivität (Oura)</div>
-          <div style="font-size:12px;color:var(--muted);">Score ${activityScoreText} · ${kcalText}</div>
-        </div>
-      </div>`);
-      if (ouraStepsText != null || garminStepsText != null) {
-        const stepLines = [];
-        if (ouraStepsText != null) stepLines.push(`<div style="font-weight:500;font-size:14px;">Schritte (Oura, vorläufig): ${ouraStepsText}</div>`);
-        if (garminStepsText != null) stepLines.push(`<div style="font-weight:500;font-size:14px;${ouraStepsText != null ? 'margin-top:4px;' : ''}">Schritte (Garmin): ${garminStepsText}</div>`);
-        rows.push(`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">
-          <span style="font-size:18px;">👣</span>
-          <div style="flex:1;">
-            ${stepLines.join('')}
-            ${stepStandText ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">Stand: ${stepStandText} Uhr</div>` : ''}
-          </div>
-        </div>`);
+      const row = (icon, label, value, last) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;${last ? '' : 'border-bottom:1px solid var(--border);'}">
+        <span style="font-size:18px;">${icon}</span>
+        <div style="flex:1;font-weight:500;font-size:14px;">${label}</div>
+        <div style="font-size:14px;text-align:right;">${value}</div>
+      </div>`;
+
+      const rows = [
+        row('💓', 'Ruhepuls (letzte Nacht)', restingText),
+        row('📈', 'HRV (letzte Nacht)', hrvText),
+        row('🌙', 'Tiefschlaf', deepText),
+        row('😴', 'Gesamtschlaf', sleepText, true),
+      ];
+
+      // Schlaf- und Readiness-Score nur als dezente Zeile, nicht als Hauptwerte
+      let scoreHtml = '';
+      if (d && (d.sleepScore != null || d.readinessScore != null)) {
+        const sleepScoreText = d.sleepScore != null ? String(d.sleepScore) : '–';
+        const readinessScoreText = d.readinessScore != null ? String(d.readinessScore) : '–';
+        scoreHtml = `<div style="font-size:11px;color:var(--muted);margin-top:4px;">Schlaf-Score ${sleepScoreText} · Readiness ${readinessScoreText}</div>`;
       }
 
       // Dezente Statuszeile(n) unter den Werten
       const statusLines = [];
-      if (!d) {
-        statusLines.push('Noch keine Daten für diesen Tag. Oura-App öffnen, Ring synchronisieren, dann in Daten → Oura auf Jetzt synchronisieren tippen.');
+      const hasRecoveryData = d && (d.restingHr != null || d.hrvAvg != null || d.deepSleepSec || d.sleepDurationSec);
+      if (!hasRecoveryData) {
+        statusLines.push('Schlaf- und Erholungswerte erscheinen nach dem Aufwachen und dem Ring-Sync.');
       }
       const loadedDays = Object.keys(ouraDaily).length;
       let syncLine = 'Letzter Sync: ' + (ouraStatus.lastSyncAtMs
@@ -6585,7 +6612,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         statusHtml += `<div style="font-size:11px;color:#f97316;margin-top:4px;">⚠️ ${ouraStatus.lastSyncError}</div>`;
       }
 
-      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('') + statusHtml;
+      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('') + scoreHtml + statusHtml;
       card.style.display = 'block';
     }
 
@@ -6642,21 +6669,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         }
 
         renderOuraDailyCard(currentDate);
-        if (connected) loadOuraStepLogToday();
       } catch(e) { console.warn('Oura status error:', e); }
-    }
-
-    // Lädt NUR den Zeitstempel des letzten Oura-Schritt-Abrufs für HEUTE aus oura_step_log
-    // (ein einziges Dokumentlesen, bewusst nicht in IndexedDB gecacht – App-Start bleibt
-    // unverändert schnell). Für andere Tage wird keine "Stand"-Zeit angezeigt.
-    async function loadOuraStepLogToday() {
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const snap = await getDoc(doc(db, 'users', userId, 'oura_step_log', todayStr));
-        ouraStepLogToday = snap.exists() ? { date: todayStr, lastFetchAt: snap.data().lastFetchAt || null } : null;
-        window.ouraStepLogToday = ouraStepLogToday;
-        renderOuraDailyCard(currentDate);
-      } catch(e) { console.warn('Oura step log error:', e); }
     }
 
     window.connectOura = async function() {
@@ -6678,15 +6691,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         const startMs = endMs - (7 * 24 * 3600 * 1000);
         const result = await syncFn({ startMs, endMs });
         showToast('✓ ' + (result.data.days || 0) + ' Tage Oura-Daten synchronisiert');
-        // Anzeige-Daten neu laden
-        const ouraCutoff = new Date();
-        ouraCutoff.setDate(ouraCutoff.getDate() - 35);
-        const ouraSnap = await getDocs(query(userOuraDailyCol(), where('date', '>=', ouraCutoff.toISOString().split('T')[0])));
-        ouraDaily = {};
-        ouraSnap.forEach(d => { ouraDaily[d.id] = d.data(); });
-        window.ouraDaily = ouraDaily;
+        // Oura-Tageswerte neu laden (inkl. Schritt-Fallback fürs Kalorienziel) und Ansichten aktualisieren
+        await refreshOuraDaily();
         saveToCache();
-        renderFoodLog();
+        renderAll();
       } catch(e) {
         console.error('Oura sync error:', e);
         showToast('❌ Sync fehlgeschlagen: ' + e.message);

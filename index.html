@@ -559,6 +559,7 @@
           <div id="custom-types-list" style="margin-bottom:15px;"></div>
           <input type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;">
           <button class="btn" onclick="addCustomType()" style="width:100%;">+ Hinzufügen</button>
+          <button onclick="migrateCustomTypes()" style="width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">🔄 Fehlende Arten anlegen</button>
         </div>
         
         <!-- Day Log -->
@@ -1926,6 +1927,9 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
+        // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden
+        await loadCustomTypes();
+
         // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
         try {
           await refreshOuraDaily();
@@ -2929,7 +2933,7 @@
             const calcKcal = calcActivityKcal(e);
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-            const label = typeLabels[typ] || customTrainingTypes.find(t => t.id === typ)?.label || typ;
+            const label = typeLabels[typ] || customTypeLabel(typ, e);
             const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:#1a2a3a;color:#4285f4;padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
             return `
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
@@ -4227,7 +4231,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         // Aktivitäten
         dayActivities.forEach(a => {
-          const baseLabel = TYP_LABELS[a.typ] || (customTrainingTypes.find(t => t.id === a.typ)?.label ? '🏅 ' + customTrainingTypes.find(t => t.id === a.typ).label : ('🏅 ' + (a.typ || 'Aktivität')));
+          const baseLabel = TYP_LABELS[a.typ] || ('🏅 ' + (customTypeLabel(a.typ, a) || 'Aktivität'));
           const emoji = baseLabel.split(' ')[0];
           const typName = baseLabel.split(' ').slice(1).join(' ');
           // Variante anhängen wenn vorhanden (pullups/pushups)
@@ -5754,7 +5758,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         notiz: notiz,
         garminTime: timeVal,
         timestamp: date + 'T' + (timeVal || new Date().toTimeString().slice(0,8)),
-        source: 'manual'
+        source: 'manual',
+        // Eigene Arten: Anzeigename mitspeichern, damit er auch ohne Typ-Dokument angezeigt wird
+        ...(type.startsWith('custom_') ? { typLabel: customTypeLabel(type) } : {})
       };
       entry.act_kcal_calc = calcManualActivityKcal(entry);
 
@@ -5873,7 +5879,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
         const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
         const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-        const typeLabel = typeLabels[typ] || customTrainingTypes.find(t => t.id === typ)?.label || typ;
+        const typeLabel = typeLabels[typ] || customTypeLabel(typ, e);
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
         const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
@@ -6934,7 +6940,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     function planTypLabel(typ, fallbackLabel) {
       if (TYP_LABELS[typ]) return TYP_LABELS[typ];
       const custom = customTrainingTypes.find(t => t.id === typ);
-      return '🏅 ' + (custom?.label || fallbackLabel || typ || 'Aktivität');
+      return '🏅 ' + (custom?.label || fallbackLabel || (String(typ || '').startsWith('custom_') ? deriveCustomLabel(typ) : typ) || 'Aktivität');
     }
 
     function planMinToZeit(min) {
@@ -8006,6 +8012,48 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     // ── Eigene Trainingsarten ─────────────────────────────────────────────────
     let customTrainingTypes = [];
+
+    // Anzeigename aus einer custom_-ID ableiten (nur Fallback, wenn kein Typ-Dokument existiert)
+    // z. B. custom_terraband_knie_gerade → "Terraband Knie Gerade"
+    function deriveCustomLabel(id) {
+      const LOWER = ['to', 'und', 'of'];
+      return String(id || '').replace(/^custom_/, '').split('_').filter(Boolean)
+        .map((w, i) => (i > 0 && LOWER.includes(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+
+    // Einheitliche Anzeige für eigene Arten. Reihenfolge: Typ-Dokument → Name am Eintrag → aus ID abgeleitet.
+    // Vordefinierte Typen (kein custom_-Präfix) bleiben unverändert auf der ID.
+    function customTypeLabel(typ, entry) {
+      if (!String(typ || '').startsWith('custom_')) return typ;
+      return customTrainingTypes.find(t => t.id === typ)?.label || entry?.typLabel || deriveCustomLabel(typ);
+    }
+
+    // Einmalige Migration: legt für Custom-Arten, die in Einträgen vorkommen, aber kein Typ-Dokument
+    // haben, ein Dokument im Standardformat an ({id, label, addedBy}). Bestehende Labels bleiben unverändert.
+    // Historische Einträge werden nicht angefasst.
+    window.migrateCustomTypes = async function() {
+      const known = new Set(customTrainingTypes.map(t => t.id));
+      const missing = [...new Set(trainingEntries.map(e => e.typ).filter(t => String(t || '').startsWith('custom_') && !known.has(t)))];
+      if (missing.length === 0) { showToast('Keine fehlenden Arten'); return; }
+      const preview = missing.map(id => id + ' → ' + deriveCustomLabel(id)).join('\n');
+      if (!await showConfirm('Fehlende Arten anlegen?', preview, '🔄', 'Anlegen', false)) return;
+      try {
+        for (const id of missing) {
+          const label = deriveCustomLabel(id);
+          await setDoc(doc(globalTrainingTypesCol(), id), { id, label, addedBy: userId });
+          customTrainingTypes.push({ id, label });
+        }
+        customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+        renderCustomTypes();
+        updateTrainingTypeSelect();
+        renderTrainingHistory();
+        showToast('✓ ' + missing.length + ' Art(en) angelegt');
+      } catch(e) {
+        console.error('Migration custom types error:', e);
+        showToast('❌ Migration fehlgeschlagen');
+      }
+    };
 
     async function loadCustomTypes() {
       try {

@@ -533,6 +533,7 @@
             </select>
           </div>
           
+          <div id="training-reps-section">
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anzahl Sets</label>
             <div style="display:flex;align-items:center;gap:12px;">
@@ -542,7 +543,31 @@
             </div>
           </div>
           <div id="sets-inputs-container" style="margin-bottom:15px;"></div>
+          </div>
           <input type="hidden" id="training-sets">
+
+          <!-- Haltezeit-Übungen: Sekunden pro Satz statt Wiederholungen (keine Kalorien) -->
+          <div id="training-hold-section" style="display:none;margin-bottom:15px;">
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
+              <div>
+                <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Haltezeit (Sek.)</label>
+                <input type="number" id="hold-sec-all" min="1" max="3600" placeholder="45" inputmode="numeric" pattern="[0-9]*" onfocus="this.select()" oninput="onHoldAllInput()"
+                  style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:22px;font-weight:600;box-sizing:border-box;">
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anzahl Sätze</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button type="button" onclick="adjustHoldSets(-1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">−</button>
+                  <span id="hold-sets-count" style="font-size:20px;font-weight:600;min-width:28px;text-align:center;">3</span>
+                  <button type="button" onclick="adjustHoldSets(1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">+</button>
+                </div>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;margin-bottom:10px;">
+              <input type="checkbox" id="hold-individual" onchange="toggleHoldIndividual()" style="width:20px;height:20px;"> Sätze einzeln anpassen
+            </label>
+            <div id="hold-inputs-container"></div>
+          </div>
           
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Notizen</label>
@@ -551,6 +576,7 @@
           
           <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
           <button id="zirkel-adhoc-log-btn" class="btn" onclick="openZirkelAdhocPicker()" style="display:none;width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">🔄 Ad-hoc Zirkel starten</button>
+          <button class="btn" onclick="openIntervalConfig()" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">⏱ Intervall-Zirkel</button>
         </div>
 
         <!-- Eigene Trainingsarten -->
@@ -1383,6 +1409,22 @@
     <div id="zirkel-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;overflow-y:auto;"></div>
   </div>
 
+  <!-- Intervall-Zirkel konfigurieren (Haltezeit-Schritte mit Pausen, Vorlagen) -->
+  <div id="interval-config-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 20px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;max-height:92vh;overflow-y:auto;">
+      <h3 style="margin:0 0 14px;">⏱ Intervall-Zirkel</h3>
+      <div id="interval-config-body"></div>
+    </div>
+  </div>
+
+  <!-- Intervall-Zirkel Ablauf: Vollbild, legt sich über die App -->
+  <div id="interval-timer-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;flex-direction:column;">
+    <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
+      <button onclick="requestCloseIntervalTimer()" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;">✕</button>
+    </div>
+    <div id="interval-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 20px max(40px, env(safe-area-inset-bottom, 40px));box-sizing:border-box;overflow-y:auto;"></div>
+  </div>
+
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
@@ -1659,6 +1701,7 @@
     let trainingPlanFrom = null;  // Montag (yyyy-mm-dd), ab dem die aktuelle Version gilt
     let planWeekPlans = {};       // vergangene Wochen: { [Montag der Woche]: { plan, from } }
     let ouraDaily = {};           // { [date]: { sleepScore, sleepDurationSec, readinessScore, activityScore, steps, ... } }
+    let intervalTemplates = [];   // Intervall-Zirkel-Vorlagen aus users/{uid}/intervalTemplates (+ IndexedDB-Cache)
     let ouraStatus = { connected: false, lastSyncAtMs: null, lastSyncDays: null, lastSyncError: null }; // Verbindungsstatus aus users/{uid}/integrations/oura, für Tagesüberblick-Karte + Settings
 
     window.foodDB = foodDB;
@@ -1678,6 +1721,7 @@
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
+    const userIntervalTemplateCol = () => collection(db, 'users', userId, 'intervalTemplates'); // Intervall-Zirkel-Vorlagen, Doc-ID = Vorlagen-ID
     const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte fließen nur als Kalorien-Fallback ein (siehe getKcalStepsForDate)
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
@@ -1752,6 +1796,10 @@
           cacheGet('ouraStatus'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
+        const [cachedCustomTypes, cachedIntervalTemplates] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates')]);
+        // Typ-Dokumente (inkl. Haltezeit-Markierung) vor dem Trainings-Block setzen, damit das Formular gleich passt
+        if (Array.isArray(cachedCustomTypes)) { customTrainingTypes = cachedCustomTypes; renderCustomTypes(); }
+        if (Array.isArray(cachedIntervalTemplates)) intervalTemplates = cachedIntervalTemplates;
         let hasCache = false;
         if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
         if (cachedRecipes?.length) { recipes = cachedRecipes; window.recipes = recipes; hasCache = true; }
@@ -1806,6 +1854,8 @@
         cachePut('trainingplan_from', trainingPlanFrom),
         cachePut('ouraDaily', Object.values(ouraDaily)),
         cachePut('ouraStatus', ouraStatus),
+        cachePut('customTrainingTypes', customTrainingTypes),
+        cachePut('intervalTemplates', intervalTemplates),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -1930,6 +1980,11 @@
 
         // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden
         await loadCustomTypes();
+
+        // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
+        try {
+          await loadIntervalTemplates();
+        } catch(e) { console.warn('Interval templates load error:', e); }
 
         // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
         try {
@@ -2931,7 +2986,7 @@
           recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivitäten</div>';
         } else {
           recentContainer.innerHTML = recent.map(e => {
-            const calcKcal = calcActivityKcal(e);
+            const calcKcal = e.source === 'manual' ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
             const label = typeLabels[typ] || customTypeLabel(typ, e);
@@ -2940,7 +2995,7 @@
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div style="font-weight:500;font-size:14px;">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
-                  <div style="font-size:12px;color:var(--muted);">${e.datum} · ${e.sets || ''}</div>
+                  <div style="font-size:12px;color:var(--muted);">${e.datum} · ${isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || '')}</div>
                 </div>
                 ${calcKcal > 0 ? `<div style="font-size:14px;font-weight:600;color:#f97316;">${fmt(calcKcal)} kcal</div>` : ''}
               </div>
@@ -4239,11 +4294,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           const variantSuffix = a.variantLabel ? ` · ${a.variantLabel}` : '';
           const displayName = typName + variantSuffix;
 
-          const kcal = a.act_kcal_calc || a.kalorien || 0;
+          // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert)
+          const kcal = a.source === 'manual' ? 0 : (a.act_kcal_calc || a.kalorien || 0);
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
           const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
-          const meta = a.sets || autoMeta;
+          const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -5407,7 +5463,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       'barcode-container',
       'confirm-dialog',
       'zirkel-adhoc-modal',
-      'zirkel-timer-modal'
+      'zirkel-timer-modal',
+      'interval-timer-modal',
+      'interval-config-modal'
     ];
 
     // Wenn ein Modal geöffnet wird, pushState damit Back-Button es schließen kann
@@ -5434,6 +5492,11 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
           // (User bricht die Abfrage ab), funktioniert der nächste Back-Druck wieder normal.
           pushModalState();
           window.requestCloseZirkelTimer();
+        }
+        else if (openModal === 'interval-timer-modal') {
+          // Wie beim Zirkel-Timer: History-Eintrag wiederherstellen, Abbruch erst nach Rückfrage
+          pushModalState();
+          window.requestCloseIntervalTimer();
         }
         else document.getElementById(openModal).style.display = 'none';
       } else {
@@ -5707,6 +5770,101 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       updateHiddenSets();
     }
 
+    // ── Haltezeit-Übungen ────────────────────────────────────────────────────
+    // Eine eigene Übung ist Haltezeit-Übung, wenn ihr Typ-Dokument kind: 'hold' trägt.
+    // Ein Haltezeit-Eintrag speichert holdSec: [45, 40, 35] (Sekunden je Satz) statt sets,
+    // dazu weder zeit noch distanz noch act_kcal_calc → calcActivityKcal liefert 0, nichts fließt ins Kalorienziel.
+    // Ob ein Eintrag Haltezeit ist, entscheidet allein holdSec am Eintrag – alte Wdh-Einträge bleiben unverändert.
+    let holdSetsCount = 3;
+    let trainingFormHoldForced = false; // Bearbeiten eines Haltezeit-Eintrags, dessen Typ (noch) nicht als Haltezeit markiert ist
+
+    function isHoldType(typ) {
+      return customTrainingTypes.some(t => t.id === typ && t.kind === 'hold');
+    }
+    function isHoldEntry(e) {
+      return Array.isArray(e?.holdSec) && e.holdSec.length > 0;
+    }
+    function fmtHoldSets(holdSec) {
+      const list = (holdSec || []).map(s => (parseInt(s) || 0) + ' s');
+      return `${list.length} ${list.length === 1 ? 'Satz' : 'Sätze'}: ${list.join(', ')}`;
+    }
+    function isTrainingFormHold() {
+      return trainingFormHoldForced || isHoldType(document.getElementById('training-type')?.value);
+    }
+    function updateTrainingFormMode() {
+      const hold = isTrainingFormHold();
+      const repsSec = document.getElementById('training-reps-section');
+      const holdSecEl = document.getElementById('training-hold-section');
+      if (repsSec) repsSec.style.display = hold ? 'none' : '';
+      if (holdSecEl) holdSecEl.style.display = hold ? '' : 'none';
+    }
+
+    function renderHoldInputs() {
+      const container = document.getElementById('hold-inputs-container');
+      if (!container) return;
+      const individual = document.getElementById('hold-individual')?.checked;
+      if (!individual) { container.innerHTML = ''; return; }
+      const prev = [];
+      container.querySelectorAll('input[data-hold-idx]').forEach(el => { prev[parseInt(el.dataset.holdIdx)] = el.value; });
+      const all = document.getElementById('hold-sec-all')?.value || '';
+      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;">';
+      for (let i = 0; i < holdSetsCount; i++) {
+        const v = prev[i] !== undefined && prev[i] !== '' ? prev[i] : all;
+        html += `<div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Satz ${i + 1} (s)</div>
+          <input type="number" data-hold-idx="${i}" id="hold-sec-${i}" min="1" max="3600" value="${v}" placeholder="Sek." inputmode="numeric" pattern="[0-9]*" onfocus="this.select()"
+            style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:20px;box-sizing:border-box;">
+        </div>`;
+      }
+      container.innerHTML = html + '</div>';
+    }
+
+    window.adjustHoldSets = function(delta) {
+      holdSetsCount = Math.max(1, Math.min(20, holdSetsCount + delta));
+      document.getElementById('hold-sets-count').textContent = holdSetsCount;
+      renderHoldInputs();
+    };
+
+    window.toggleHoldIndividual = function() {
+      renderHoldInputs();
+    };
+
+    // Einheitliche Haltezeit: Einzelfelder, die noch dem alten Gesamtwert entsprechen, mitziehen
+    window.onHoldAllInput = function() {
+      const all = document.getElementById('hold-sec-all');
+      const prevAll = all.dataset.prev || '';
+      document.querySelectorAll('#hold-inputs-container input[data-hold-idx]').forEach(el => {
+        if (el.value === '' || el.value === prevAll) el.value = all.value;
+      });
+      all.dataset.prev = all.value;
+    };
+
+    function readHoldSecs() {
+      if (document.getElementById('hold-individual')?.checked) {
+        const vals = [];
+        for (let i = 0; i < holdSetsCount; i++) vals.push(parseInt(document.getElementById('hold-sec-' + i)?.value) || 0);
+        return vals.filter(v => v > 0);
+      }
+      const all = parseInt(document.getElementById('hold-sec-all')?.value) || 0;
+      return all > 0 ? Array(holdSetsCount).fill(all) : [];
+    }
+
+    function initHoldUI(holdSec) {
+      const list = (holdSec || []).map(v => parseInt(v) || 0).filter(v => v > 0);
+      holdSetsCount = list.length || 3;
+      const countEl = document.getElementById('hold-sets-count');
+      if (countEl) countEl.textContent = holdSetsCount;
+      const allEl = document.getElementById('hold-sec-all');
+      const uniform = list.length > 0 && list.every(v => v === list[0]);
+      if (allEl) { allEl.value = list.length ? list[0] : ''; allEl.dataset.prev = allEl.value; }
+      const indEl = document.getElementById('hold-individual');
+      if (indEl) indEl.checked = list.length > 0 && !uniform;
+      const container = document.getElementById('hold-inputs-container');
+      if (container) container.innerHTML = '';
+      renderHoldInputs();
+      list.forEach((v, i) => { const el = document.getElementById('hold-sec-' + i); if (el) el.value = v; });
+    }
+
     // Vordefinierte Varianten je Typ: [key, Label] – genutzt vom Loggen-Formular und Plan-Editor
     const TRAINING_VARIANTS = {
       pullups: [['regulaer', 'Regulär'], ['reverse', 'Reverse'], ['hammer', 'Hammer Grip']],
@@ -5727,6 +5885,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const list = TRAINING_VARIANTS[type] || TRAINING_VARIANTS.pushups;
         variantSel.innerHTML = list.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
       }
+      updateTrainingFormMode();
     };
 
     window.saveTrainingEntry = async function() {
@@ -5735,10 +5894,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       const date = document.getElementById('training-date').value;
       const type = document.getElementById('training-type').value;
       const variant = document.getElementById('training-variant').value;
-      const sets = document.getElementById('training-sets').value;
+      const holdMode = isTrainingFormHold();
+      const holdSec = holdMode ? readHoldSecs() : [];
+      const sets = holdMode ? '' : document.getElementById('training-sets').value;
       const notiz = document.getElementById('training-notiz').value;
       
-      if (!date || !type || !sets) {
+      if (!date || !type || (holdMode ? holdSec.length === 0 : !sets)) {
         showToast('❌ Bitte alle Pflichtfelder ausfüllen');
         return;
       }
@@ -5765,7 +5926,13 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         // Eigene Arten: Anzeigename mitspeichern, damit er auch ohne Typ-Dokument angezeigt wird
         ...(type.startsWith('custom_') ? { typLabel: customTypeLabel(type) } : {})
       };
-      entry.act_kcal_calc = calcManualActivityKcal(entry);
+      if (holdMode) {
+        // Haltezeit: Sekunden je Satz, kein sets-String, kein act_kcal_calc (keine Kalorien)
+        delete entry.sets;
+        entry.holdSec = holdSec;
+      } else {
+        entry.act_kcal_calc = calcManualActivityKcal(entry);
+      }
 
       try {
         await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
@@ -5779,6 +5946,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
 
         // Clear form
         initSetsUI('');
+        initHoldUI([]);
+        trainingFormHoldForced = false;
+        updateTrainingFormMode();
         document.getElementById('training-notiz').value = '';
 
         showToast('✓ Training gespeichert');
@@ -5902,6 +6072,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
+        if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">⏱ ${fmtHoldSets(e.holdSec)}</span>`;
+        // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert)
+        const showKcal = e.source !== 'manual' && (e.act_kcal_calc > 0 || e.kalorien > 0);
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -5910,7 +6083,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
             <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">
               ${setsDisplay}
               ${setsTotal > 0 ? `<span style="color:var(--primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
-              ${(e.act_kcal_calc > 0 || e.kalorien > 0) ? `<span style="color:#f97316;margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
+              ${showKcal ? `<span style="color:#f97316;margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
             </div>
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
@@ -5934,10 +6107,12 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       updateTrainingTypeSelect(); // Liste aktuell halten, damit auch Custom-Arten aus Einträgen gewählt werden können
       const typeSelect = document.getElementById('training-type');
       typeSelect.value = entry.typ || entry.type || '';
+      trainingFormHoldForced = isHoldEntry(entry);
       updateVariantOptions();
       const variantSelect = document.getElementById('training-variant');
       variantSelect.value = entry.variant || entry.variante || '';
       initSetsUI(entry.sets || '');
+      initHoldUI(isHoldEntry(entry) ? entry.holdSec : []);
       document.getElementById('training-notiz').value = entry.notiz || '';
 
       // Change button to update mode
@@ -7116,7 +7291,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           if (e) {
             const boxColor = deviated ? '#f59e0b' : 'var(--primary)';
             left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:#fff;font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
-            const kcal = calcActivityKcal(e);
+            const kcal = e.source === 'manual' ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
             const kcalHtml = kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : '';
             const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
             if (deviated) {
@@ -7156,8 +7331,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
         extra.forEach(e => {
           const title = planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
-          const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
-          const kcal = calcActivityKcal(e);
+          const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
+          const kcal = e.source === 'manual' ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
           rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);opacity:.6;">
             <span style="width:24px;text-align:center;flex-shrink:0;font-size:12px;color:var(--muted);">+</span>
             <div style="flex:1;min-width:0;">
@@ -8014,6 +8189,721 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       }
     };
 
+    // ── Intervall-Zirkel (Haltezeit) ─────────────────────────────────────────
+    // Vorlage (users/{uid}/intervalTemplates/{id}, + IndexedDB-Cache 'intervalTemplates'):
+    //   { id, name, prepSec, rounds, roundPauseSec, steps: [{ typ, typLabel, holdSec, pauseSec }], updatedAt }
+    // Ablauf = feste Segmentliste: Vorbereitung → Halten → Pause → Halten … (Rundenpause ersetzt die Pause nach
+    // dem letzten Schritt einer Runde, wenn > 0). Zeit wird nur über Zeitstempel gemessen (segStartMs + Dauer = Ende);
+    // der Tick holt nach einer Hintergrundphase alle inzwischen abgelaufenen Segmente nach. Töne werden im Voraus
+    // auf der AudioContext-Zeitachse geplant, damit sie auch bei gedrosselten JS-Timern pünktlich kommen.
+    // Logging: je Übung ein Eintrag im Format der manuellen Haltezeit-Eingabe (holdSec, source 'manual', ohne Kalorien).
+    // Unabhängig vom Kraft-Zirkel (zirkelTimerState), der unverändert bleibt.
+    const INTERVAL_DEFAULTS = { prepSec: 10, rounds: 1, roundPauseSec: 0, holdSec: 30, pauseSec: 5 };
+    const INTERVAL_PHASES = {
+      prep:       { label: 'Vorbereitung', color: '#f59e0b' },
+      hold:       { label: 'Halten',       color: '#22c55e' },
+      pause:      { label: 'Pause',        color: '#3b82f6' },
+      roundpause: { label: 'Rundenpause',  color: '#3b82f6' }
+    };
+    let intervalDraft = null;  // Konfiguration im Modal (Arbeitskopie, Werte ggf. noch als Text aus den Feldern)
+    let intervalTimer = null;  // laufender Ablauf
+
+    async function loadIntervalTemplates() {
+      const snap = await getDocs(userIntervalTemplateCol());
+      const list = [];
+      snap.forEach(d => list.push({ ...d.data(), id: d.id }));
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      intervalTemplates = list;
+    }
+
+    function intervalInt(v, min, max, def) {
+      const n = parseInt(v);
+      return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def;
+    }
+
+    // Übungsauswahl wie im Loggen-Formular: eingebaute Optionen + Custom-Übungen (ohne "Neue Übung anlegen")
+    function getIntervalExerciseOptions() {
+      const select = document.getElementById('training-type');
+      const builtIn = select
+        ? Array.from(select.options).filter(o => !o.dataset.custom && !o.dataset.newExercise).map(o => ({ id: o.value, label: o.textContent }))
+        : [];
+      return [...builtIn, ...getCustomExerciseOptions()];
+    }
+
+    function intervalExerciseLabel(typ, fallback) {
+      return getIntervalExerciseOptions().find(o => o.id === typ)?.label || fallback || customTypeLabel(typ) || typ;
+    }
+
+    function newIntervalStep(prev) {
+      const opts = getIntervalExerciseOptions();
+      const typ = prev?.typ || customTrainingTypes.find(t => t.kind === 'hold')?.id || opts[0]?.id || '';
+      return {
+        typ, typLabel: intervalExerciseLabel(typ),
+        holdSec: prev?.holdSec ?? INTERVAL_DEFAULTS.holdSec,
+        pauseSec: prev?.pauseSec ?? INTERVAL_DEFAULTS.pauseSec
+      };
+    }
+
+    function newIntervalDraft() {
+      return {
+        id: null, name: '',
+        prepSec: INTERVAL_DEFAULTS.prepSec, rounds: INTERVAL_DEFAULTS.rounds, roundPauseSec: INTERVAL_DEFAULTS.roundPauseSec,
+        steps: [newIntervalStep()]
+      };
+    }
+
+    // Bereinigte Konfiguration (Zahlen geklemmt, Schritte ohne Übung/Haltezeit entfernt, Anzeigenamen gesetzt)
+    function normalizeIntervalConfig(d) {
+      return {
+        id: d.id || null,
+        name: String(d.name || '').trim(),
+        prepSec: intervalInt(d.prepSec, 0, 600, INTERVAL_DEFAULTS.prepSec),
+        rounds: intervalInt(d.rounds, 1, 50, INTERVAL_DEFAULTS.rounds),
+        roundPauseSec: intervalInt(d.roundPauseSec, 0, 1800, INTERVAL_DEFAULTS.roundPauseSec),
+        steps: (d.steps || [])
+          .map(st => ({
+            typ: st.typ,
+            typLabel: intervalExerciseLabel(st.typ, st.typLabel),
+            holdSec: intervalInt(st.holdSec, 0, 3600, 0),
+            pauseSec: intervalInt(st.pauseSec, 0, 1800, INTERVAL_DEFAULTS.pauseSec)
+          }))
+          .filter(st => st.typ && st.holdSec > 0)
+      };
+    }
+
+    function buildIntervalSegments(cfg) {
+      const segs = [];
+      if (cfg.prepSec > 0) segs.push({ phase: 'prep', dur: cfg.prepSec, round: 1, stepIdx: -1 });
+      for (let r = 1; r <= cfg.rounds; r++) {
+        cfg.steps.forEach((st, i) => {
+          segs.push({ phase: 'hold', dur: st.holdSec, round: r, stepIdx: i });
+          const lastStep = i === cfg.steps.length - 1;
+          if (lastStep && r === cfg.rounds) return; // nach dem allerletzten Halten keine Pause
+          const isRoundPause = lastStep && cfg.roundPauseSec > 0;
+          const pause = isRoundPause ? cfg.roundPauseSec : st.pauseSec;
+          if (pause > 0) segs.push({ phase: isRoundPause ? 'roundpause' : 'pause', dur: pause, round: r, stepIdx: i });
+        });
+      }
+      return segs;
+    }
+
+    function intervalTotalSec(segs) {
+      return segs.reduce((sum, s) => sum + s.dur, 0);
+    }
+
+    // ── Konfiguration ──
+    window.openIntervalConfig = function() {
+      if (!intervalDraft) intervalDraft = newIntervalDraft();
+      renderIntervalConfig();
+      pushModalState();
+      document.getElementById('interval-config-modal').style.display = 'flex';
+    };
+
+    window.closeIntervalConfig = function() {
+      document.getElementById('interval-config-modal').style.display = 'none';
+    };
+
+    function intervalConfigSummaryText() {
+      const cfg = normalizeIntervalConfig(intervalDraft);
+      if (!cfg.steps.length) return 'Mindestens ein Schritt mit Haltezeit nötig';
+      const holds = cfg.steps.length * cfg.rounds;
+      return `${holds} Haltezeit${holds === 1 ? '' : 'en'} · Gesamtdauer ${fmtZirkelTime(intervalTotalSec(buildIntervalSegments(cfg)))}`;
+    }
+
+    function updateIntervalConfigSummary() {
+      const el = document.getElementById('interval-config-summary');
+      if (el) el.textContent = intervalConfigSummaryText();
+    }
+
+    function renderIntervalConfig() {
+      const d = intervalDraft;
+      const inp = 'width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;box-sizing:border-box;';
+      const sel = 'width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;';
+      const lbl = 'display:block;font-size:12px;color:var(--muted);margin-bottom:4px;';
+      const smallBtn = 'padding:6px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:13px;';
+      const num = (value, handler, min, placeholder) =>
+        `<input type="number" min="${min}" step="1" inputmode="numeric" pattern="[0-9]*" value="${value ?? ''}" placeholder="${placeholder}" onfocus="this.select()" oninput="${handler}" style="${inp}">`;
+      const opts = getIntervalExerciseOptions();
+
+      let html = `
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <select onchange="loadIntervalTemplate(this.value)" style="${sel}flex:1;">
+            <option value="">➕ Neuer Zirkel</option>
+            ${intervalTemplates.map(t => `<option value="${planEsc(t.id)}" ${t.id === d.id ? 'selected' : ''}>${planEsc(t.name || 'Ohne Namen')}</option>`).join('')}
+          </select>
+        </div>
+        <div style="margin-bottom:12px;"><label style="${lbl}">Name der Vorlage</label>
+          <input type="text" value="${planEsc(d.name)}" placeholder="z. B. Core Planks" oninput="intervalField('name', this.value)" style="${inp}font-size:16px;"></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+          <div><label style="${lbl}">Vorbereitung (s)</label>${num(d.prepSec, "intervalField('prepSec', this.value)", 0, '10')}</div>
+          <div><label style="${lbl}">Runden</label>${num(d.rounds, "intervalField('rounds', this.value)", 1, '1')}</div>
+          <div><label style="${lbl}">Rundenpause (s)</label>${num(d.roundPauseSec, "intervalField('roundPauseSec', this.value)", 0, '0')}</div>
+        </div>`;
+
+      d.steps.forEach((st, i) => {
+        const options = opts.some(o => o.id === st.typ) ? opts : [...opts, { id: st.typ, label: st.typLabel || st.typ }];
+        html += `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <span style="font-weight:600;flex:1;">Schritt ${i + 1}</span>
+            <button onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="${smallBtn}">↑</button>
+            <button onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} style="${smallBtn}">↓</button>
+            <button onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} title="Schritt entfernen" style="${smallBtn}">✕</button>
+          </div>
+          <select onchange="intervalStepField(${i}, 'typ', this.value)" style="${sel}margin-bottom:8px;">
+            ${options.map(o => `<option value="${planEsc(o.id)}" ${o.id === st.typ ? 'selected' : ''}>${planEsc(o.label)}</option>`).join('')}
+          </select>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+            <div><label style="${lbl}">Halten (s)</label>${num(st.holdSec, `intervalStepField(${i}, 'holdSec', this.value)`, 1, '30')}</div>
+            <div><label style="${lbl}">Pause danach (s)</label>${num(st.pauseSec, `intervalStepField(${i}, 'pauseSec', this.value)`, 0, '5')}</div>
+          </div>
+        </div>`;
+      });
+
+      html += `
+        <button onclick="intervalAddStep()" style="width:100%;padding:10px;margin-bottom:10px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:14px;">+ Schritt</button>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Ist eine Rundenpause gesetzt, ersetzt sie die Pause nach dem letzten Schritt einer Runde.</div>
+        <div id="interval-config-summary" style="font-size:14px;color:var(--primary);margin-bottom:14px;">${intervalConfigSummaryText()}</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button onclick="saveIntervalTemplate()" style="flex:2;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">💾 Vorlage speichern</button>
+          ${d.id ? `<button onclick="deleteIntervalTemplate()" style="flex:1;padding:12px;background:none;border:1px solid var(--danger);border-radius:8px;color:var(--danger);cursor:pointer;">🗑 Löschen</button>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="closeIntervalConfig()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Schließen</button>
+          <button onclick="openIntervalTimer()" class="btn" style="flex:2;padding:14px;font-size:16px;">Weiter ▶</button>
+        </div>`;
+      document.getElementById('interval-config-body').innerHTML = html;
+    }
+
+    window.intervalField = function(field, value) {
+      if (!intervalDraft) return;
+      intervalDraft[field] = value;
+      updateIntervalConfigSummary();
+    };
+
+    window.intervalStepField = function(i, field, value) {
+      const st = intervalDraft?.steps[i];
+      if (!st) return;
+      st[field] = value;
+      if (field === 'typ') st.typLabel = intervalExerciseLabel(value);
+      updateIntervalConfigSummary();
+    };
+
+    window.intervalAddStep = function() {
+      intervalDraft.steps.push(newIntervalStep(intervalDraft.steps[intervalDraft.steps.length - 1]));
+      renderIntervalConfig();
+    };
+
+    window.intervalRemoveStep = function(i) {
+      if (intervalDraft.steps.length <= 1) return;
+      intervalDraft.steps.splice(i, 1);
+      renderIntervalConfig();
+    };
+
+    window.intervalMoveStep = function(i, dir) {
+      const j = i + dir, steps = intervalDraft.steps;
+      if (j < 0 || j >= steps.length) return;
+      [steps[i], steps[j]] = [steps[j], steps[i]];
+      renderIntervalConfig();
+    };
+
+    window.loadIntervalTemplate = function(id) {
+      const t = intervalTemplates.find(x => x.id === id);
+      intervalDraft = t ? JSON.parse(JSON.stringify(t)) : newIntervalDraft();
+      if (!intervalDraft.steps?.length) intervalDraft.steps = [newIntervalStep()];
+      renderIntervalConfig();
+    };
+
+    window.saveIntervalTemplate = async function() {
+      const cfg = normalizeIntervalConfig(intervalDraft);
+      if (!cfg.name) { showToast('Bitte einen Namen für die Vorlage eingeben'); return; }
+      if (!cfg.steps.length) { showToast('❌ Mindestens ein Schritt mit Haltezeit nötig'); return; }
+      const id = cfg.id || ('iv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      const data = { ...cfg, id, updatedAt: new Date().toISOString() };
+      try {
+        await setDoc(doc(userIntervalTemplateCol(), id), data);
+        intervalTemplates = [...intervalTemplates.filter(t => t.id !== id), data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        cachePut('intervalTemplates', intervalTemplates);
+        intervalDraft = JSON.parse(JSON.stringify(data));
+        renderIntervalConfig();
+        showToast('✓ Vorlage gespeichert');
+      } catch (e) {
+        console.error('Interval template save error:', e);
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+    };
+
+    window.deleteIntervalTemplate = async function() {
+      const id = intervalDraft?.id;
+      if (!id) return;
+      const name = intervalTemplates.find(t => t.id === id)?.name || '';
+      if (!await showConfirm('Vorlage löschen?', name)) return;
+      try {
+        await deleteDoc(doc(userIntervalTemplateCol(), id));
+        intervalTemplates = intervalTemplates.filter(t => t.id !== id);
+        cachePut('intervalTemplates', intervalTemplates);
+        intervalDraft = newIntervalDraft();
+        renderIntervalConfig();
+        showToast('✓ Vorlage gelöscht');
+      } catch (e) {
+        console.error('Interval template delete error:', e);
+        showToast('❌ Löschen fehlgeschlagen');
+      }
+    };
+
+    // ── Ablauf ──
+    window.openIntervalTimer = function() {
+      const cfg = normalizeIntervalConfig(intervalDraft);
+      if (!cfg.steps.length) { showToast('❌ Mindestens ein Schritt mit Haltezeit nötig'); return; }
+      document.getElementById('interval-config-modal').style.display = 'none';
+      intervalTimer = {
+        cfg, segs: buildIntervalSegments(cfg),
+        segIdx: -1, segStartMs: 0, pausedAtMs: null, startedAt: null,
+        done: [], finished: false, savedTyps: new Set(), saving: false, saveError: false,
+        intervalId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, scheduled: []
+      };
+      renderIntervalIntro();
+      pushModalState();
+      document.getElementById('interval-timer-modal').style.display = 'flex';
+    };
+
+    function intervalStepLabel(stepIdx) {
+      return intervalTimer?.cfg.steps[stepIdx]?.typLabel || '';
+    }
+
+    function renderIntervalIntro() {
+      const { cfg, segs } = intervalTimer;
+      const list = cfg.steps.map((st, i) =>
+        `<div style="padding:4px 0;">${i + 1}. ${planEsc(st.typLabel)} · ${st.holdSec} s${st.pauseSec > 0 ? ` · ${st.pauseSec} s Pause` : ''}</div>`).join('');
+      document.getElementById('interval-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:380px;">
+          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">⏱ ${planEsc(cfg.name || 'Intervall-Zirkel')}</div>
+          <div style="color:var(--muted);margin-bottom:16px;">${cfg.rounds} Runde${cfg.rounds === 1 ? '' : 'n'} · ${cfg.prepSec} s Vorbereitung · ${fmtZirkelTime(intervalTotalSec(segs))} gesamt</div>
+          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;max-height:40vh;overflow-y:auto;">${list}</div>
+          <button onclick="intervalTimerBegin()" class="btn" style="width:100%;padding:28px;font-size:24px;border-radius:14px;">▶ Start</button>
+        </div>`;
+    }
+
+    // AudioContext im Tap-Handler erzeugen und mit einem stillen Puffer freischalten
+    function intervalUnlockAudio() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return null;
+        const ctx = new AudioCtx();
+        ctx.resume?.().catch(() => {});
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, 22050);
+        src.connect(ctx.destination);
+        src.start(0);
+        return ctx;
+      } catch (e) {
+        console.warn('Audio nicht verfügbar:', e);
+        return null;
+      }
+    }
+
+    // Töne: [Frequenz Hz, Versatz s, Dauer s, Wellenform, Lautstärke]
+    const INTERVAL_TONES = {
+      tick:   [[880, 0, 0.12, 'sine', 0.35]],                                                  // 3-2-1
+      start:  [[660, 0, 0.12, 'square', 0.15], [1320, 0.12, 0.38, 'square', 0.15]],           // Beginn Halten: hoch, aufsteigend
+      end:    [[784, 0, 0.2, 'triangle', 0.45], [392, 0.2, 0.45, 'triangle', 0.45]],           // Ende Halten: absteigend
+      finish: [[523, 0, 0.18, 'sine', 0.35], [659, 0.18, 0.18, 'sine', 0.35], [784, 0.36, 0.18, 'sine', 0.35], [1047, 0.54, 0.7, 'sine', 0.35]]
+    };
+
+    function intervalScheduleTone(kind, atCtxTime) {
+      const t = intervalTimer, ctx = t?.audioCtx;
+      if (!ctx) return;
+      INTERVAL_TONES[kind].forEach(([freq, offset, dur, type, vol]) => {
+        try {
+          const start = Math.max(ctx.currentTime, atCtxTime + offset);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, start);
+          gain.gain.linearRampToValueAtTime(vol, start + 0.01);
+          gain.gain.setValueAtTime(vol, start + Math.max(0.02, dur - 0.03));
+          gain.gain.linearRampToValueAtTime(0, start + dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(start);
+          osc.stop(start + dur + 0.02);
+          t.scheduled.push({ osc, gain });
+        } catch (e) { /* Ton optional – Ablauf läuft unabhängig davon weiter */ }
+      });
+    }
+
+    function intervalCancelTones() {
+      const t = intervalTimer;
+      if (!t) return;
+      t.scheduled.forEach(({ osc, gain }) => {
+        try { gain.disconnect(); } catch (e) { /* schon getrennt */ }
+        try { osc.stop(0); } catch (e) { /* schon gestoppt */ }
+      });
+      t.scheduled = [];
+    }
+
+    // Alle Töne ab dem aktuellen Segment neu planen (nach Start, Fortsetzen, Überspringen, Rückkehr in den Vordergrund)
+    function intervalScheduleAllTones() {
+      const t = intervalTimer;
+      intervalCancelTones();
+      if (!t?.audioCtx || t.pausedAtMs || t.finished || t.segIdx < 0) return;
+      const ctx = t.audioCtx;
+      const nowMs = Date.now();
+      const toCtx = ms => ctx.currentTime + (ms - nowMs) / 1000;
+      const future = ms => ms >= nowMs - 50;
+      let segStart = t.segStartMs;
+      for (let i = t.segIdx; i < t.segs.length; i++) {
+        const seg = t.segs[i], segEnd = segStart + seg.dur * 1000;
+        const prev = t.segs[i - 1];
+        if (seg.phase === 'hold' && future(segStart)) {
+          // Folgt Halten direkt auf Halten (Pause 0), kommt der Startton kurz nach dem Endton
+          intervalScheduleTone('start', toCtx(segStart) + (prev?.phase === 'hold' ? 0.7 : 0));
+        }
+        if (seg.phase === 'prep' || seg.phase === 'hold') {
+          for (let k = 3; k >= 1; k--) {
+            const at = segEnd - k * 1000;
+            if (seg.dur > k && future(at)) intervalScheduleTone('tick', toCtx(at));
+          }
+        }
+        if (seg.phase === 'hold' && future(segEnd)) {
+          intervalScheduleTone(i === t.segs.length - 1 ? 'finish' : 'end', toCtx(segEnd));
+        }
+        segStart = segEnd;
+      }
+    }
+
+    function intervalVibrate(pattern) {
+      try { navigator.vibrate?.(pattern); } catch (e) { /* Vibration optional */ }
+    }
+
+    async function intervalRequestWakeLock() {
+      const t = intervalTimer;
+      if (!t) return;
+      // Vorbereitet für eine native Lösung im Android-Wrapper (existiert dort derzeit nicht)
+      try { window.AndroidTokenBridge?.setKeepScreenOn?.(true); } catch (e) { /* optional */ }
+      if (!('wakeLock' in navigator)) { t.wakeLockUnsupported = true; updateIntervalWakeHint(); return; }
+      if (t.wakeLock && !t.wakeLock.released) return;
+      try {
+        t.wakeLock = await navigator.wakeLock.request('screen');
+        t.wakeLockUnsupported = false;
+      } catch (e) {
+        console.warn('WakeLock nicht verfügbar:', e);
+        t.wakeLockUnsupported = true;
+      }
+      updateIntervalWakeHint();
+    }
+
+    function intervalReleaseWakeLock() {
+      const t = intervalTimer;
+      if (!t) return;
+      t.wakeLock?.release?.().catch(() => {});
+      t.wakeLock = null;
+      try { window.AndroidTokenBridge?.setKeepScreenOn?.(false); } catch (e) { /* optional */ }
+    }
+
+    function updateIntervalWakeHint() {
+      const el = document.getElementById('iv-wake-hint');
+      if (el) el.style.display = intervalTimer?.wakeLockUnsupported ? '' : 'none';
+    }
+
+    window.intervalTimerBegin = function() {
+      const t = intervalTimer;
+      if (!t || t.segIdx >= 0) return;
+      t.audioCtx = intervalUnlockAudio(); // muss synchron im Tap passieren
+      t.startedAt = new Date();
+      t.segIdx = 0;
+      t.segStartMs = Date.now();
+      intervalRequestWakeLock();
+      intervalScheduleAllTones();
+      if (t.segs[0].phase === 'hold') intervalVibrate(250);
+      t.intervalId = setInterval(intervalTick, 250);
+      renderIntervalRunning();
+    };
+
+    function intervalSegEndMs() {
+      const t = intervalTimer;
+      return t.segStartMs + t.segs[t.segIdx].dur * 1000;
+    }
+
+    function intervalRemainingSec() {
+      const t = intervalTimer;
+      const ref = t.pausedAtMs || Date.now();
+      return Math.max(0, Math.ceil((intervalSegEndMs() - ref) / 1000));
+    }
+
+    function intervalRecordHold(seg, sec) {
+      const t = intervalTimer;
+      const s = Math.floor(sec);
+      if (seg.phase !== 'hold' || s < 1) return;
+      const st = t.cfg.steps[seg.stepIdx];
+      t.done.push({ round: seg.round, stepIdx: seg.stepIdx, typ: st.typ, typLabel: st.typLabel, sec: s });
+    }
+
+    function intervalOnSegmentStart(lagMs) {
+      const t = intervalTimer;
+      // Vibration nur bei pünktlichem Wechsel, nicht beim Nachholen nach einer Hintergrundphase
+      if (lagMs < 1500) intervalVibrate(t.segs[t.segIdx].phase === 'hold' ? 250 : [120, 80, 120]);
+      renderIntervalRunning();
+    }
+
+    function intervalTick() {
+      const t = intervalTimer;
+      if (!t || t.segIdx < 0 || t.finished || t.pausedAtMs) return;
+      const now = Date.now();
+      let changed = false;
+      while (t.segIdx < t.segs.length) {
+        const seg = t.segs[t.segIdx];
+        const endMs = t.segStartMs + seg.dur * 1000;
+        if (now < endMs) break;
+        intervalRecordHold(seg, seg.dur);
+        t.segStartMs = endMs; // exakt anschließen, keine aufsummierte Drift
+        t.segIdx++;
+        changed = true;
+      }
+      if (t.segIdx >= t.segs.length) { intervalFinish(now - t.segStartMs); return; }
+      if (changed) intervalOnSegmentStart(now - t.segStartMs);
+      else updateIntervalRunningLive();
+    }
+
+    function intervalProgress() {
+      const t = intervalTimer;
+      const total = intervalTotalSec(t.segs);
+      const before = t.segs.slice(0, t.segIdx).reduce((sum, s) => sum + s.dur, 0);
+      const cur = t.segs[t.segIdx];
+      const inSeg = cur ? Math.min(cur.dur, Math.max(0, ((t.pausedAtMs || Date.now()) - t.segStartMs) / 1000)) : 0;
+      return { total, elapsed: Math.min(total, before + inSeg) };
+    }
+
+    function renderIntervalRunning() {
+      const t = intervalTimer;
+      if (!t || t.finished) return;
+      const seg = t.segs[t.segIdx];
+      const ph = INTERVAL_PHASES[seg.phase];
+      const nextHold = t.segs.slice(seg.phase === 'hold' ? t.segIdx + 1 : t.segIdx).find(s => s.phase === 'hold');
+      const holdsTotal = t.segs.filter(s => s.phase === 'hold').length;
+      const holdNo = t.segs.slice(0, t.segIdx + 1).filter(s => s.phase === 'hold').length + (seg.phase === 'hold' ? 0 : 1);
+      const current = seg.phase === 'hold' ? intervalStepLabel(seg.stepIdx) : (nextHold ? intervalStepLabel(nextHold.stepIdx) : '');
+      const currentPrefix = seg.phase === 'hold' ? '' : 'Gleich: ';
+      const after = seg.phase === 'hold' ? nextHold : t.segs.slice(t.segIdx).filter(s => s.phase === 'hold')[1];
+      const paused = !!t.pausedAtMs;
+      const btn = 'flex:1;padding:16px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;font-size:15px;';
+      document.getElementById('interval-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:420px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;">
+            <span>Runde ${seg.round} von ${t.cfg.rounds}</span>
+            <span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span>
+          </div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.color};margin-bottom:6px;">${paused ? '⏸ Pausiert · ' : ''}${ph.label}</div>
+          <div style="font-size:24px;font-weight:600;margin-bottom:4px;min-height:30px;">${current ? currentPrefix + planEsc(current) : ''}</div>
+          <div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>
+          <div style="font-size:15px;color:var(--muted);margin:6px 0 16px;min-height:20px;">${after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '')}</div>
+          <div style="background:var(--surface);border-radius:6px;height:10px;overflow:hidden;margin-bottom:4px;">
+            <div id="iv-progress-bar" style="height:100%;width:0%;background:${ph.color};"></div>
+          </div>
+          <div id="iv-progress-text" style="font-size:12px;color:var(--muted);margin-bottom:18px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="intervalTogglePause()" style="${btn}">${paused ? '▶ Weiter' : '⏸ Pause'}</button>
+            <button onclick="intervalSkip()" style="${btn}">⏭ Überspringen</button>
+            <button onclick="requestCloseIntervalTimer()" style="${btn}color:var(--danger);border-color:var(--danger);">✕ Abbrechen</button>
+          </div>
+          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:#f59e0b;margin-top:14px;">⚠️ Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
+        </div>`;
+      updateIntervalRunningLive();
+    }
+
+    function updateIntervalRunningLive() {
+      const t = intervalTimer;
+      if (!t || t.finished || t.segIdx < 0) return;
+      const rem = document.getElementById('iv-remaining');
+      if (rem) rem.textContent = intervalRemainingSec();
+      const { total, elapsed } = intervalProgress();
+      const bar = document.getElementById('iv-progress-bar');
+      if (bar) bar.style.width = (total > 0 ? Math.round(elapsed / total * 100) : 0) + '%';
+      const txt = document.getElementById('iv-progress-text');
+      if (txt) txt.textContent = `${fmtZirkelTime(elapsed)} / ${fmtZirkelTime(total)}`;
+    }
+
+    window.intervalTogglePause = function() {
+      const t = intervalTimer;
+      if (!t || t.segIdx < 0 || t.finished) return;
+      if (t.pausedAtMs) {
+        t.segStartMs += Date.now() - t.pausedAtMs;
+        t.pausedAtMs = null;
+        intervalTimerResumeAudio();
+      } else {
+        t.pausedAtMs = Date.now();
+        intervalCancelTones();
+      }
+      renderIntervalRunning();
+    };
+
+    async function intervalTimerResumeAudio() {
+      const t = intervalTimer;
+      try { if (t?.audioCtx?.state === 'suspended') await t.audioCtx.resume(); } catch (e) { /* optional */ }
+      intervalScheduleAllTones();
+    }
+
+    // Aktuelles Segment beenden. Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit.
+    window.intervalSkip = function() {
+      const t = intervalTimer;
+      if (!t || t.segIdx < 0 || t.finished) return;
+      const now = Date.now();
+      const seg = t.segs[t.segIdx];
+      intervalRecordHold(seg, Math.min(seg.dur, ((t.pausedAtMs || now) - t.segStartMs) / 1000));
+      t.segIdx++;
+      t.segStartMs = now;
+      if (t.pausedAtMs) t.pausedAtMs = now; // bleibt pausiert, am Anfang des nächsten Segments
+      if (t.segIdx >= t.segs.length) {
+        intervalCancelTones();
+        if (t.audioCtx) intervalScheduleTone('finish', t.audioCtx.currentTime);
+        intervalFinish(0);
+        return;
+      }
+      intervalScheduleAllTones();
+      intervalOnSegmentStart(0);
+    };
+
+    function intervalFinish(lagMs) {
+      const t = intervalTimer;
+      clearInterval(t.intervalId);
+      t.intervalId = null;
+      t.finished = true;
+      t.pausedAtMs = null;
+      intervalReleaseWakeLock();
+      // Schlusston ist bereits auf der Audio-Zeitachse geplant (nicht abbrechen)
+      if (lagMs < 1500) intervalVibrate([400, 150, 400]);
+      renderIntervalDone();
+      window.saveIntervalResults();
+    }
+
+    // Absolvierte Haltezeiten je Übung zusammenfassen (Reihenfolge des ersten Auftretens)
+    function intervalResultsByType() {
+      const byTyp = new Map();
+      intervalTimer.done.forEach(h => {
+        if (!byTyp.has(h.typ)) byTyp.set(h.typ, { typ: h.typ, typLabel: h.typLabel, holdSec: [] });
+        byTyp.get(h.typ).holdSec.push(h.sec);
+      });
+      return [...byTyp.values()];
+    }
+
+    function renderIntervalDone() {
+      const t = intervalTimer;
+      const groups = intervalResultsByType();
+      const list = groups.map(g => `<div style="padding:4px 0;">${planEsc(g.typLabel)}: ${fmtHoldSets(g.holdSec)}</div>`).join('')
+        || '<div style="color:var(--muted);">Keine Haltezeit absolviert</div>';
+      const status = t.saving ? '⏳ Speichere…'
+        : t.saveError ? '❌ Speichern fehlgeschlagen'
+        : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? '✓ Im Trainingslog gespeichert' : '';
+      document.getElementById('interval-timer-body').innerHTML = `
+        <div style="text-align:center;width:100%;max-width:380px;">
+          <div style="font-size:24px;font-weight:600;margin-bottom:16px;">Zirkel abgeschlossen! 🎉</div>
+          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:12px;">${list}</div>
+          <div style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:20px;">${status}</div>
+          <div style="display:flex;gap:8px;">
+            ${t.saveError ? `<button onclick="saveIntervalResults()" class="btn" style="flex:1;padding:14px;">Erneut speichern</button>` : ''}
+            <button onclick="closeIntervalTimer()" class="btn" style="flex:1;padding:14px;${t.saveError ? 'background:var(--surface2);border:1px solid var(--border);color:var(--text);' : ''}">Schließen</button>
+          </div>
+        </div>`;
+    }
+
+    // Ein Eintrag je Übung im Format der manuellen Haltezeit-Eingabe (kein sets, kein zeit, kein act_kcal_calc)
+    window.saveIntervalResults = async function() {
+      const t = intervalTimer;
+      if (!t || t.saving) return;
+      const groups = intervalResultsByType().filter(g => !t.savedTyps.has(g.typ));
+      if (!groups.length) return;
+      t.saving = true; t.saveError = false;
+      if (t.finished) renderIntervalDone();
+      const started = t.startedAt || new Date();
+      const datum = planYmd(started);
+      const time = started.toTimeString().slice(0, 8);
+      const notiz = t.cfg.name ? `Intervall-Zirkel: ${t.cfg.name}` : 'Intervall-Zirkel';
+      try {
+        for (const g of groups) {
+          const entry = {
+            id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            datum, typ: g.typ,
+            variant: '', variantLabel: '',
+            holdSec: g.holdSec,
+            notiz,
+            garminTime: time,
+            timestamp: datum + 'T' + time,
+            source: 'manual',
+            ...(String(g.typ).startsWith('custom_') ? { typLabel: g.typLabel } : {})
+          };
+          await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+          trainingEntries.push(entry);
+          t.savedTyps.add(g.typ);
+        }
+        window.trainingEntries = trainingEntries;
+        showToast('✓ Zirkel gespeichert');
+      } catch (err) {
+        console.error('Intervall-Zirkel Speichern Fehler:', err);
+        t.saveError = true;
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+      t.saving = false;
+      saveToCache();
+      renderFoodLog();
+      renderTrainingHistory();
+      renderDataStats();
+      if (intervalTimer === t && t.finished) renderIntervalDone();
+    };
+
+    window.closeIntervalTimer = function() {
+      const t = intervalTimer;
+      if (t) {
+        if (t.intervalId) clearInterval(t.intervalId);
+        intervalCancelTones();
+        intervalReleaseWakeLock();
+        try { t.audioCtx?.close?.().catch(() => {}); } catch (e) { /* optional */ }
+      }
+      document.getElementById('interval-timer-modal').style.display = 'none';
+      intervalTimer = null;
+    };
+
+    window.requestCloseIntervalTimer = async function() {
+      const t = intervalTimer;
+      if (!t) return;
+      if (t.segIdx < 0) { window.closeIntervalTimer(); return; } // noch nicht gestartet
+      if (t.finished) {
+        const unsaved = intervalResultsByType().some(g => !t.savedTyps.has(g.typ));
+        if (unsaved && !await showConfirm('Nicht gespeichert', 'Das Ergebnis wurde noch nicht gespeichert. Trotzdem schließen?', '⚠️', 'Schließen', true)) return;
+        window.closeIntervalTimer();
+        return;
+      }
+      // Während der Rückfrage anhalten, damit keine Haltezeit unbemerkt weiterläuft
+      const wasPaused = !!t.pausedAtMs;
+      if (!wasPaused) window.intervalTogglePause();
+      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', '⚠️', 'Abbrechen', true);
+      if (intervalTimer !== t) return;
+      if (!ok) { if (!wasPaused) window.intervalTogglePause(); return; }
+      // Laufende Haltezeit mit der tatsächlich gehaltenen Zeit übernehmen
+      const seg = t.segs[t.segIdx];
+      intervalRecordHold(seg, Math.min(seg.dur, (t.pausedAtMs - t.segStartMs) / 1000));
+      clearInterval(t.intervalId);
+      t.intervalId = null;
+      intervalCancelTones();
+      intervalReleaseWakeLock();
+      if (t.done.length && await showConfirm('Teilleistung speichern?', intervalResultsByType().map(g => `${g.typLabel}: ${fmtHoldSets(g.holdSec)}`).join(' · '), '💾', 'Speichern', false)) {
+        await window.saveIntervalResults();
+        if (t.saveError) { t.finished = true; renderIntervalDone(); return; } // Erneut-speichern-Option anbieten
+      }
+      window.closeIntervalTimer();
+    };
+
+    // Rückkehr in den Vordergrund: Stand über Zeitstempel nachholen, Wake Lock und Töne erneuern
+    document.addEventListener('visibilitychange', async () => {
+      const t = intervalTimer;
+      if (!t || t.segIdx < 0 || t.finished || document.visibilityState !== 'visible') return;
+      intervalTick();
+      if (intervalTimer !== t || t.finished) return;
+      intervalRequestWakeLock();
+      if (!t.pausedAtMs) await intervalTimerResumeAudio();
+      renderIntervalRunning();
+    });
+
     // ── Eigene Trainingsarten ─────────────────────────────────────────────────
     let customTrainingTypes = [];
 
@@ -8067,6 +8957,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
         renderCustomTypes();
         updateTrainingTypeSelect();
+        updateTrainingFormMode();
+        cachePut('customTrainingTypes', customTrainingTypes);
       } catch(e) { console.warn('Load custom types error:', e); }
     }
 
@@ -8078,12 +8970,33 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         return;
       }
       container.innerHTML = customTrainingTypes.map((t, i) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:14px;">${t.label}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:14px;flex:1;min-width:0;">${t.label}</span>
+          <button onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten"
+            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? '#fff' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? '⏱ Haltezeit' : 'Wdh.'}</button>
           <button onclick="removeCustomType(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕</button>
         </div>
       `).join('');
     }
+
+    // Übung als Haltezeit-Übung markieren bzw. zurück auf Wiederholungen. Ändert nur das Typ-Dokument
+    // (kind: 'hold' | 'reps'); bestehende Einträge bleiben unverändert und werden nach ihrem eigenen Format angezeigt.
+    window.toggleCustomTypeHold = async function(index) {
+      const t = customTrainingTypes[index];
+      if (!t) return;
+      const kind = t.kind === 'hold' ? 'reps' : 'hold';
+      try {
+        await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, kind }, { merge: true });
+        t.kind = kind;
+        cachePut('customTrainingTypes', customTrainingTypes);
+        renderCustomTypes();
+        updateTrainingFormMode();
+        showToast(kind === 'hold' ? `✓ ${t.label}: Haltezeit` : `✓ ${t.label}: Wiederholungen`);
+      } catch (e) {
+        console.error('Toggle hold type error:', e);
+        showToast('❌ Speichern fehlgeschlagen');
+      }
+    };
 
     // Alle Custom-Übungen als {id, label}, alphabetisch nach Anzeigename. Enthält auch Custom-IDs, die nur
     // in Einträgen vorkommen und (noch) kein Typ-Dokument haben. Eingebaute Übungen gehören nicht dazu.
@@ -8132,6 +9045,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         input?.focus();
         return;
       }
+      trainingFormHoldForced = false;
       window.updateVariantOptions();
     };
 

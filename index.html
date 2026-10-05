@@ -3916,6 +3916,51 @@
     }
 
     // Render Food Log
+    // ── Farbregeln der Tageskacheln (einzige Stelle, jederzeit änderbar) ───────
+    // Je Kennzahl eine Regel auf ratio = ist / ziel (Grenzen inklusive):
+    //   'target': grün, wenn 1 − tol ≤ ratio ≤ 1 + tol, darunter und darüber rot
+    //   'cap':    grün, wenn ratio ≤ max (nach unten offen), darüber rot
+    //   'floor':  grün, wenn ratio ≥ min (nach oben offen), darunter rot
+    const KPI_RULES = {
+      kcal:    { type: 'target', tol: 0.05 }, // grün 95–105 % des Ziels
+      fett:    { type: 'cap',    max: 1.05 }, // grün bis 105 %
+      kh:      { type: 'target', tol: 0.10 }, // grün 90–110 %
+      protein: { type: 'floor',  min: 0.80 }  // grün ab 80 %
+    };
+    const KPI_EPS = 1e-9; // gegen Gleitkommafehler an den Grenzen
+
+    // Liefert { status: 'green'|'red'|'none', ratio, diff } ohne Seiteneffekte.
+    // ratio = ist / ziel, diff = ziel − ist (positiv: noch übrig, negativ: drüber).
+    // 'none' (ratio/diff null) bei Ziel 0, ≤ 0, leer oder nicht numerisch sowie unbekannter Kennzahl.
+    function kpiStatus(kennzahl, ist, ziel) {
+      const rule = KPI_RULES[kennzahl];
+      const z = (ziel === null || ziel === undefined || ziel === '') ? NaN : Number(ziel);
+      if (!rule || !Number.isFinite(z) || z <= 0) return { status: 'none', ratio: null, diff: null };
+      const i = Number.isFinite(Number(ist)) ? Number(ist) : 0;
+      const ratio = i / z;
+      const diff = z - i;
+      let green;
+      if (rule.type === 'target') green = ratio >= 1 - rule.tol - KPI_EPS && ratio <= 1 + rule.tol + KPI_EPS;
+      else if (rule.type === 'cap') green = ratio <= rule.max + KPI_EPS;
+      else if (rule.type === 'floor') green = ratio >= rule.min - KPI_EPS;
+      else return { status: 'none', ratio, diff };
+      return { status: green ? 'green' : 'red', ratio, diff };
+    }
+    window.kpiStatus = kpiStatus;
+
+    // Fasst die (gefilterte, sortierte) Aktivitätsliste eines Tages nach typ zusammen.
+    // Reihenfolge = Position des ersten Eintrags je Typ. Reine Anzeigefunktion.
+    function groupDayActivities(list) {
+      const groups = [];
+      const byTyp = new Map();
+      list.forEach(a => {
+        let g = byTyp.get(a.typ);
+        if (!g) { g = { typ: a.typ, items: [] }; byTyp.set(a.typ, g); groups.push(g); }
+        g.items.push(a);
+      });
+      return groups;
+    }
+
     function renderFoodLog() {
       // Update date display
       const dateObj = new Date(currentDate + 'T12:00:00');
@@ -3936,7 +3981,9 @@
         totalCarbs += e.carbs || 0;
         totalFat += e.fat || 0;
       });
-      
+      // Ungerundete Summen für die Farbregel (kpiStatus)
+      const rawKcal = totalKcal, rawProtein = totalProtein, rawCarbs = totalCarbs, rawFat = totalFat;
+
       // Round to 1 decimal
       totalKcal = Math.round(totalKcal * 10) / 10;
       totalProtein = Math.round(totalProtein * 10) / 10;
@@ -4001,19 +4048,23 @@
       const carbsPct = carbsGoal > 0 ? Math.round(totalCarbs / carbsGoal * 100) : 0;
       const fatPct = fatGoal > 0 ? Math.round(totalFat / fatGoal * 100) : 0;
 
-      const setBar = (id, pct) => {
+      // Farbe je Kennzahl nach KPI_RULES; ohne gültiges Ziel ('none') wie bisher: rot über 100 %, sonst grün
+      const setBar = (id, pct, kennzahl, ist, ziel) => {
         const bar = document.getElementById(id);
         const label = document.getElementById(id + '-label');
         if (bar) {
           bar.style.width = Math.min(100, pct) + '%';
-          bar.style.background = pct > 100 ? '#ef4444' : '#22c55e';
+          const status = kpiStatus(kennzahl, ist, ziel).status;
+          bar.style.background = status === 'green' ? 'var(--success)'
+            : status === 'red' ? 'var(--danger)'
+            : (pct > 100 ? '#ef4444' : '#22c55e');
         }
         if (label) label.textContent = pct + '%';
       };
-      setBar('bar-kcal', kcalPct);
-      setBar('bar-protein', proteinPct);
-      setBar('bar-carbs', carbsPct);
-      setBar('bar-fat', fatPct);
+      setBar('bar-kcal', kcalPct, 'kcal', rawKcal, todayGoal);
+      setBar('bar-protein', proteinPct, 'protein', rawProtein, proteinGoal);
+      setBar('bar-carbs', carbsPct, 'kh', rawCarbs, carbsGoal);
+      setBar('bar-fat', fatPct, 'fett', rawFat, fatGoal);
       
       // Makro goals in tiles
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `/ ${fmt(proteinGoal)}g Protein` : 'Protein';
@@ -4044,8 +4095,12 @@
           </div>`;
         }
 
-        // Aktivitäten
-        dayActivities.forEach(a => {
+        // Angezeigte Kalorien einer Aktivitätszeile.
+        // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert)
+        const activityRowKcal = a => a.source === 'manual' ? 0 : (a.act_kcal_calc || a.kalorien || 0);
+
+        // Eine Aktivitätszeile (Einzeldarstellung, unverändert)
+        const activityRowHtml = a => {
           const baseLabel = TYP_LABELS[a.typ] || ('🏅 ' + (customTypeLabel(a.typ, a) || 'Aktivität'));
           const emoji = baseLabel.split(' ')[0];
           const typName = baseLabel.split(' ').slice(1).join(' ');
@@ -4053,14 +4108,13 @@
           const variantSuffix = a.variantLabel ? ` · ${a.variantLabel}` : '';
           const displayName = typName + variantSuffix;
 
-          // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert)
-          const kcal = a.source === 'manual' ? 0 : (a.act_kcal_calc || a.kalorien || 0);
+          const kcal = activityRowKcal(a);
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
           const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
           const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
-          html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:16px;">${emoji}</span>
               <div>
@@ -4070,6 +4124,46 @@
               </div>
             </div>
             ${kcal > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;">${fmt(kcal)} kcal</span>` : ''}
+          </div>`;
+        };
+
+        // Aktivitäten: Typen mit nur einem Eintrag wie bisher, gleiche Typen (≥ 2) als zugeklappte Gruppe
+        groupDayActivities(dayActivities).forEach(g => {
+          if (g.items.length === 1) { html += activityRowHtml(g.items[0]); return; }
+
+          const first = g.items[0];
+          const baseLabel = TYP_LABELS[first.typ] || ('🏅 ' + (customTypeLabel(first.typ, first) || 'Aktivität'));
+          const emoji = baseLabel.split(' ')[0];
+          const typName = baseLabel.split(' ').slice(1).join(' ');
+
+          // Summen: Distanz und Dauer nur, falls vorhanden; Kalorien = Summe der angezeigten Zeilenwerte
+          const distSum = g.items.reduce((s, a) => s + (a.distanz > 0 ? parseFloat(a.distanz) || 0 : 0), 0);
+          const secSum = Math.round(g.items.reduce((s, a) => s + parseHours(a.zeit || '') * 3600, 0));
+          const kcalSum = g.items.reduce((s, a) => { const k = activityRowKcal(a); return s + (k > 0 ? Math.round(k) : 0); }, 0);
+          const distText = distSum > 0 ? `${String(Math.round(distSum * 100) / 100).replace('.', ',')} km` : '';
+          const zeitText = secSum > 0
+            ? `${Math.floor(secSum / 3600)}:${String(Math.floor(secSum % 3600 / 60)).padStart(2, '0')}:${String(secSum % 60).padStart(2, '0')}`
+            : '';
+          const sumMeta = [distText, zeitText].filter(Boolean).join(' · ');
+
+          const groupKey = currentDate + '|' + g.typ;
+          const isOpen = expandedActivityGroups.has(groupKey);
+          const safeKey = groupKey.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+          html += `<div class="activity-group">
+            <div class="activity-group-header" data-group-key="${safeKey}" onclick="toggleActivityGroup(this)" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span class="activity-group-arrow" style="font-size:11px;color:var(--muted);width:12px;flex-shrink:0;">${isOpen ? '▼' : '▶'}</span>
+                <span style="font-size:16px;">${emoji}</span>
+                <div style="min-width:0;">
+                  <div style="font-weight:500;font-size:14px;">${typName} <span style="color:var(--muted);font-weight:400;">${g.items.length}×</span></div>
+                  ${sumMeta ? `<div style="font-size:12px;color:var(--muted);">${sumMeta}</div>` : ''}
+                </div>
+              </div>
+              ${kcalSum > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;flex-shrink:0;">${fmt(kcalSum)} kcal</span>` : ''}
+            </div>
+            <div class="activity-group-items" style="display:${isOpen ? 'block' : 'none'};">
+              ${g.items.map(activityRowHtml).join('')}
+            </div>
           </div>`;
         });
 
@@ -4214,7 +4308,25 @@
         expandedMeals.delete(mealName);
       }
     };
-    
+
+    // Aufgeklappte Aktivitätsgruppen im Ernährungs-Tab, Schlüssel "datum|typ" (übersteht Neuzeichnen)
+    let expandedActivityGroups = new Set();
+
+    window.toggleActivityGroup = function(header) {
+      const items = header.nextElementSibling;
+      const arrow = header.querySelector('.activity-group-arrow');
+      const key = header.dataset.groupKey;
+      if (items.style.display === 'none') {
+        items.style.display = 'block';
+        arrow.textContent = '▼';
+        expandedActivityGroups.add(key);
+      } else {
+        items.style.display = 'none';
+        arrow.textContent = '▶';
+        expandedActivityGroups.delete(key);
+      }
+    };
+
     // Add/Edit/Delete Entry
 
     // ── Meal from hour helper ────────────────────────────────────────────────

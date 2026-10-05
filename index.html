@@ -471,10 +471,6 @@
     .bk-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
     #bulk-kategorie-modal .bk-save { width: auto !important; min-height: 44px; padding: 10px 16px; }
     .bk-close { background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; min-width: 44px; min-height: 44px; }
-    .bk-quick-label { font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
-    .bk-quick { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-    .bk-quick button { flex: 0 0 auto; white-space: nowrap; min-height: 44px; padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; font-size: 12px; }
-    .bk-quick button.bk-clear { color: var(--muted); }
     .bk-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--border); min-height: 56px; }
     .bk-text { flex: 1 1 auto; min-width: 0; }
     .bk-name { font-weight: 500; font-size: 14px; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -1403,19 +1399,6 @@
             <button class="btn bk-save" onclick="saveBulkKategorie()">✓ Speichern</button>
             <button class="bk-close" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen">✕</button>
           </div>
-        </div>
-        <div class="bk-quick-label">Alle Einträge der Liste vorbelegen (wird erst mit „✓ Speichern“ übernommen):</div>
-        <div class="bk-quick">
-          <button onclick="bulkSetAllKat('fleisch_fisch')">🥩 Alle → Fleisch</button>
-          <button onclick="bulkSetAllKat('milchprodukte')">🧀 Alle → Milch</button>
-          <button onclick="bulkSetAllKat('obst_gemuese')">🥦 Alle → Obst/Gem.</button>
-          <button onclick="bulkSetAllKat('getreide_brot')">🍞 Alle → Getreide</button>
-          <button onclick="bulkSetAllKat('suesswaren')">🍫 Alle → Süßigkeiten</button>
-          <button onclick="bulkSetAllKat('gerichte')">🍽️ Alle → Gerichte</button>
-          <button onclick="bulkSetAllKat('getraenke')">🥤 Alle → Getränke</button>
-          <button onclick="bulkSetAllKat('supplements')">🏋️ Alle → Supplements</button>
-          <button onclick="bulkSetAllKat('sonstiges')">📦 Alle → Sonstiges</button>
-          <button class="bk-clear" onclick="bulkSetAllKat('')">✕ Auswahl leeren</button>
         </div>
       </div>
       <div id="bulk-kat-list"></div>
@@ -3305,10 +3288,6 @@
           </select>`;
         list.appendChild(div);
       });
-    };
-
-    window.bulkSetAllKat = function(value) {
-      document.querySelectorAll('.bk-sel').forEach(sel => { sel.value = value; });
     };
 
     window.saveBulkKategorie = async function() {

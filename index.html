@@ -459,6 +459,27 @@
         grid-template-columns: 1fr !important;
       }
     }
+
+    /* ── Modal "Kategorien zuweisen" ──────────────────────────────────────── */
+    /* Die globale Regel select { width:100% } machte das Dropdown in der Flex-Zeile
+       zeilenbreit, der Namensblock (flex-basis 0) bekam 0 px → Name unsichtbar. */
+    .bk-inner { max-width: 700px; margin: 0 auto; padding: 0 16px max(80px, env(safe-area-inset-bottom, 80px)); box-sizing: border-box; }
+    .bk-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
+    .bk-titlebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .bk-titlebar > div:first-child { min-width: 0; }
+    .bk-titlebar h3 { margin: 0 0 2px; }
+    .bk-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    #bulk-kategorie-modal .bk-save { width: auto !important; min-height: 44px; padding: 10px 16px; }
+    .bk-close { background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; min-width: 44px; min-height: 44px; }
+    .bk-quick-label { font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+    .bk-quick { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+    .bk-quick button { flex: 0 0 auto; white-space: nowrap; min-height: 44px; padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; font-size: 12px; }
+    .bk-quick button.bk-clear { color: var(--muted); }
+    .bk-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--border); min-height: 56px; }
+    .bk-text { flex: 1 1 auto; min-width: 0; }
+    .bk-name { font-weight: 500; font-size: 14px; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .bk-macros { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    #bulk-kategorie-modal select.bk-sel { flex: 0 0 140px; width: 140px; min-width: 0; min-height: 44px; padding: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; }
   </style>
 </head>
 <body>
@@ -1371,28 +1392,31 @@
     </div>
   </div>
   <div id="bulk-kategorie-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
-    <div style="max-width:700px;margin:0 auto;padding:20px 20px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:1;border-bottom:1px solid var(--border);">
-        <div>
-          <h3 style="margin:0 0 4px;">🏷️ Kategorien zuweisen</h3>
-          <div id="bulk-kat-status" style="font-size:12px;color:var(--muted);"></div>
+    <div class="bk-inner">
+      <div class="bk-head">
+        <div class="bk-titlebar">
+          <div>
+            <h3>🏷️ Kategorien zuweisen</h3>
+            <div id="bulk-kat-status" style="font-size:12px;color:var(--muted);"></div>
+          </div>
+          <div class="bk-actions">
+            <button class="btn bk-save" onclick="saveBulkKategorie()">✓ Speichern</button>
+            <button class="bk-close" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen">✕</button>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn" onclick="saveBulkKategorie()" style="padding:10px 18px;">✓ Speichern</button>
-          <button onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
+        <div class="bk-quick-label">Alle Einträge der Liste vorbelegen (wird erst mit „✓ Speichern“ übernommen):</div>
+        <div class="bk-quick">
+          <button onclick="bulkSetAllKat('fleisch_fisch')">🥩 Alle → Fleisch</button>
+          <button onclick="bulkSetAllKat('milchprodukte')">🧀 Alle → Milch</button>
+          <button onclick="bulkSetAllKat('obst_gemuese')">🥦 Alle → Obst/Gem.</button>
+          <button onclick="bulkSetAllKat('getreide_brot')">🍞 Alle → Getreide</button>
+          <button onclick="bulkSetAllKat('suesswaren')">🍫 Alle → Süßigkeiten</button>
+          <button onclick="bulkSetAllKat('gerichte')">🍽️ Alle → Gerichte</button>
+          <button onclick="bulkSetAllKat('getraenke')">🥤 Alle → Getränke</button>
+          <button onclick="bulkSetAllKat('supplements')">🏋️ Alle → Supplements</button>
+          <button onclick="bulkSetAllKat('sonstiges')">📦 Alle → Sonstiges</button>
+          <button class="bk-clear" onclick="bulkSetAllKat('')">✕ Auswahl leeren</button>
         </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <button onclick="bulkSetAllKat('fleisch_fisch')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥩 Alle → Fleisch</button>
-        <button onclick="bulkSetAllKat('milchprodukte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🧀 Alle → Milch</button>
-        <button onclick="bulkSetAllKat('obst_gemuese')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥦 Alle → Obst/Gem.</button>
-        <button onclick="bulkSetAllKat('getreide_brot')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍞 Alle → Getreide</button>
-        <button onclick="bulkSetAllKat('suesswaren')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍫 Alle → Süßigkeiten</button>
-        <button onclick="bulkSetAllKat('gerichte')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🍽️ Alle → Gerichte</button>
-        <button onclick="bulkSetAllKat('getraenke')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🥤 Alle → Getränke</button>
-        <button onclick="bulkSetAllKat('supplements')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">🏋️ Alle → Supplements</button>
-        <button onclick="bulkSetAllKat('sonstiges')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;">📦 Alle → Sonstiges</button>
-        <button onclick="bulkSetAllKat('')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:12px;">✕ Alle leeren</button>
       </div>
       <div id="bulk-kat-list"></div>
     </div>
@@ -3270,13 +3294,13 @@
       uncategorized.forEach(f => {
         const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);';
+        div.className = 'bk-row';
         div.innerHTML = `
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</div>
-            <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
+          <div class="bk-text">
+            <div class="bk-name" title="${safeName.replace(/"/g, '&quot;')}">${safeName}</div>
+            <div class="bk-macros">${f.kcal} kcal · P ${f.protein}g · KH ${f.carbs}g · F ${f.fat}g</div>
           </div>
-          <select data-food-id="${f.id}" class="bk-sel" style="padding:7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;min-width:160px;">
+          <select data-food-id="${f.id}" class="bk-sel" aria-label="Kategorie für ${safeName.replace(/"/g, '&quot;')}">
             ${KATEGORIE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
           </select>`;
         list.appendChild(div);

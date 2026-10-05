@@ -516,7 +516,7 @@
           
           <div style="margin-bottom:15px;">
             <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Typ</label>
-            <select id="training-type" onchange="updateVariantOptions()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <select id="training-type" onchange="onTrainingTypeChange(this)" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
               <option value="pullups">Pull-ups</option>
               <option value="pushups">Push-ups</option>
               <option value="lunges">Lunges</option>
@@ -1772,6 +1772,7 @@
           dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
           window.trainingEntries = trainingEntries;
           window.dayLogs = dayLogs;
+          updateTrainingTypeSelect(); // Custom-Arten aus dem Cache vor dem Netz-Load anzeigen
           hasCache = true;
         }
         if (cachedFavs) { favorites = new Set(cachedFavs); hasCache = true; }
@@ -2451,7 +2452,7 @@
         { id: 'pushups', label: 'Push-ups' },
         { id: 'lunges', label: 'Lunges' }
       ];
-      const allTypes = [...baseTypes, ...customTrainingTypes];
+      const allTypes = [...baseTypes, ...getCustomExerciseOptions()];
       // Only show types that have data
       const typesWithData = allTypes.filter(t =>
         trainingEntries.some(e => {
@@ -5715,7 +5716,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
     };
 
     window.updateVariantOptions = function() {
-      const type = document.getElementById('training-type').value;
+      const typeSel = document.getElementById('training-type');
+      const type = typeSel.value;
+      typeSel.dataset.last = type; // letzte gültige Auswahl (für "➕ Neue Übung anlegen")
       const variantSel = document.getElementById('training-variant');
       if (type.startsWith('custom_')) {
         variantSel.innerHTML = '<option value="">—</option>';
@@ -5928,6 +5931,7 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       // Fill form with existing values
       document.getElementById('training-date').value = entry.datum || '';
       document.getElementById('training-time').value = entry.garminTime || entry.timestamp?.split('T')[1]?.slice(0,5) || '';
+      updateTrainingTypeSelect(); // Liste aktuell halten, damit auch Custom-Arten aus Einträgen gewählt werden können
       const typeSelect = document.getElementById('training-type');
       typeSelect.value = entry.typ || entry.type || '';
       updateVariantOptions();
@@ -7190,13 +7194,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // ── Editor ────────────────────────────────────────────────────────────────
     function planTypeOptions(selected) {
       const opts = PLAN_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
-      customTrainingTypes.forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
       // Typen aus dem Plan, die (noch) nicht in den Listen sind
       PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
         if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: '🏅 ' + (u.typLabel || u.typ) });
       }));
       return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
-        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigener Typ…</option>`;
+        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>➕ Neue Übung anlegen</option>`;
     }
 
     // Varianten für einen Typ: vordefinierte (Loggen-Formular) + in trainingEntries/Plan vorkommende
@@ -7235,7 +7239,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     function planZirkelTypeOptions(selected) {
       const opts = ZIRKEL_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
-      customTrainingTypes.forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
       if (selected && !opts.find(o => o.id === selected)) opts.push({ id: selected, label: planTypLabel(selected) });
       return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
     }
@@ -8081,24 +8085,62 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       `).join('');
     }
 
+    // Alle Custom-Übungen als {id, label}, alphabetisch nach Anzeigename. Enthält auch Custom-IDs, die nur
+    // in Einträgen vorkommen und (noch) kein Typ-Dokument haben. Eingebaute Übungen gehören nicht dazu.
+    function getCustomExerciseOptions() {
+      const byId = new Map(customTrainingTypes.map(t => [t.id, { id: t.id, label: t.label }]));
+      trainingEntries.forEach(e => {
+        if (String(e.typ || '').startsWith('custom_') && !byId.has(e.typ)) byId.set(e.typ, { id: e.typ, label: customTypeLabel(e.typ, e) });
+      });
+      return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    // Eine Auswahlliste für das Loggen-Formular: eingebaute Optionen (statisch im HTML, vorn),
+    // dann Custom-Übungen, zuletzt "➕ Neue Übung anlegen". Aufruf jederzeit möglich, auch vor dem Laden
+    // der Typ-Dokumente; die Auswahl bleibt dabei erhalten.
+    const NEW_EXERCISE_OPTION = '__new_exercise__';
+    let pendingNewExerciseSelect = false; // true, wenn der Anlege-Ablauf über die Liste gestartet wurde
+
     function updateTrainingTypeSelect() {
       const select = document.getElementById('training-type');
       if (!select) return;
-      // Remove old custom options
-      Array.from(select.options).forEach(o => { if (o.dataset.custom) o.remove(); });
-      // Add current custom types
-      if (customTrainingTypes.length > 0) {
-        const group = document.createElement('optgroup');
-        group.label = 'Eigene';
-        customTrainingTypes.forEach(t => {
-          const opt = document.createElement('option');
-          opt.value = t.id;
-          opt.textContent = t.label;
-          opt.dataset.custom = '1';
-          group.appendChild(opt);
-        });
-        select.appendChild(group);
+      const current = select.value;
+      Array.from(select.options).forEach(o => { if (o.dataset.custom || o.dataset.newExercise) o.remove(); });
+      getCustomExerciseOptions().forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.label;
+        opt.dataset.custom = '1';
+        select.appendChild(opt);
+      });
+      const newOpt = document.createElement('option');
+      newOpt.value = NEW_EXERCISE_OPTION;
+      newOpt.textContent = '➕ Neue Übung anlegen';
+      newOpt.dataset.newExercise = '1';
+      select.appendChild(newOpt);
+      if (current && Array.from(select.options).some(o => o.value === current)) select.value = current;
+      populateWorkoutTypeSelect();
+    }
+
+    window.onTrainingTypeChange = function(select) {
+      if (select.value === NEW_EXERCISE_OPTION) {
+        // Anlege-Ablauf: vorherige Auswahl bleibt stehen, Name wird im Feld "Eigene Trainingsarten" eingegeben
+        select.value = select.dataset.last || select.options[0].value;
+        pendingNewExerciseSelect = true;
+        const input = document.getElementById('custom-type-name');
+        input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input?.focus();
+        return;
       }
+      window.updateVariantOptions();
+    };
+
+    function selectTrainingType(id) {
+      pendingNewExerciseSelect = false;
+      const select = document.getElementById('training-type');
+      if (!select || !Array.from(select.options).some(o => o.value === id)) return;
+      select.value = id;
+      window.updateVariantOptions();
     }
 
     window.addCustomType = async function() {
@@ -8106,13 +8148,18 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const name = input.value.trim();
       if (!name) { showToast('Bitte einen Namen eingeben'); return; }
       const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      if (customTrainingTypes.find(t => t.id === id)) { showToast('Art existiert bereits'); return; }
+      if (customTrainingTypes.find(t => t.id === id)) {
+        showToast('Art existiert bereits');
+        if (pendingNewExerciseSelect) selectTrainingType(id);
+        return;
+      }
       await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
       customTrainingTypes.push({ id, label: name });
       customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
       input.value = '';
       renderCustomTypes();
       updateTrainingTypeSelect();
+      if (pendingNewExerciseSelect) selectTrainingType(id);
       showToast('✓ ' + name + ' hinzugefügt');
     };
 

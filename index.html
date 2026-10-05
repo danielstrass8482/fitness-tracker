@@ -5888,6 +5888,16 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       updateTrainingFormMode();
     };
 
+    // Bearbeiten-Modus des Loggen-Formulars: ID des Eintrags, der gerade bearbeitet wird (sonst null).
+    // saveTrainingEntry überschreibt dann dasselbe Dokument statt einen neuen Eintrag anzulegen.
+    let editingTrainingId = null;
+
+    function setTrainingEditMode(id) {
+      editingTrainingId = id == null ? null : String(id);
+      const btn = document.querySelector('[onclick="saveTrainingEntry()"]');
+      if (btn) btn.textContent = editingTrainingId ? 'Training aktualisieren' : 'Training speichern';
+    }
+
     window.saveTrainingEntry = async function() {
       // Immer aktuell aus den Inputs lesen, unabhängig von oninput-Events
       updateHiddenSets();
@@ -5900,7 +5910,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       const notiz = document.getElementById('training-notiz').value;
       
       if (!date || !type || (holdMode ? holdSec.length === 0 : !sets)) {
-        showToast('❌ Bitte alle Pflichtfelder ausfüllen');
+        const what = !date ? 'Datum' : !type ? 'Übung' : holdMode ? 'Sekunden je Satz' : 'Wiederholungen';
+        showToast(`❌ Bitte ${what} angeben` + (editingTrainingId ? ' – Eintrag unverändert' : ''));
         return;
       }
 
@@ -5911,9 +5922,18 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         gerade: 'Gerade', seitlich: 'Seitlich'
       };
       
+      // Bearbeiten: alter Eintrag muss noch existieren, sonst nichts schreiben (kein Wiederanlegen gelöschter Einträge)
+      const editId = editingTrainingId;
+      const oldEntry = editId ? trainingEntries.find(e => String(e.id) === editId) : null;
+      if (editId && !oldEntry) {
+        setTrainingEditMode(null);
+        showToast('❌ Eintrag nicht mehr vorhanden – nichts geändert');
+        return;
+      }
+
       const timeVal = document.getElementById('training-time')?.value || '';
       const entry = {
-        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        id: editId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9)),
         datum: date,
         typ: type,
         variant: variant,
@@ -5934,11 +5954,30 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         entry.act_kcal_calc = calcManualActivityKcal(entry);
       }
 
+      // Bearbeiten: Felder, die das Formular nicht kennt (z. B. zeit, distanz, kalorien), vom alten Eintrag
+      // übernehmen; Formularfelder haben Vorrang. Felder des jeweils anderen Modus entfernen.
+      let toSave = entry;
+      if (oldEntry) {
+        toSave = { ...oldEntry, ...entry };
+        if (holdMode) { delete toSave.sets; delete toSave.act_kcal_calc; }
+        else delete toSave.holdSec;
+        // Kalorienwert nur neu berechnen, wenn sich Typ, Variante oder Sätze geändert haben
+        // (sonst würde z. B. ein geändertes Körpergewicht alte Einträge verschieben)
+        const sameWork = !holdMode && oldEntry.act_kcal_calc !== undefined && (oldEntry.typ || oldEntry.type) === type
+          && (oldEntry.variant || '') === variant && (oldEntry.sets || '') === sets;
+        if (sameWork) toSave.act_kcal_calc = oldEntry.act_kcal_calc;
+        if (!type.startsWith('custom_')) delete toSave.typLabel;
+      }
+
       try {
-        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
-        trainingEntries.push(entry);
+        // Gleiche Dokument-ID beim Bearbeiten → setDoc überschreibt, kein Löschen nötig
+        await setDoc(doc(userTrainingCol(), String(toSave.id)), toSave);
+        const idx = oldEntry ? trainingEntries.findIndex(e => String(e.id) === editId) : -1;
+        if (idx >= 0) trainingEntries[idx] = toSave;
+        else trainingEntries.push(toSave);
         window.trainingEntries = trainingEntries;
         saveToCache();
+        if (oldEntry) setTrainingEditMode(null);
 
         renderFoodLog();          // Kalorienziel aktualisieren
         renderTrainingHistory();
@@ -5951,10 +5990,10 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         updateTrainingFormMode();
         document.getElementById('training-notiz').value = '';
 
-        showToast('✓ Training gespeichert');
+        showToast(oldEntry ? '✓ Training aktualisiert' : '✓ Training gespeichert');
       } catch (err) {
         console.error('Save error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast(oldEntry ? '❌ Aktualisieren fehlgeschlagen – alter Eintrag unverändert' : '❌ Speichern fehlgeschlagen');
       }
     };
     
@@ -6115,18 +6154,9 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
       initHoldUI(isHoldEntry(entry) ? entry.holdSec : []);
       document.getElementById('training-notiz').value = entry.notiz || '';
 
-      // Change button to update mode
-      const btn = document.querySelector('[onclick="saveTrainingEntry()"]');
-      if (btn) {
-        btn.textContent = 'Training aktualisieren';
-        btn.onclick = async () => {
-          await deleteDoc(doc(userTrainingCol(), String(id)));
-          trainingEntries = trainingEntries.filter(e => String(e.id) !== String(id));
-          btn.textContent = 'Training speichern';
-          btn.onclick = saveTrainingEntry;
-          await saveTrainingEntry();
-        };
-      }
+      // Bearbeiten-Modus: saveTrainingEntry prüft zuerst und überschreibt dann dasselbe Dokument.
+      // Bei Fehlern bleibt der alte Eintrag unverändert und der Modus aktiv.
+      setTrainingEditMode(entry.id);
       // Scroll to form
       document.getElementById('training-date').scrollIntoView({ behavior: 'smooth' });
       showToast('Eintrag zum Bearbeiten geladen');
@@ -6142,6 +6172,8 @@ Antworte NUR mit JSON, kein Text davor oder danach. Format:
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
         saveToCache();
+        // Gelöschter Eintrag war gerade im Formular → Bearbeiten-Modus beenden (sonst würde er neu angelegt)
+        if (editingTrainingId === String(id)) setTrainingEditMode(null);
 
         renderTrainingHistory();
         renderDataStats();
@@ -8969,15 +9001,68 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         container.innerHTML = '<div style="font-size:13px;color:var(--muted);">Noch keine eigenen Arten</div>';
         return;
       }
-      container.innerHTML = customTrainingTypes.map((t, i) => `
+      container.innerHTML = customTrainingTypes.map((t, i) => t.id === renamingCustomTypeId ? `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <input type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()"
+            style="flex:1;min-width:0;padding:8px;background:var(--bg);border:1px solid var(--primary);border-radius:6px;color:var(--text);font-size:14px;">
+          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:12px;">✓</button>
+          <button onclick="cancelCustomTypeRename()" title="Abbrechen" style="padding:4px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:12px;">✕</button>
+        </div>
+      ` : `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:14px;flex:1;min-width:0;">${t.label}</span>
+          <button onclick="startCustomTypeRename(${i})" title="Umbenennen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">✏️</button>
           <button onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten"
             style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? '#fff' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? '⏱ Haltezeit' : 'Wdh.'}</button>
           <button onclick="removeCustomType(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕</button>
         </div>
       `).join('');
     }
+
+    // Umbenennen: ändert nur das Feld label im Typ-Dokument trainingTypes/{id}. ID und Einträge bleiben
+    // unberührt; customTypeLabel bevorzugt das Label des Typ-Dokuments vor typLabel am Eintrag.
+    let renamingCustomTypeId = null;
+
+    window.startCustomTypeRename = function(index) {
+      const t = customTrainingTypes[index];
+      if (!t) return;
+      renamingCustomTypeId = t.id;
+      renderCustomTypes();
+      const input = document.getElementById('custom-type-rename-input');
+      input?.focus();
+      input?.select();
+    };
+
+    window.cancelCustomTypeRename = function() {
+      renamingCustomTypeId = null;
+      renderCustomTypes();
+    };
+
+    window.saveCustomTypeRename = async function(index) {
+      const t = customTrainingTypes[index];
+      if (!t || t.id !== renamingCustomTypeId) return;
+      const label = (document.getElementById('custom-type-rename-input')?.value || '').trim();
+      if (!label) { showToast('Bitte einen Namen eingeben'); return; }
+      if (label === t.label) { cancelCustomTypeRename(); return; }
+      try {
+        await setDoc(doc(globalTrainingTypesCol(), t.id), { label }, { merge: true });
+        t.label = label;
+        renamingCustomTypeId = null;
+        customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+        cachePut('customTrainingTypes', customTrainingTypes);
+        // Neuen Namen überall anzeigen: Karte, Auswahl (inkl. Dashboard-Auswahl), Verlauf + Plan, Tagesaktivitäten
+        renderCustomTypes();
+        updateTrainingTypeSelect();
+        renderTrainingHistory();             // rendert auch die Planwoche neu
+        if (planEditMode) renderTrainingPlan(true); // offener Plan-Editor rendert aus planDraft, Eingaben bleiben
+        renderFoodLog();
+        if (document.getElementById('dashboard-tab')?.classList.contains('active')) renderDashboard();
+        showToast('✓ Umbenannt in ' + label);
+      } catch (e) {
+        console.error('Rename custom type error:', e);
+        showToast('❌ Umbenennen fehlgeschlagen – Name unverändert');
+      }
+    };
 
     // Übung als Haltezeit-Übung markieren bzw. zurück auf Wiederholungen. Ändert nur das Typ-Dokument
     // (kind: 'hold' | 'reps'); bestehende Einträge bleiben unverändert und werden nach ihrem eigenen Format angezeigt.

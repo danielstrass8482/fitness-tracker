@@ -387,6 +387,15 @@
     [data-kpi-diff].is-ok, .fo-kpistat.is-ok { color: var(--fo-ok); }
     [data-kpi-diff].is-bad, .fo-kpistat.is-bad { color: var(--fo-bad); }
     [data-kpi-diff] { color: var(--fo-text-3); }
+    /* Icons im alten Markup: Text und Icon auf einer Linie */
+    button .fo-i, h1 .fo-i, h2 .fo-i, h3 .fo-i { vertical-align: -0.2em; }
+    /* Auf-/Zuklappen: ein chevD, der zugeklappt nach rechts zeigt */
+    .fo-toggle-chev { transform: rotate(-90deg); transition: transform .15s; color: var(--fo-text-3); }
+    .fo-toggle-chev.is-open { transform: none; }
+    /* Toast mit Status-Icon */
+    .toast { display: flex; align-items: center; gap: 8px; }
+    .toast .fo-i.is-ok, .fo-status-ok { color: var(--fo-ok); }
+    .toast .fo-i.is-bad, .fo-status-bad { color: var(--fo-bad); }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -850,10 +859,67 @@
   </style>
 </head>
 <body class="fo-app">
+  <!-- Fuelofit Icon-Sprite (54 Icons). Verwendung: <svg class="fo-i"><use href="#i-run"/></svg> -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20h-5.5v-6h-5v6H4Z"/></symbol>
+    <symbol id="i-food" viewBox="0 0 24 24"><path d="M12 7.5c-1.4-1-3.4-1.3-5-.6C4.6 8 3.6 11 4.4 14.3 5.3 18 7.8 21 10 21c.9 0 1.3-.5 2-.5s1.1.5 2 .5c2.2 0 4.7-3 5.6-6.7.8-3.3-.2-6.3-2.6-7.4-1.6-.7-3.6-.4-5 .6ZM12 7.5c0-2 .8-3.5 2.5-4.5"/></symbol>
+    <symbol id="i-training" viewBox="0 0 24 24"><path d="M6.5 7v10M3.5 9.5v5M17.5 7v10M20.5 9.5v5M6.5 12h11"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16V9"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4"/></symbol>
+    <symbol id="i-run" viewBox="0 0 24 24"><path d="M14.5 4.5a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0M7.5 10.5 11 8h3l2.5 3.5 3 .5M14 8l-3 5 3.5 2.5-1 5M11 13l-2.5 3.5H5"/></symbol>
+    <symbol id="i-bike" viewBox="0 0 24 24"><path d="M2 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M15 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M5.5 16.5 9 10h6.5l3 6.5M9 10l3 6.5 3.5-6.5M12 16.5H5.5M8 7.5h2.5M15.5 10l-1-3h2"/></symbol>
+    <symbol id="i-ebike" viewBox="0 0 24 24"><path d="M2 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M15 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0M5.5 16.5 9 11.5h6.5l3 5M9 11.5l3 5 3.5-5M12.5 2.5 10.5 6h3l-2 3.5"/></symbol>
+    <symbol id="i-strength" viewBox="0 0 24 24"><path d="M9 9V7.5a3 3 0 0 1 6 0V9M6 14.5a6 6 0 0 1 12 0c0 2.2-.8 4-1.8 5.5H7.8C6.8 18.5 6 16.7 6 14.5Z"/></symbol>
+    <symbol id="i-circuit" viewBox="0 0 24 24"><path d="M19.5 9A8 8 0 1 0 20 13M20 4.5V9h-4.5M12 8v4l2.5 2"/></symbol>
+    <symbol id="i-plank" viewBox="0 0 24 24"><path d="M17.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M17 11 4.5 15M15 11.7l.5 4.3h3M4.5 15 4 19M3 19h18"/></symbol>
+    <symbol id="i-walk" viewBox="0 0 24 24"><path d="M11.5 4a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0M12.5 8l-2 5 3 3v5M10.5 13 8 20.5M12.5 8l3 3.5 2.5.5M12.5 8 9 10.5l-1 3M18.5 11v10"/></symbol>
+    <symbol id="i-yoga" viewBox="0 0 24 24"><path d="M10.25 4.5a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0M12 8v5M6.5 11.5 12 10l5.5 1.5M4 18l5-2.5h6L20 18M7 20.5h10"/></symbol>
+    <symbol id="i-steps" viewBox="0 0 24 24"><path d="M8.5 3.5C6.8 3.5 6 5.5 6 8s.8 4 2 4 2.5-1.5 2.5-4-.3-4.5-2-4.5ZM6.5 14.5H10V16a1.75 1.75 0 0 1-3.5 0ZM15.5 7.5c1.7 0 2.5 2 2.5 4.5S17.2 16 16 16s-2.5-1.5-2.5-4 .3-4.5 2-4.5ZM14 18.5h3.5V20a1.75 1.75 0 0 1-3.5 0Z"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.7 2.9-5.6 3.6-9.3 2 1.3 3 3.2 3.2 5 1-.6 1.7-1.7 1.9-2.9 2.2 1.6 4.3 4.3 4.3 7.2 0 3.6-2.6 6.2-6.5 6.2Z"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/></symbol>
+    <symbol id="i-hrv" viewBox="0 0 24 24"><path d="M2.5 12h4l2-5.5 4 11 3-8.5 2 3h4"/></symbol>
+    <symbol id="i-sleep" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.5 6.5 0 0 0 10 10Z"/></symbol>
+    <symbol id="i-deepsleep" viewBox="0 0 24 24"><path d="M3 19V6M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-8v6M5 11.5a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0"/></symbol>
+    <symbol id="i-readiness" viewBox="0 0 24 24"><path d="M4.6 17.5a8.5 8.5 0 1 1 14.8 0M12 13.5l3.5-4.5"/></symbol>
+    <symbol id="i-trendDown" viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 8 8M21 11v6h-6"/></symbol>
+    <symbol id="i-trendUp" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 13V7h-6"/></symbol>
+    <symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 4l1.8 4.7 4.7 1.8-4.7 1.8L12 17l-1.8-4.7-4.7-1.8 4.7-1.8ZM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="M4 10.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M20 20l-4.9-4.9"/></symbol>
+    <symbol id="i-barcode" viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M7.5 8.5v7M10.5 8.5v7M13.5 8.5v7M16.5 8.5v7"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4ZM9 13.5a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3Z"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24"><path d="M4.5 9.5A8 8 0 0 1 19 8M19 3.5V8h-4.5M19.5 14.5A8 8 0 0 1 5 16M5 20.5V16h4.5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M8 11l-1.5 1.5a3.5 3.5 0 0 0 5 5L13 16M16 13l1.5-1.5a3.5 3.5 0 0 0-5-5L11 8M4 4l16 16"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h10v10H9ZM15 9V5H5v10h4"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5ZM8 4v5h7V4M8 20v-6h8v6"/></symbol>
+    <symbol id="i-recipe" viewBox="0 0 24 24"><path d="M6 3.5h8.5L18 7v13.5H6ZM9 11h6M9 14.5h6M9 18h3.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M4 6h16v14H4ZM4 10h16M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-chevL" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+    <symbol id="i-chevR" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-chevD" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-chevU" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-arrowUp" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-arrowDown" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-okCircle" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M8 12.5l2.5 2.5L16 9.5"/></symbol>
+    <symbol id="i-alertCircle" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7.5v5.5M12 16.5v.01"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5v14M15.5 5v14"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5.5 5.5 15 12l-9.5 6.5ZM18.5 5.5v13"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+  </svg>
   <!-- Login Screen -->
   <div id="login-screen" class="login-screen">
     <div class="login-box">
-      <h1>🏋️ Training & Ernährung</h1>
+      <h1><svg class="fo-i" aria-hidden="true"><use href="#i-training"/></svg> Training & Ernährung</h1>
       <p>Deine Daten werden sicher in Firebase gespeichert</p>
       <button id="login-btn" class="btn" onclick="if(window.handleLogin){window.handleLogin();}else{setTimeout(function(){if(window.handleLogin)window.handleLogin();},300);}">Mit Google anmelden</button>
     </div>
@@ -870,11 +936,11 @@
     </div>
     
     <div class="tabs tab-bar" id="bottom-nav">
-      <button class="tab" data-tab="uebersicht"><span style="font-size:18px;">🏠</span>Übersicht</button>
-      <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
-      <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
-      <button class="tab" data-tab="analyse"><span style="font-size:18px;">📊</span>Analyse</button>
-      <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
+      <button class="tab" data-tab="uebersicht"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-home"/></svg></span>Übersicht</button>
+      <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-food"/></svg></span>Ernährung</button>
+      <button class="tab" data-tab="training"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-training"/></svg></span>Training</button>
+      <button class="tab" data-tab="analyse"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-chart"/></svg></span>Analyse</button>
+      <button class="tab" data-tab="einstellungen"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-settings"/></svg></span>Einstellungen</button>
     </div>
 
     <!-- Gemeinsame Datumsnavigation (ein Element, Zustand currentDate): sichtbar in Übersicht und Ernährung › Tagebuch -->
@@ -883,8 +949,8 @@
       <div style="text-align:center;margin-bottom:16px;">
         <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
         <div style="display:flex;justify-content:center;gap:16px;">
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(-1)">←</button>
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(1)">→</button>
+          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(-1)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
+          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
         </div>
       </div>
     </div>
@@ -974,8 +1040,8 @@
           </div>
           
           <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
-          <button id="zirkel-adhoc-log-btn" class="btn" onclick="openZirkelAdhocPicker()" style="display:none;width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">🔄 Ad-hoc Zirkel starten</button>
-          <button class="btn" onclick="openIntervalConfig()" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">⏱ Intervall-Zirkel</button>
+          <button id="zirkel-adhoc-log-btn" class="btn" onclick="openZirkelAdhocPicker()" style="display:none;width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-circuit"/></svg> Ad-hoc Zirkel starten</button>
+          <button class="btn" onclick="openIntervalConfig()" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-clock"/></svg> Intervall-Zirkel</button>
         </div>
 
         <!-- Eigene Trainingsarten -->
@@ -984,7 +1050,7 @@
           <div id="custom-types-list" style="margin-bottom:15px;"></div>
           <input type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;">
           <button class="btn" onclick="addCustomType()" style="width:100%;">+ Hinzufügen</button>
-          <button onclick="migrateCustomTypes()" style="width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">🔄 Fehlende Arten anlegen</button>
+          <button onclick="migrateCustomTypes()" style="width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Fehlende Arten anlegen</button>
         </div>
         
         <!-- Day Log -->
@@ -1111,7 +1177,7 @@
           </select>
           <div style="display:flex;gap:8px;margin-bottom:8px;">
             <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
-            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;">📥 CSV Export</button>
+            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-download"/></svg> CSV Export</button>
           </div>
           <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
           <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
@@ -1271,13 +1337,13 @@
       <!-- ── Workout Auswertung ──────────────────────────────────────────── -->
       <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
-          <h3 style="font-size:15px;margin:0;">💪 Workout</h3>
+          <h3 style="font-size:15px;margin:0;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-strength"/></svg> Workout</h3>
           <select id="workout-type-select" onchange="renderWorkoutChart()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
           </select>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:14px;">
           <button id="workout-metric-total" onclick="setWorkoutMetric('total',this)" style="padding:5px 12px;font-size:12px;background:var(--fo-primary);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">Σ Gesamt</button>
-          <button id="workout-metric-max" onclick="setWorkoutMetric('max',this)" style="padding:5px 12px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">↑ Max/Set</button>
+          <button id="workout-metric-max" onclick="setWorkoutMetric('max',this)" style="padding:5px 12px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-arrowUp"/></svg> Max/Set</button>
         </div>
         <div style="position:relative;height:220px;">
           <canvas id="workout-chart"></canvas>
@@ -1301,7 +1367,7 @@
 
     <div id="analyse-tab" class="subtab-content">
       <div class="analyse-fixed-top">
-        <h2 style="margin-bottom:10px;">🤖 Analyse</h2>
+        <h2 style="margin-bottom:10px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg> Analyse</h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Stelle Fragen an Claude zu deinen Trainings- und Ernährungsdaten. Dein API Key liegt in deinen Einstellungen in Firestore und wird direkt vom Gerät an Anthropic gesendet.</p>
 
         <div id="analyse-no-key" style="display:none;background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
@@ -1447,7 +1513,7 @@
         </div>
 
         <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <h3 style="margin-bottom:15px;">🤖 KI-Analyse (Anthropic)</h3>
+          <h3 style="margin-bottom:15px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg> KI-Analyse (Anthropic)</h3>
           <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anthropic API Key</label>
           <input type="password" id="settings-anthropic-key" placeholder="sk-ant-..." style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           <div style="font-size:12px;color:var(--muted);margin-top:6px;">Dein API Key wird mit deinen Einstellungen in deinem Firebase-Konto gespeichert (Firestore, users/…/settings/main) und bei Anfragen direkt vom Gerät an Anthropic gesendet. Erforderlich für den "Analyse"-Tab.</div>
@@ -1456,14 +1522,14 @@
         <!-- Verbindungen: Google Fit und Oura (bisher Daten › Import, interne id import-subtab) -->
         <div class="meal-category">
           <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow">▶</span> Verbindungen</div>
+            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Verbindungen</div>
           </div>
           <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
             <div id="import-subtab">
               <!-- Google Fit Integration -->
               <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
+                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-steps"/></svg></div>
                   <h3 style="margin:0;">Google Fit</h3>
                 </div>
                 <div id="gfit-disconnected">
@@ -1472,12 +1538,12 @@
                 </div>
                 <div id="gfit-connected" style="display:none;">
                   <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-                    <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+                    <div style="font-size:13px;color:var(--success);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-okCircle"/></svg> Verbunden</div>
                     <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
                   </div>
                   <div style="display:flex;gap:10px;">
-                    <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
-                    <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
+                    <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Neue Daten sync</button>
+                    <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-download"/></svg> Alles neu laden</button>
                   </div>
                   <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
                 </div>
@@ -1486,7 +1552,7 @@
               <!-- Oura Ring Integration -->
               <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
+                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-readiness"/></svg></div>
                   <h3 style="margin:0;">Oura Ring</h3>
                 </div>
                 <div id="oura-disconnected">
@@ -1495,11 +1561,11 @@
                 </div>
                 <div id="oura-connected" style="display:none;">
                   <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-                    <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+                    <div style="font-size:13px;color:var(--success);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-okCircle"/></svg> Verbunden</div>
                     <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
                     <div style="font-size:12px;color:var(--fo-bad);margin-top:4px;display:none;" id="oura-error"></div>
                   </div>
-                  <button class="btn" onclick="syncOuraNow()" style="width:100%;">🔄 Jetzt synchronisieren</button>
+                  <button class="btn" onclick="syncOuraNow()" style="width:100%;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Jetzt synchronisieren</button>
                   <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
                 </div>
             </div>
@@ -1510,7 +1576,7 @@
         <!-- Backup: Google Drive (bisher Daten › Backup, interne id export-subtab) -->
         <div class="meal-category">
           <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow">▶</span> Backup</div>
+            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Backup</div>
           </div>
           <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
             <div id="export-subtab">
@@ -1518,7 +1584,7 @@
 
                 <!-- Google Drive Auto-Backup -->
                 <div style="background:var(--bg);padding:20px;border-radius:12px;border:1px solid var(--border);">
-                  <h3 style="margin-bottom:8px;font-size:15px;">☁️ Google Drive Backup</h3>
+                  <h3 style="margin-bottom:8px;font-size:15px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg> Google Drive Backup</h3>
                   <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
                   <!-- Disconnected State -->
                   <div id="gdrive-disconnected">
@@ -1527,7 +1593,7 @@
                   <!-- Connected State -->
                   <div id="gdrive-connected" style="display:none;">
                     <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
-                    <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;">☁️ Jetzt in Google Drive sichern</button>
+                    <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg> Jetzt in Google Drive sichern</button>
                     <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
                     <button onclick="disconnectGoogleDrive()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Drive trennen</button>
                   </div>
@@ -1541,7 +1607,7 @@
         <!-- Statistik (bisher Daten › Statistik, interne id statistik-subtab) -->
         <div class="meal-category">
           <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow">▶</span> Statistik</div>
+            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Statistik</div>
           </div>
           <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
             <div id="statistik-subtab">
@@ -1588,7 +1654,7 @@
   <!-- Custom Confirm Dialog -->
   <div id="confirm-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:99999;align-items:center;justify-content:center;padding:20px;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:100%;box-shadow:var(--fo-sh-2);">
-      <div id="confirm-icon" style="font-size:32px;text-align:center;margin-bottom:12px;">🗑️</div>
+      <div id="confirm-icon" style="font-size:32px;text-align:center;margin-bottom:12px;"><svg class="fo-i fo-i--xl" aria-hidden="true"><use href="#i-trash"/></svg></div>
       <div id="confirm-message" style="font-size:16px;font-weight:500;text-align:center;margin-bottom:8px;color:var(--text);">Löschen?</div>
       <div id="confirm-submessage" style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;"></div>
       <div style="display:flex;gap:10px;">
@@ -1636,8 +1702,8 @@
             <input type="text" id="recipe-ingred-search" placeholder="Lebensmittel suchen..."
               style="flex:1;padding:9px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;"
               oninput="searchRecipeIngredient()">
-            <button onclick="startBarcodeScanner('recipe')" title="Barcode scannen"
-              style="padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:16px;">📷</button>
+            <button onclick="startBarcodeScanner('recipe')" title="Barcode scannen" aria-label="Barcode scannen"
+              style="padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-barcode"/></svg></button>
           </div>
           <div id="recipe-ingred-results" style="max-height:160px;overflow-y:auto;margin-top:6px;"></div>
         </div>
@@ -1658,14 +1724,14 @@
           <div id="consolidate-status" style="font-size:12px;color:var(--muted);"></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="display:none;padding:10px 18px;">✓ Ausführen</button>
-          <button onclick="document.getElementById('consolidate-modal').style.display='none'" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;">✕</button>
+          <button id="consolidate-apply-btn" class="btn" onclick="applyConsolidation()" style="display:none;padding:10px 18px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Ausführen</button>
+          <button onclick="document.getElementById('consolidate-modal').style.display='none'" aria-label="Schließen" style="background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
       </div>
 
       <!-- Legende -->
       <div style="display:flex;gap:8px;margin:12px 0;font-size:12px;flex-wrap:wrap;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-ok-tint);border:1px solid var(--fo-ok);border-radius:4px;padding:2px 8px;color:var(--fo-ok);">✓ Behalten</span> = Master dieser Gruppe</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-ok-tint);border:1px solid var(--fo-ok);border-radius:4px;padding:2px 8px;color:var(--fo-ok);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Behalten</span> = Master dieser Gruppe</span>
         <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-primary-tint);border:1px solid var(--fo-primary);border-radius:4px;padding:2px 8px;color:var(--fo-primary);">⇒ Mergen</span> = wird in Master aufgelöst</span>
         <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-surface-2);border:1px solid var(--fo-text-2);border-radius:4px;padding:2px 8px;color:var(--fo-text-2);">↗ Eigene Gruppe</span> = aus Gruppe entfernen</span>
       </div>
@@ -1677,7 +1743,7 @@
   <!-- Bulk Zeit Modal -->
   <div id="bulk-time-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 16px;">🕐 Zeit ändern</h3>
+      <h3 style="margin:0 0 16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-clock"/></svg> Zeit ändern</h3>
       <div id="bulk-time-entry-list" style="max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
         <input type="time" id="bulk-time-input" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;">
@@ -1685,7 +1751,7 @@
       </div>
       <div style="display:flex;gap:8px;">
         <button onclick="document.getElementById('bulk-time-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="applyBulkTime()" class="btn" style="flex:2;padding:12px;">✓ Übernehmen</button>
+        <button onclick="applyBulkTime()" class="btn" style="flex:2;padding:12px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Übernehmen</button>
       </div>
     </div>
   </div>
@@ -1693,7 +1759,7 @@
   <!-- Plan-Einheit abhaken Modal -->
   <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
+      <h3 style="margin:0 0 4px;"><svg class="fo-i" aria-hidden="true"><use href="#i-check"/></svg> Einheit eintragen</h3>
       <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
       <!-- Nur bei Zirkel -->
       <div id="plan-complete-zirkel" style="display:none;">
@@ -1748,11 +1814,11 @@
   <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
   <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 16px;">🔄 Ad-hoc Zirkel starten</h3>
+      <h3 style="margin:0 0 16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-circuit"/></svg> Ad-hoc Zirkel starten</h3>
       <select id="zirkel-adhoc-select" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px;"></select>
       <div style="display:flex;gap:8px;">
         <button onclick="document.getElementById('zirkel-adhoc-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="startZirkelAdhoc()" class="btn" style="flex:2;padding:12px;">▶ Start</button>
+        <button onclick="startZirkelAdhoc()" class="btn" style="flex:2;padding:12px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-play"/></svg> Start</button>
       </div>
     </div>
   </div>
@@ -1760,7 +1826,7 @@
   <!-- Zirkel Live-Timer: Vollbild, legt sich über die App während ein Zirkel läuft -->
   <div id="zirkel-timer-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;flex-direction:column;">
     <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
-      <button onclick="requestCloseZirkelTimer()" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;">✕</button>
+      <button onclick="requestCloseZirkelTimer()" aria-label="Schließen" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
     <div id="zirkel-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;overflow-y:auto;"></div>
   </div>
@@ -1768,7 +1834,7 @@
   <!-- Intervall-Zirkel konfigurieren (Haltezeit-Schritte mit Pausen, Vorlagen) -->
   <div id="interval-config-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 20px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;max-height:92vh;overflow-y:auto;">
-      <h3 style="margin:0 0 14px;">⏱ Intervall-Zirkel</h3>
+      <h3 style="margin:0 0 14px;"><svg class="fo-i" aria-hidden="true"><use href="#i-clock"/></svg> Intervall-Zirkel</h3>
       <div id="interval-config-body"></div>
     </div>
   </div>
@@ -1776,7 +1842,7 @@
   <!-- Intervall-Zirkel Ablauf: Vollbild, legt sich über die App -->
   <div id="interval-timer-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;flex-direction:column;">
     <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
-      <button onclick="requestCloseIntervalTimer()" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;">✕</button>
+      <button onclick="requestCloseIntervalTimer()" aria-label="Schließen" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
     <div id="interval-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 20px max(40px, env(safe-area-inset-bottom, 40px));box-sizing:border-box;overflow-y:auto;"></div>
   </div>
@@ -1784,7 +1850,7 @@
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 4px;">⧉ Eintrag kopieren</h3>
+      <h3 style="margin:0 0 4px;"><svg class="fo-i" aria-hidden="true"><use href="#i-copy"/></svg> Eintrag kopieren</h3>
       <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:16px;">
         <div style="min-width:0;">
@@ -1801,7 +1867,7 @@
       </div>
       <div style="display:flex;gap:8px;">
         <button onclick="document.getElementById('copy-entry-modal').style.display='none'" style="flex:1;min-height:44px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="applyCopyEntry()" class="btn" style="flex:2;min-height:44px;padding:12px;">⧉ Kopieren</button>
+        <button onclick="applyCopyEntry()" class="btn" style="flex:2;min-height:44px;padding:12px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-copy"/></svg> Kopieren</button>
       </div>
     </div>
   </div>
@@ -1814,8 +1880,8 @@
             <div id="bulk-kat-status" style="font-size:12px;color:var(--muted);"></div>
           </div>
           <div class="bk-actions">
-            <button class="btn bk-save" onclick="saveBulkKategorie()">✓ Speichern</button>
-            <button class="bk-close" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen">✕</button>
+            <button class="btn bk-save" onclick="saveBulkKategorie()"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Speichern</button>
+            <button class="bk-close" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
           </div>
         </div>
       </div>
@@ -1926,8 +1992,8 @@
               style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" 
               oninput="searchFood()" onfocus="showFoodSuggestions()"
               onkeydown="handleFoodSearchKey(event)">
-            <button onclick="searchOpenFoodFacts()" title="Open Food Facts" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;">🌍</button>
-            <button onclick="startBarcodeScanner()" title="Barcode" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;">📷</button>
+            <button onclick="searchOpenFoodFacts()" title="Open Food Facts" aria-label="Open Food Facts" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-globe"/></svg></button>
+            <button onclick="startBarcodeScanner()" title="Barcode" aria-label="Barcode" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-barcode"/></svg></button>
           </div>
 
           <!-- Ausgewähltes Lebensmittel (jetzt ÜBER den Suchergebnissen) -->
@@ -1954,7 +2020,7 @@
           <!-- Open Food Facts Ergebnisse -->
           <div id="off-results-container" style="display:none;margin-bottom:10px;">
             <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-              <span>🌍 Open Food Facts Ergebnisse</span>
+              <span><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-globe"/></svg> Open Food Facts Ergebnisse</span>
               <span id="off-status" style="color:var(--primary);"></span>
             </div>
             <div id="off-search-results" style="max-height:calc(100vh - 360px);overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
@@ -2041,6 +2107,27 @@
     window.dayLogs = dayLogs;
     window.ouraDaily = ouraDaily;
     window.ouraStatus = ouraStatus;
+
+    // ── Icons (Sprite im <body>) ─────────────────────────────────────────────
+    // Dekoratives Sprite-Icon als HTML; Texte stehen immer daneben (Icon-only-Buttons haben aria-label)
+    function foIcon(name, cls = '', filled = false) {
+      return `<svg class="fo-i${cls ? ' ' + cls : ''}"${filled ? ' style="fill:currentColor"' : ''} aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    }
+    // Setzt Icon + Text in ein Element (Text als Textknoten, kein HTML aus Daten)
+    function setIconText(el, icon, text, cls = 'fo-i--sm') {
+      if (!el) return;
+      el.replaceChildren();
+      if (icon) el.insertAdjacentHTML('afterbegin', foIcon(icon, cls) + ' ');
+      el.append(text);
+    }
+    // Typ-Icons für Aktivitätszeilen. Ohne passendes Sprite-Icon bleibt das bisherige Emoji (gemeldete Ausnahme).
+    const TYP_ICONS = { laufen: 'run', rad: 'bike', rad_indoor: 'bike', rad_ebike: 'ebike', gehen: 'walk', wandern: 'walk', kraft: 'strength', pullups: 'strength', pushups: 'strength', yoga: 'yoga', cardio: 'heart', zirkel: 'circuit' };
+    const TYP_EMOJI = { schwimmen: '🏊', lunges: '🦵', terraband_knie: '🦵', crosstraining: '⚡' };
+    function typIcon(typ, cls = 'fo-i--sm') {
+      if (TYP_ICONS[typ]) return foIcon(TYP_ICONS[typ], cls);
+      if (TYP_EMOJI[typ]) return `<span aria-hidden="true">${TYP_EMOJI[typ]}</span>`;
+      return '';
+    }
 
     // Collections
     const userCol = () => collection(db, 'users', userId, 'data');
@@ -2201,7 +2288,7 @@
         const hasCachedData = await loadFromCache();
         if (hasCachedData) {
           renderAll();
-          showToast('⏳ Synchronisiere...');
+          showToast('Synchronisiere...', 'wait');
           loadAllData(true); // Hintergrund-Sync, kein await
         } else {
           await loadAllData(false); // Erststart: blockierend laden
@@ -2231,18 +2318,18 @@
         await signInWithPopup(auth, provider);
       } catch (err) {
         console.error('Login error:', err);
-        showToast('❌ Login fehlgeschlagen');
+        showToast('Login fehlgeschlagen', 'bad');
       }
     };
     window.handleLogout = async function() {
-      if (await showConfirm('Abmelden?', '', '👋', 'Abmelden', false)) {
+      if (await showConfirm('Abmelden?', '', 'logout', 'Abmelden', false)) {
         await signOut(auth);
       }
     };
     
     // Load Data from Firebase
     async function loadAllData(backgroundSync = false) {
-      if (!backgroundSync) showToast('⏳ Lade Daten...');
+      if (!backgroundSync) showToast('Lade Daten...', 'wait');
 
       try {
         // Load Foods
@@ -2324,9 +2411,9 @@
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan)
         await loadCurrentTrainingPlan();
 
-        console.log(`✓ Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
-        if (backgroundSync) showToast(`✓ Synchronisiert`);
-        else showToast(`✓ Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`);
+        console.log(`Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
+        if (backgroundSync) showToast(`Synchronisiert`, 'ok');
+        else showToast(`Geladen: ${foodDB.length} Foods, ${Object.keys(foodLog).length} Tage`, 'ok');
 
         saveToCache();
 
@@ -2335,7 +2422,7 @@
 
       } catch (err) {
         console.error('Load error:', err);
-        if (!backgroundSync) showToast('❌ Fehler beim Laden');
+        if (!backgroundSync) showToast('Fehler beim Laden', 'bad');
       }
     }
 
@@ -3311,11 +3398,11 @@
 
       // ── Letzte Aktivitäten ─────────────────────────────────────────────
       const typeLabels = {
-        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
-        terraband_knie: '🦵 Terraband Knie',
-        laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
-        rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
-        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining', zirkel: '🔄 Zirkel'
+        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: typIcon('lunges') + ' Lunges',
+        terraband_knie: typIcon('terraband_knie') + ' Terraband Knie',
+        laufen: typIcon('laufen') + ' Laufen', gehen: typIcon('gehen') + ' Gehen', wandern: typIcon('wandern') + ' Wandern',
+        rad: typIcon('rad') + ' Rad', rad_ebike: typIcon('rad_ebike') + ' E-Bike', rad_indoor: typIcon('rad_indoor') + ' Rad Indoor',
+        schwimmen: typIcon('schwimmen') + ' Schwimmen', kraft: typIcon('kraft') + ' Krafttraining', zirkel: typIcon('zirkel') + ' Zirkel'
       };
       const recentContainer = document.getElementById('recent-activity');
       if (recentContainer) {
@@ -3431,7 +3518,7 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;">★</button>
+            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;" aria-label="Favorit">${foIcon('star', '', isFav)}</button>
             <button onclick="editFoodDB('${f.id}')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;">Bearbeiten</button>
             <button onclick="deleteFoodDB('${f.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
           </div>
@@ -3443,11 +3530,11 @@
           <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);">
             <button onclick="window._foodDBPage=Math.max(0,(window._foodDBPage||0)-1);renderFoodDB();"
               style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
-              ${currentPage === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>← Zurück</button>
+              ${currentPage === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>${foIcon('chevL', 'fo-i--sm')} Zurück</button>
             <span style="font-size:13px;color:var(--muted);">Seite ${currentPage+1} / ${totalPages} · ${filtered.length} Einträge</span>
             <button onclick="window._foodDBPage=Math.min(${totalPages-1},(window._foodDBPage||0)+1);renderFoodDB();"
               style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
-              ${currentPage >= totalPages-1 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>Weiter →</button>
+              ${currentPage >= totalPages-1 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>Weiter ${foIcon('chevR', 'fo-i--sm')}</button>
           </div>`;
       }
     }
@@ -3472,7 +3559,7 @@
       a.download = 'fuelofit_lebensmittel.csv';
       a.click();
       URL.revokeObjectURL(url);
-      showToast(`✓ ${foodDB.length} Lebensmittel exportiert`);
+      showToast(`${foodDB.length} Lebensmittel exportiert`, 'ok');
     };
 
     // ── Konsolidierungs-Tool (neu: 3 Optionen pro Eintrag) ───────────────────
@@ -3505,7 +3592,7 @@
     function renderConsolidateGroups() {
       const groupsDiv = document.getElementById('consolidate-groups');
       if (consolidateGroups.length === 0) {
-        groupsDiv.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Keine Duplikate gefunden ✓</div>';
+        groupsDiv.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted);">Keine Duplikate gefunden ${foIcon('check', 'fo-i--sm')}</div>`;
         return;
       }
 
@@ -3533,7 +3620,7 @@
                   </div>
                   <div style="display:flex;gap:4px;flex-shrink:0;">
                     <button onclick="setDecision(${gi},${fi},'keep')"
-                      style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-ok);background:${d==='keep'?'var(--fo-ok)':'transparent'};color:${d==='keep'?'var(--fo-on-primary)':'var(--fo-ok)'};cursor:pointer;font-size:12px;font-weight:600;">✓ Behalten</button>
+                      style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-ok);background:${d==='keep'?'var(--fo-ok)':'transparent'};color:${d==='keep'?'var(--fo-on-primary)':'var(--fo-ok)'};cursor:pointer;font-size:12px;font-weight:600;">${foIcon('check', 'fo-i--sm')} Behalten</button>
                     <button onclick="setDecision(${gi},${fi},'merge')"
                       style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-primary);background:${d==='merge'?'var(--fo-primary)':'transparent'};color:${d==='merge'?'var(--fo-on-primary)':'var(--fo-primary)'};cursor:pointer;font-size:12px;font-weight:600;">⇒ Mergen</button>
                     <button onclick="setDecision(${gi},${fi},'split')"
@@ -3571,7 +3658,7 @@
       const status = document.getElementById('consolidate-status');
       const groupsDiv = document.getElementById('consolidate-groups');
       modal.style.display = 'block';
-      status.textContent = '⏳ Analysiere ' + foodDB.length + ' Einträge...';
+      setIconText(status, 'clock', 'Analysiere ' + foodDB.length + ' Einträge...');
       groupsDiv.innerHTML = '';
       document.getElementById('consolidate-apply-btn').style.display = 'none';
 
@@ -3601,8 +3688,8 @@
         }
 
         if (consolidateGroups.length === 0) {
-          status.textContent = '✓ Keine Duplikate gefunden';
-          groupsDiv.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">✓ Keine Duplikate gefunden</div>';
+          setIconText(status, 'check', 'Keine Duplikate gefunden');
+          groupsDiv.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted);">${foIcon('check', 'fo-i--sm')} Keine Duplikate gefunden</div>`;
           return;
         }
 
@@ -3615,7 +3702,7 @@
     window.applyConsolidation = async function() {
       const btn = document.getElementById('consolidate-apply-btn');
       btn.disabled = true;
-      btn.textContent = '⏳ Führe zusammen...';
+      setIconText(btn, 'clock', 'Führe zusammen...');
 
       let merged = 0, deleted = 0, split = 0;
 
@@ -3667,7 +3754,7 @@
       renderFoodDB();
       renderDataStats();
       document.getElementById('consolidate-modal').style.display = 'none';
-      showToast(`✓ ${merged} gemergt, ${deleted} gelöscht, ${split} als eigene Gruppe behalten`);
+      showToast(`${merged} gemergt, ${deleted} gelöscht, ${split} als eigene Gruppe behalten`, 'ok');
       await loadAllData();
     };
 
@@ -3696,7 +3783,7 @@
       status.textContent = `${uncategorized.length} Lebensmittel ohne Kategorie`;
 
       if (uncategorized.length === 0) {
-        list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">✓ Alle Lebensmittel haben eine Kategorie</div>';
+        list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted);">${foIcon('check', 'fo-i--sm')} Alle Lebensmittel haben eine Kategorie</div>`;
         return;
       }
 
@@ -3736,7 +3823,7 @@
       saveToCache();
       renderFoodDB();
       document.getElementById('bulk-kategorie-modal').style.display = 'none';
-      showToast(`✓ ${saved} Kategorien gespeichert`);
+      showToast(`${saved} Kategorien gespeichert`, 'ok');
     };
 
 
@@ -3747,7 +3834,7 @@
         'Einträge mit ungültiger foodId werden über den Namen (exakt + Tippfehler-tolerant) mit der Lebensmittel-DB abgeglichen und korrigiert.',
         '🔧', 'Reparieren', false)) return;
 
-      showToast('⏳ Analysiere Tagebuch...');
+      showToast('Analysiere Tagebuch...', 'wait');
 
       // Levenshtein-Distanz
       function levenshtein(a, b) {
@@ -3786,11 +3873,11 @@
       const broken = allEntries.filter(e => e.foodId && !foodDB.find(f => String(f.id) === String(e.foodId)));
 
       if (broken.length === 0) {
-        showToast('✓ Alle Tagebuch-Einträge haben gültige foodIds');
+        showToast('Alle Tagebuch-Einträge haben gültige foodIds', 'ok');
         return;
       }
 
-      showToast(`⏳ ${broken.length} defekte Einträge gefunden, repariere...`);
+      showToast(`${broken.length} defekte Einträge gefunden, repariere...`, 'wait');
 
       let fixed = 0, notFound = 0;
       const BATCH = 50;
@@ -3813,14 +3900,14 @@
             notFound++;
           }
         }
-        showToast(`⏳ ${i + batch.length}/${broken.length} verarbeitet...`);
+        showToast(`${i + batch.length}/${broken.length} verarbeitet...`, 'wait');
         await new Promise(r => setTimeout(r, 10)); // UI nicht blockieren
       }
 
       window.foodLog = foodLog;
       renderFoodLog();
       renderDashboard();
-      showToast(`✓ ${fixed} repariert, ${notFound} nicht gefunden`);
+      showToast(`${fixed} repariert, ${notFound} nicht gefunden`, 'ok');
     };
 
 
@@ -3885,10 +3972,10 @@
         renderFoodDB();
         renderDataStats();
         closeFoodDBModal();
-        showToast('✓ Gespeichert');
+        showToast('Gespeichert', 'ok');
       } catch (err) {
         console.error('Save error:', err);
-        showToast('❌ Fehler beim Speichern');
+        showToast('Fehler beim Speichern', 'bad');
       }
     };
     
@@ -3903,10 +3990,10 @@
 
         renderFoodDB();
         renderDataStats();
-        showToast('✓ Gelöscht');
+        showToast('Gelöscht', 'ok');
       } catch (err) {
         console.error('Delete error:', err);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
@@ -3962,7 +4049,7 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:12px;">
               <button onclick="event.stopPropagation();toggleFavorite('recipe_${r.id}', event)"
-                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;">★</button>
+                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;" aria-label="Favorit">${foIcon('star', '', favorites.has('recipe_' + r.id))}</button>
               <button onclick="event.stopPropagation();deleteRecipe('${r.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
             </div>
           </div>
@@ -4082,7 +4169,7 @@
               style="width:70px;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:right;"
               oninput="updateIngredientAmount(${idx}, this.value)" onchange="updateIngredientAmount(${idx}, this.value)" onfocus="this.select()">
             <span style="font-size:12px;color:var(--muted);">g</span>
-            <button onclick="removeIngredient(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;padding:2px 6px;">✕</button>
+            <button onclick="removeIngredient(${idx})" aria-label="Entfernen" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;padding:2px 6px;">${foIcon('trash', 'fo-i--sm')}</button>
           </div>
         </div>
       `).join('');
@@ -4151,7 +4238,7 @@
         ('recipe_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
       const name = document.getElementById('recipe-modal-name').value.trim();
       const portions = parseInt(document.getElementById('recipe-modal-portions').value) || 1;
-      if (!name) { showToast('❌ Bitte Rezeptname eingeben'); return; }
+      if (!name) { showToast('Bitte Rezeptname eingeben', 'bad'); return; }
       
       const currentRecipe = document.getElementById('recipe-modal-id').value ? recipes.find(r => String(r.id) === document.getElementById('recipe-modal-id').value) : null;
       const nutr = recipeNutritionFromIngredients(recipeModalIngredients, currentRecipe);
@@ -4174,10 +4261,10 @@
         renderRecipes();
         renderDataStats();
         closeRecipeModal();
-        showToast('✓ Rezept gespeichert');
+        showToast('Rezept gespeichert', 'ok');
       } catch (err) {
         console.error('Save recipe error:', err);
-        showToast('❌ Fehler beim Speichern');
+        showToast('Fehler beim Speichern', 'bad');
       }
     };
     
@@ -4192,10 +4279,10 @@
 
         renderRecipes();
         renderDataStats();
-        showToast('✓ Gelöscht');
+        showToast('Gelöscht', 'ok');
       } catch (err) {
         console.error('Delete error:', err);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
@@ -4214,14 +4301,14 @@
     };
     
 
-    // Anzeige-Labels (Emoji + Name) für Aktivitätstypen
+    // Anzeige-Labels (Name) für Aktivitätstypen; das Icon liefert typIcon(typ)
     const TYP_LABELS = {
-      laufen: '🏃 Laufen', rad: '🚴 Rad', rad_ebike: '⚡ E-Bike',
-      gehen: '🚶 Gehen', wandern: '🥾 Wandern', schwimmen: '🏊 Schwimmen',
-      kraft: '💪 Kraft', yoga: '🧘 Yoga', cardio: '🏋️ Cardio',
-      pullups: '💪 Pull-ups', pushups: '💪 Push-ups',
-      lunges: '🦵 Lunges', terraband_knie: '🦵 Terraband Knie',
-      zirkel: '🔄 Zirkel'
+      laufen: 'Laufen', rad: 'Rad', rad_ebike: 'E-Bike',
+      gehen: 'Gehen', wandern: 'Wandern', schwimmen: 'Schwimmen',
+      kraft: 'Kraft', yoga: 'Yoga', cardio: 'Cardio',
+      pullups: 'Pull-ups', pushups: 'Push-ups',
+      lunges: 'Lunges', terraband_knie: 'Terraband Knie',
+      zirkel: 'Zirkel'
     };
 
     // ── Aktivitätskalorien-Berechnung ────────────────────────────────────────
@@ -4563,7 +4650,7 @@
         if (steps > 0) {
           const sourceText = 'Garmin';
           html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:20px;">👟</span>
+            <span style="font-size:20px;">${foIcon('steps')}</span>
             <div>
               <span style="font-weight:500;">${fmt(steps)} Schritte</span>
               ${sourceText ? `<div style="font-size:11px;color:var(--muted);">${sourceText}</div>` : ''}
@@ -4577,9 +4664,8 @@
 
         // Eine Aktivitätszeile (Einzeldarstellung, unverändert)
         const activityRowHtml = a => {
-          const baseLabel = TYP_LABELS[a.typ] || ('🏅 ' + (customTypeLabel(a.typ, a) || 'Aktivität'));
-          const emoji = baseLabel.split(' ')[0];
-          const typName = baseLabel.split(' ').slice(1).join(' ');
+          const typName = TYP_LABELS[a.typ] || customTypeLabel(a.typ, a) || 'Aktivität';
+          const emoji = typIcon(a.typ);
           // Variante anhängen wenn vorhanden (pullups/pushups)
           const variantSuffix = a.variantLabel ? ` · ${a.variantLabel}` : '';
           const displayName = typName + variantSuffix;
@@ -4608,9 +4694,8 @@
           if (g.items.length === 1) { html += activityRowHtml(g.items[0]); return; }
 
           const first = g.items[0];
-          const baseLabel = TYP_LABELS[first.typ] || ('🏅 ' + (customTypeLabel(first.typ, first) || 'Aktivität'));
-          const emoji = baseLabel.split(' ')[0];
-          const typName = baseLabel.split(' ').slice(1).join(' ');
+          const typName = TYP_LABELS[first.typ] || customTypeLabel(first.typ, first) || 'Aktivität';
+          const emoji = typIcon(first.typ);
 
           // Summen: Distanz und Dauer nur, falls vorhanden; Kalorien = Summe der angezeigten Zeilenwerte
           const distSum = g.items.reduce((s, a) => s + (a.distanz > 0 ? parseFloat(a.distanz) || 0 : 0), 0);
@@ -4628,7 +4713,7 @@
           html += `<div class="activity-group">
             <div class="activity-group-header" data-group-key="${safeKey}" onclick="toggleActivityGroup(this)" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
               <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                <span class="activity-group-arrow" style="font-size:11px;color:var(--muted);width:12px;flex-shrink:0;">${isOpen ? '▼' : '▶'}</span>
+                <span class="activity-group-arrow" style="font-size:11px;color:var(--muted);width:16px;flex-shrink:0;">${foIcon('chevD', 'fo-i--sm fo-toggle-chev' + (isOpen ? ' is-open' : ''))}</span>
                 <span style="font-size:16px;">${emoji}</span>
                 <div style="min-width:0;">
                   <div style="font-weight:500;font-size:14px;">${typName} <span style="color:var(--muted);font-weight:400;">${g.items.length}×</span></div>
@@ -4729,13 +4814,13 @@
         const isExpanded = expandedMeals.has(mealName);
         mealDiv.innerHTML = `
           <div class="meal-header" onclick="toggleMeal(this)">
-            <div class="meal-title">${isExpanded ? '▼' : '▶'} ${mealName}</div>
+            <div class="meal-title">${foIcon('chevD', 'fo-i--sm fo-toggle-chev' + (isExpanded ? ' is-open' : ''))} ${mealName}</div>
             <div style="display:flex;gap:8px;align-items:center;font-size:12px;">
               <span style="color:var(--fo-text-3);">P ${Math.round(mealProtein)}g</span>
               <span style="color:var(--fo-text-3);">K ${Math.round(mealCarbs)}g</span>
               <span style="color:var(--fo-text-3);">F ${Math.round(mealFat)}g</span>
               <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
-              <button onclick="event.stopPropagation();openBulkTimeEdit('${key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern">🕐</button>
+              <button onclick="event.stopPropagation();openBulkTimeEdit('${key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern" aria-label="Zeit für alle ändern">${foIcon('clock', 'fo-i--sm')}</button>
             </div>
           </div>
           <div class="meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
@@ -4746,7 +4831,7 @@
               <div class="meal-entry" style="${e._isExpanded ? 'border-left:2px solid var(--border);padding-left:8px;' : ''}">
                 <div onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="flex:1;min-width:0;cursor:pointer;">
                   <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
-                  ${isRecipeBlock ? '📋 ' : ''}${e.name}${fromRecipeNote}
+                  ${isRecipeBlock ? foIcon('recipe', 'fo-i--sm') + ' ' : ''}${e.name}${fromRecipeNote}
                   ${(() => {
                     if (!e.amount) return '';
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
@@ -4755,8 +4840,8 @@
                 </div>
                 <div style="display:flex;gap:4px;align-items:center;">
                   <span style="font-size:13px;">${fmt(e.kcal)} kcal</span>
-                  <button onclick="event.stopPropagation();copyEntry('${e.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:14px;" title="Kopieren">⧉</button>
-                  <button onclick="event.stopPropagation();deleteEntry('${e.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">✕</button>
+                  <button onclick="event.stopPropagation();copyEntry('${e.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:14px;" title="Kopieren" aria-label="Kopieren">${foIcon('copy')}</button>
+                  <button onclick="event.stopPropagation();deleteEntry('${e.id}')" aria-label="Löschen" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">${foIcon('trash')}</button>
                 </div>
               </div>`;
             }).join('') : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
@@ -4772,15 +4857,16 @@
     window.toggleMeal = function(header) {
       const entries = header.nextElementSibling;
       const arrow = header.querySelector('.meal-title');
-      const mealName = arrow.textContent.substring(2); // ohne ▼/▶
+      const mealName = arrow.textContent.trim(); // Text ohne Icon, z. B. "Morgens (0-11h)"
+      const chev = arrow.querySelector('.fo-toggle-chev');
       
       if (entries.style.display === 'none') {
         entries.style.display = 'block';
-        arrow.textContent = '▼' + arrow.textContent.substring(1);
+        chev?.classList.add('is-open');
         expandedMeals.add(mealName);
       } else {
         entries.style.display = 'none';
-        arrow.textContent = '▶' + arrow.textContent.substring(1);
+        chev?.classList.remove('is-open');
         expandedMeals.delete(mealName);
       }
     };
@@ -4794,11 +4880,11 @@
       const key = header.dataset.groupKey;
       if (items.style.display === 'none') {
         items.style.display = 'block';
-        arrow.textContent = '▼';
+        arrow.querySelector('.fo-toggle-chev').classList.add('is-open');
         expandedActivityGroups.add(key);
       } else {
         items.style.display = 'none';
-        arrow.textContent = '▶';
+        arrow.querySelector('.fo-toggle-chev').classList.remove('is-open');
         expandedActivityGroups.delete(key);
       }
     };
@@ -4975,7 +5061,7 @@
             await setDoc(doc(userLogCol(), String(ingEntry.id)), ingEntry);
             foodLog[currentDate].push(ingEntry);
           }
-          showToast(`✓ ${selectedRecipe.ingredients.length} Zutaten gespeichert`);
+          showToast(`${selectedRecipe.ingredients.length} Zutaten gespeichert`, 'ok');
         } else {
           // Save as single block entry — reuse existing ID when editing
           const entryId = editingEntryId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9));
@@ -4998,7 +5084,7 @@
           } else {
             foodLog[currentDate].push(entry);
           }
-          showToast(editingEntryId ? '✓ Aktualisiert' : '✓ Rezept gespeichert');
+          showToast(editingEntryId ? 'Aktualisiert' : 'Rezept gespeichert', 'ok');
         }
 
         window.foodLog = foodLog;
@@ -5007,7 +5093,7 @@
         closeAddFood();
       } catch (err) {
         console.error('Save recipe error:', err);
-        showToast('❌ Fehler beim Speichern');
+        showToast('Fehler beim Speichern', 'bad');
       }
     };
 
@@ -5088,7 +5174,7 @@
       const results = document.getElementById('off-search-results');
       const status = document.getElementById('off-status');
       container.style.display = 'block';
-      results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">⏳ Suche...</div>';
+      results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Suche...</div>`;
       status.textContent = '';
 
       try {
@@ -5114,9 +5200,9 @@
         products.slice(0, 10).forEach(p => renderOFFResult(foodFromOFF(p), results));
       } catch(e) {
         if (e.name === 'TimeoutError') {
-          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">⏱ Zeitüberschreitung – bitte nochmal versuchen</div>';
+          results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Zeitüberschreitung – bitte nochmal versuchen</div>`;
         } else {
-          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">❌ Fehler bei der Suche</div>';
+          results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">${foIcon('alertCircle', 'fo-i--sm')} Fehler bei der Suche</div>`;
         }
         console.error('OFF search error:', e);
       }
@@ -5125,7 +5211,7 @@
     let barcodeContext = 'food'; // 'food' oder 'recipe'
 
     async function lookupBarcode(barcode, attempt = 1) {
-      document.getElementById('barcode-status').textContent = `🔍 Suche Barcode ${barcode}${attempt > 1 ? ` (Versuch ${attempt})` : ''}...`;
+      setIconText(document.getElementById('barcode-status'), 'search', `Suche Barcode ${barcode}${attempt > 1 ? ` (Versuch ${attempt})` : ''}...`);
       try {
         const resp = await fetch(
           `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
@@ -5139,14 +5225,14 @@
           if (barcodeContext === 'recipe') {
             document.getElementById('recipe-ingred-search').value = saved.name;
             searchRecipeIngredient();
-            showToast(`✓ ${food.name} gefunden`);
+            showToast(`${food.name} gefunden`, 'ok');
           } else {
             selectFood(saved.id);
             document.getElementById('selected-food-source').textContent = 'Open Food Facts';
-            showToast(`✓ ${food.name} gefunden`);
+            showToast(`${food.name} gefunden`, 'ok');
           }
         } else {
-          document.getElementById('barcode-status').textContent = '❌ Produkt nicht gefunden – weiter scannen...';
+          setIconText(document.getElementById('barcode-status'), 'alertCircle', 'Produkt nicht gefunden – weiter scannen...');
           setTimeout(() => {
             if (barcodeStream) document.getElementById('barcode-status').textContent = 'Kamera aktiv – Barcode vor die Kamera halten';
           }, 2000);
@@ -5154,10 +5240,10 @@
       } catch(e) {
         if (attempt < 3) {
           // Automatisch nochmal versuchen
-          document.getElementById('barcode-status').textContent = `⚠️ Fehler – retry in 2s...`;
+          setIconText(document.getElementById('barcode-status'), 'alertCircle', `Fehler – retry in 2s...`);
           setTimeout(() => lookupBarcode(barcode, attempt + 1), 2000);
         } else {
-          document.getElementById('barcode-status').textContent = '❌ Netzwerkfehler – bitte manuell suchen';
+          setIconText(document.getElementById('barcode-status'), 'alertCircle', 'Netzwerkfehler – bitte manuell suchen');
         }
       }
     }
@@ -5247,7 +5333,7 @@
           video.onloadedmetadata = () => { barcodeAnimFrame = requestAnimationFrame(scan); };
         } else {
           // Fallback: QuaggaJS
-          document.getElementById('barcode-status').textContent = '⏳ Lade Barcode-Scanner...';
+          setIconText(document.getElementById('barcode-status'), 'clock', 'Lade Barcode-Scanner...');
           await new Promise((resolve, reject) => {
             const s = document.createElement('script');
             s.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
@@ -5259,7 +5345,7 @@
               constraints: { facingMode: 'environment' } },
             decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','code_128_reader'] }
           }, err => {
-            if (err) { document.getElementById('barcode-status').textContent = '❌ Scanner nicht verfügbar'; return; }
+            if (err) { setIconText(document.getElementById('barcode-status'), 'alertCircle', 'Scanner nicht verfügbar'); return; }
             Quagga.start();
             document.getElementById('barcode-status').textContent = 'Kamera aktiv – Barcode vor die Kamera halten';
           });
@@ -5270,7 +5356,7 @@
           });
         }
       } catch(e) {
-        document.getElementById('barcode-status').textContent = '❌ Kamera nicht verfügbar: ' + e.message;
+        setIconText(document.getElementById('barcode-status'), 'alertCircle', 'Kamera nicht verfügbar: ' + e.message);
       }
     };
 
@@ -5354,7 +5440,7 @@
             <div style="font-size:11px;color:var(--muted);">${macroLine}${isRecipe ? '' : ' / 100g'}</div>
           </div>
           <button class="fav-btn" data-favkey="${key}"
-            style="background:none;border:none;cursor:pointer;font-size:18px;color:${starColor};padding:4px;flex-shrink:0;">★</button>
+            style="background:none;border:none;cursor:pointer;font-size:18px;color:${starColor};padding:4px;flex-shrink:0;" aria-label="Favorit">${foIcon('star', '', isFav)}</button>
         </div>`;
     }
 
@@ -5376,11 +5462,11 @@
         const freqRecipes = recipes.filter(r => !favorites.has('recipe_' + r.id) && counts['recipe_' + r.id])
           .sort((a, b) => (counts['recipe_' + b.id] || 0) - (counts['recipe_' + a.id] || 0)).slice(0, 8);
         if (favRecipes.length > 0) {
-          html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">★ Favoriten</div>`;
+          html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
           favRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
         }
         if (freqRecipes.length > 0) {
-          html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">🕐 Häufig genutzt</div>`;
+          html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
           freqRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
         }
         results.innerHTML = html || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Rezept suchen…</div>';
@@ -5392,11 +5478,11 @@
       const freqFoods = foodDB.filter(f => !favorites.has('food_' + f.id) && counts['food_' + f.id])
         .sort((a, b) => (counts['food_' + b.id] || 0) - (counts['food_' + a.id] || 0)).slice(0, 8);
       if (favFoods.length > 0) {
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">★ Favoriten</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
         favFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       if (freqFoods.length > 0) {
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">🕐 Häufig genutzt</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
         freqFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       results.innerHTML = html || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Lebensmittel suchen…</div>';
@@ -5464,7 +5550,7 @@
           results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Rezepte gefunden</div>';
           return;
         }
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-text-3);font-weight:600;background:var(--bg);">📋 Rezepte</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-text-3);font-weight:600;background:var(--bg);">${foIcon('recipe', 'fo-i--sm')} Rezepte</div>`;
         recipeMatches.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
       } else {
         const foodMatches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 20);
@@ -5472,7 +5558,7 @@
           results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
           return;
         }
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">🥗 Lebensmittel</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('food', 'fo-i--sm')} Lebensmittel</div>`;
         foodMatches.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       results.innerHTML = html;
@@ -5530,7 +5616,7 @@
       const meal = document.getElementById('food-meal').value || mealFromHour(parseInt((time || '12:00').split(':')[0]));
       
       if (amount <= 0) {
-        showToast('❌ Menge muss größer als 0 sein');
+        showToast('Menge muss größer als 0 sein', 'bad');
         return;
       }
       
@@ -5575,7 +5661,7 @@
         renderFoodLog();
         if (editingEntryId) {
           closeAddFood();
-          showToast('✓ Aktualisiert');
+          showToast('Aktualisiert', 'ok');
         } else {
           selectedFood = null;
           document.getElementById('food-search').value = '';
@@ -5584,11 +5670,11 @@
           document.getElementById('off-results-container').style.display = 'none';
           document.getElementById('off-search-results').innerHTML = '';
           setTimeout(() => document.getElementById('food-search')?.focus(), 100);
-          showToast('✓ Gespeichert');
+          showToast('Gespeichert', 'ok');
         }
       } catch (err) {
         console.error('Save error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
     
@@ -5601,7 +5687,7 @@
       }
       
       if (!entry) {
-        showToast('❌ Eintrag nicht gefunden');
+        showToast('Eintrag nicht gefunden', 'bad');
         return;
       }
 
@@ -5677,10 +5763,10 @@
         saveToCache();
 
         renderFoodLog();
-        showToast('✓ Gelöscht');
+        showToast('Gelöscht', 'ok');
       } catch (err) {
         console.error('Delete error:', err);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
@@ -5737,7 +5823,7 @@
       window.foodLog = foodLog;
       saveToCache();
       renderFoodLog();
-      showToast(`✓ ${updated} Einträge auf ${timeStr} gesetzt`);
+      showToast(`${updated} Einträge auf ${timeStr} gesetzt`, 'ok');
     };
 
     // ── Kopieren mit Datum/Zeit Modal ────────────────────────────────────────
@@ -5803,9 +5889,9 @@
         // Die App bleibt auf dem angezeigten Tag; liegt das Ziel dort, erscheint der Eintrag sofort
         renderFoodLog();
         const targetLabel = new Date(targetDate + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
-        showToast(`✓ Kopiert auf ${targetLabel}, ${targetTime}`);
+        showToast(`Kopiert auf ${targetLabel}, ${targetTime}`, 'ok');
       } catch(e) {
-        showToast('❌ Kopieren fehlgeschlagen');
+        showToast('Kopieren fehlgeschlagen', 'bad');
       }
     };
 
@@ -5861,7 +5947,7 @@
       } else {
         // Kein Modal offen → App-Beenden-Bestätigung
         history.pushState(null, ''); // verhindert sofortiges Verlassen
-        showConfirm('App beenden?', '', '👋', 'Beenden', true).then(ok => {
+        showConfirm('App beenden?', '', 'logout', 'Beenden', true).then(ok => {
           if (ok && window.AndroidTokenBridge) {
             // Android: App minimieren statt schließen
             window.AndroidTokenBridge.minimizeApp?.();
@@ -5911,9 +5997,11 @@
     // ── Custom Confirm Dialog ─────────────────────────────────────────────────
     window.confirmDialogResolve = null;
 
-    function showConfirm(message, submessage = '', icon = '🗑️', okLabel = 'Löschen', okDanger = true) {
+    // icon: Name eines Sprite-Icons; andere Werte (Emoji ohne passendes Icon) werden als Text gezeigt
+    function showConfirm(message, submessage = '', icon = 'trash', okLabel = 'Löschen', okDanger = true) {
       return new Promise(resolve => {
-        document.getElementById('confirm-icon').textContent = icon;
+        const iconEl = document.getElementById('confirm-icon');
+        if (/^[A-Za-z]+$/.test(icon)) iconEl.innerHTML = foIcon(icon, 'fo-i--xl'); else iconEl.textContent = icon;
         document.getElementById('confirm-message').textContent = message;
         document.getElementById('confirm-submessage').textContent = submessage;
         const okBtn = document.getElementById('confirm-ok');
@@ -5927,9 +6015,12 @@
       });
     }
 
-    function showToast(msg) {
+    // kind: 'ok' (Häkchen grün), 'bad' (Warnkreis rot), 'wait' (Uhr); Text bleibt unverändert
+    const TOAST_ICONS = { ok: ['okCircle', 'is-ok'], bad: ['alertCircle', 'is-bad'], wait: ['clock', ''] };
+    function showToast(msg, kind) {
       const toast = document.getElementById('toast');
-      toast.textContent = msg;
+      const ic = TOAST_ICONS[kind];
+      setIconText(toast, ic ? ic[0] : null, msg, ic ? 'fo-i--sm ' + ic[1] : '');
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 3000);
     }
@@ -6100,7 +6191,7 @@
       const arrow = header.querySelector('.settings-section-arrow');
       const open = body.style.display === 'none';
       body.style.display = open ? 'block' : 'none';
-      if (arrow) arrow.textContent = open ? '▼' : '▶';
+      arrow?.querySelector('.fo-toggle-chev')?.classList.toggle('is-open', open);
       // Backup: Status beim Aufklappen laden (bisher beim Öffnen des Unterbereichs Backup)
       if (open && body.querySelector('#export-subtab')) loadDriveStatus();
     };
@@ -6278,7 +6369,7 @@
     window.updateVariantOptions = function() {
       const typeSel = document.getElementById('training-type');
       const type = typeSel.value;
-      typeSel.dataset.last = type; // letzte gültige Auswahl (für "➕ Neue Übung anlegen")
+      typeSel.dataset.last = type; // letzte gültige Auswahl (für "Neue Übung anlegen")
       const variantSel = document.getElementById('training-variant');
       if (type.startsWith('custom_')) {
         variantSel.innerHTML = '<option value="">—</option>';
@@ -6313,7 +6404,7 @@
       
       if (!date || !type || (holdMode ? holdSec.length === 0 : !sets)) {
         const what = !date ? 'Datum' : !type ? 'Übung' : holdMode ? 'Sekunden je Satz' : 'Wiederholungen';
-        showToast(`❌ Bitte ${what} angeben` + (editingTrainingId ? ' – Eintrag unverändert' : ''));
+        showToast(`Bitte ${what} angeben` + (editingTrainingId ? ' – Eintrag unverändert' : ''), 'bad');
         return;
       }
 
@@ -6329,7 +6420,7 @@
       const oldEntry = editId ? trainingEntries.find(e => String(e.id) === editId) : null;
       if (editId && !oldEntry) {
         setTrainingEditMode(null);
-        showToast('❌ Eintrag nicht mehr vorhanden – nichts geändert');
+        showToast('Eintrag nicht mehr vorhanden – nichts geändert', 'bad');
         return;
       }
 
@@ -6392,10 +6483,10 @@
         updateTrainingFormMode();
         document.getElementById('training-notiz').value = '';
 
-        showToast(oldEntry ? '✓ Training aktualisiert' : '✓ Training gespeichert');
+        showToast(oldEntry ? 'Training aktualisiert' : 'Training gespeichert', 'ok');
       } catch (err) {
         console.error('Save error:', err);
-        showToast(oldEntry ? '❌ Aktualisieren fehlgeschlagen – alter Eintrag unverändert' : '❌ Speichern fehlgeschlagen');
+        showToast(oldEntry ? 'Aktualisieren fehlgeschlagen – alter Eintrag unverändert' : 'Speichern fehlgeschlagen', 'bad');
       }
     };
     
@@ -6405,7 +6496,7 @@
       const steps = parseInt(document.getElementById('log-steps').value) || null;
       
       if (!date) {
-        showToast('❌ Bitte Datum angeben');
+        showToast('Bitte Datum angeben', 'bad');
         return;
       }
       
@@ -6454,10 +6545,10 @@
           }
         }
         
-        showToast('✓ Tageslog gespeichert');
+        showToast('Tageslog gespeichert', 'ok');
       } catch (err) {
         console.error('Save error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
     
@@ -6481,13 +6572,13 @@
       }
       
       const typeLabels = {
-        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: '🦵 Lunges',
-        terraband_knie: '🦵 Terraband Knie',
-        laufen: '🏃 Laufen', gehen: '🚶 Gehen', wandern: '🥾 Wandern',
-        rad: '🚴 Rad', rad_ebike: '⚡ E-Bike', rad_indoor: '🏠 Rad Indoor',
-        schwimmen: '🏊 Schwimmen', kraft: '🏋️ Krafttraining',
-        yoga: '🧘 Yoga', crosstraining: '⚡ Crosstraining', cardio: '❤️ Cardio',
-        zirkel: '🔄 Zirkel'
+        pullups: 'Pull-ups', pushups: 'Push-ups', lunges: typIcon('lunges') + ' Lunges',
+        terraband_knie: typIcon('terraband_knie') + ' Terraband Knie',
+        laufen: typIcon('laufen') + ' Laufen', gehen: typIcon('gehen') + ' Gehen', wandern: typIcon('wandern') + ' Wandern',
+        rad: typIcon('rad') + ' Rad', rad_ebike: typIcon('rad_ebike') + ' E-Bike', rad_indoor: typIcon('rad_indoor') + ' Rad Indoor',
+        schwimmen: typIcon('schwimmen') + ' Schwimmen', kraft: typIcon('kraft') + ' Krafttraining',
+        yoga: typIcon('yoga') + ' Yoga', crosstraining: typIcon('crosstraining') + ' Crosstraining', cardio: typIcon('cardio') + ' Cardio',
+        zirkel: typIcon('zirkel') + ' Zirkel'
       };
       container.innerHTML = sorted.map(e => {
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
@@ -6513,7 +6604,7 @@
         const sourceBadge = isGarmin ? '<span style="font-size:10px;background:var(--fo-surface-2);color:var(--fo-text-2);padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
-        if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">⏱ ${fmtHoldSets(e.holdSec)}</span>`;
+        if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">${foIcon('clock', 'fo-i--sm')} ${fmtHoldSets(e.holdSec)}</span>`;
         // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
         const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
@@ -6579,10 +6670,10 @@
 
         renderTrainingHistory();
         renderDataStats();
-        showToast('✓ Gelöscht');
+        showToast('Gelöscht', 'ok');
       } catch (err) {
         console.error('Delete error:', err);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
     
@@ -6736,10 +6827,10 @@
         renderFoodLog();
         updateAnalyseKeyState();
 
-        showToast('✓ Einstellungen gespeichert');
+        showToast('Einstellungen gespeichert', 'ok');
       } catch (err) {
         console.error('Save settings error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
 
@@ -6888,9 +6979,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       return id;
     }
 
-    function updateAnalysisMessage(id, text) {
+    function updateAnalysisMessage(id, text, icon) {
       const el = document.getElementById(id);
-      if (el) el.textContent = text;
+      if (el) { if (icon) setIconText(el, icon, text); else el.textContent = text; }
       const container = document.getElementById('analyse-messages');
       if (container) container.scrollTop = container.scrollHeight;
     }
@@ -6902,7 +6993,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       const apiKey = settings.anthropicApiKey;
       if (!apiKey) {
-        showToast('❌ Bitte zuerst einen Anthropic API Key in den Einstellungen eintragen');
+        showToast('Bitte zuerst einen Anthropic API Key in den Einstellungen eintragen', 'bad');
         return;
       }
 
@@ -6936,7 +7027,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
         if (!resp.ok) {
           const msg = data?.error?.message || ('HTTP ' + resp.status);
-          updateAnalysisMessage(loadingId, '❌ Fehler: ' + msg);
+          updateAnalysisMessage(loadingId, 'Fehler: ' + msg, 'alertCircle');
           analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
           return;
         }
@@ -6947,7 +7038,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         updateAnalysisMessage(loadingId, answer);
       } catch (err) {
         console.error('Analyse API error:', err);
-        updateAnalysisMessage(loadingId, '❌ Verbindungsfehler: ' + err.message);
+        updateAnalysisMessage(loadingId, 'Verbindungsfehler: ' + err.message, 'alertCircle');
         analysisMessages.pop();
       } finally {
         document.querySelectorAll('.analyse-chip').forEach(b => b.disabled = false);
@@ -7009,7 +7100,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       document.getElementById('settings-carbs').value = carbs;
       document.getElementById('settings-fat').value = fat;
       document.getElementById('macro-suggestion').style.display = 'none';
-      showToast('✓ Makros übernommen – bitte Einstellungen speichern');
+      showToast('Makros übernommen – bitte Einstellungen speichern', 'ok');
     };
 
 
@@ -7057,7 +7148,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           popup?.close();
           await loadGoogleFitStatus();
           await loadAllData();
-          showToast('✓ Google Fit verbunden!');
+          showToast('Google Fit verbunden!', 'ok');
         }
       });
     };
@@ -7067,15 +7158,15 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       if (!fullSync) {
         // Neue Daten: letzte 7 Tage
-        showToast('⏳ Google Fit wird synchronisiert...');
+        showToast('Google Fit wird synchronisiert...', 'wait');
         try {
           const endMs = Date.now();
           const startMs = endMs - (7 * 24 * 3600 * 1000);
           const result = await syncFn({ startMs, endMs });
-          showToast('✓ ' + (result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert');
+          showToast((result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert', 'ok');
         } catch(e) {
           console.error('Google Fit sync error:', e);
-          showToast('❌ Sync fehlgeschlagen: ' + e.message);
+          showToast('Sync fehlgeschlagen: ' + e.message, 'bad');
           return;
         }
       } else {
@@ -7088,7 +7179,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         for (let i = 0; i < batches; i++) {
           const endMs = Date.now() - (i * BATCH_DAYS * 24 * 3600 * 1000);
           const startMs = endMs - (BATCH_DAYS * 24 * 3600 * 1000);
-          showToast('⏳ Lade Batch ' + (i + 1) + '/' + batches + '...');
+          showToast('Lade Batch ' + (i + 1) + '/' + batches + '...', 'wait');
           try {
             const result = await syncFn({ startMs, endMs });
             totalSteps += result.data.steps || 0;
@@ -7098,7 +7189,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             // Weiter mit nächstem Batch statt abbrechen
           }
         }
-        showToast('✓ ' + totalSteps + ' Tage Schritte, ' + totalActivities + ' Aktivitäten importiert');
+        showToast(totalSteps + ' Tage Schritte, ' + totalActivities + ' Aktivitäten importiert', 'ok');
       }
 
       // Entries neu laden
@@ -7114,15 +7205,15 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     };
 
     window.disconnectGoogleFit = async function() {
-      if (!await showConfirm('Google Fit trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', '🔌', 'Trennen')) return;
+      if (!await showConfirm('Google Fit trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', 'unlink', 'Trennen')) return;
       try {
         const disconnectFn = httpsCallable(fbFunctions, 'googleFitDisconnect');
         await disconnectFn();
         document.getElementById('gfit-disconnected').style.display = 'block';
         document.getElementById('gfit-connected').style.display = 'none';
-        showToast('✓ Google Fit getrennt');
+        showToast('Google Fit getrennt', 'ok');
       } catch(e) {
-        showToast('❌ Fehler: ' + e.message);
+        showToast('Fehler: ' + e.message, 'bad');
       }
     };
 
@@ -7138,9 +7229,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const ouraParam = params.get('oura');
       if (!ouraParam) return;
       if (ouraParam === 'connected') {
-        showToast('✓ Oura Ring verbunden!');
+        showToast('Oura Ring verbunden!', 'ok');
       } else if (ouraParam === 'error') {
-        showToast('❌ Oura-Verbindung fehlgeschlagen: ' + (params.get('reason') || 'unbekannt'));
+        showToast('Oura-Verbindung fehlgeschlagen: ' + (params.get('reason') || 'unbekannt'), 'bad');
       }
       params.delete('oura');
       params.delete('reason');
@@ -7171,7 +7262,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const restingText = d?.restingHr != null ? `${Math.round(d.restingHr)} bpm` : '–';
 
       // HRV-Trend: Vergleich mit dem Schnitt der 7 Vortage. Mindestens 3 Vortageswerte nötig,
-      // sonst nur der Einzelwert. Pfeil ↑/↓ ab ±5 % Abweichung vom Schnitt, sonst →.
+      // sonst nur der Einzelwert. Trend-Icon steigend/fallend ab ±5 % Abweichung vom Schnitt, sonst →.
       const HRV_TREND_THRESHOLD = 0.05;
       const HRV_TREND_MIN_VALUES = 3;
       let hrvText = '–';
@@ -7186,23 +7277,23 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         }
         if (prev.length >= HRV_TREND_MIN_VALUES) {
           const avg = prev.reduce((a, b) => a + b, 0) / prev.length;
-          const arrow = d.hrvAvg > avg * (1 + HRV_TREND_THRESHOLD) ? '↑'
-            : d.hrvAvg < avg * (1 - HRV_TREND_THRESHOLD) ? '↓' : '→';
+          const arrow = d.hrvAvg > avg * (1 + HRV_TREND_THRESHOLD) ? foIcon('trendUp', 'fo-i--sm')
+            : d.hrvAvg < avg * (1 - HRV_TREND_THRESHOLD) ? foIcon('trendDown', 'fo-i--sm') : '→';
           hrvText += ` ${arrow} <span style="font-size:11px;color:var(--muted);">Ø 7 Tage: ${Math.round(avg)} ms</span>`;
         }
       }
 
       const row = (icon, label, value, last) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;${last ? '' : 'border-bottom:1px solid var(--border);'}">
-        <span style="font-size:18px;">${icon}</span>
+        <span style="font-size:18px;color:var(--fo-primary);">${foIcon(icon)}</span>
         <div style="flex:1;font-weight:500;font-size:14px;">${label}</div>
         <div style="font-size:14px;text-align:right;">${value}</div>
       </div>`;
 
       const rows = [
-        row('💓', 'Ruhepuls (letzte Nacht)', restingText),
-        row('📈', 'HRV (letzte Nacht)', hrvText),
-        row('🌙', 'Tiefschlaf', deepText),
-        row('😴', 'Gesamtschlaf', sleepText, true),
+        row('heart', 'Ruhepuls (letzte Nacht)', restingText),
+        row('hrv', 'HRV (letzte Nacht)', hrvText),
+        row('deepsleep', 'Tiefschlaf', deepText),
+        row('sleep', 'Gesamtschlaf', sleepText, true),
       ];
 
       // Schlaf- und Readiness-Score nur als dezente Zeile, nicht als Hauptwerte
@@ -7228,10 +7319,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       let statusHtml = statusLines.map(line => `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${line}</div>`).join('');
       if (ouraStatus.lastSyncError) {
-        statusHtml += `<div style="font-size:11px;color:var(--fo-bad);margin-top:4px;">⚠️ ${ouraStatus.lastSyncError}</div>`;
+        statusHtml += `<div style="font-size:11px;color:var(--fo-bad);margin-top:4px;">${foIcon('alertCircle', 'fo-i--sm')} ${ouraStatus.lastSyncError}</div>`;
       }
 
-      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('') + scoreHtml + statusHtml;
+      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${foIcon('readiness', 'fo-i--sm')} Oura Ring</div>` + rows.join('') + scoreHtml + statusHtml;
       card.style.display = 'block';
     }
 
@@ -7276,7 +7367,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             if (errorEl) {
               if (ouraStatus.lastSyncError) {
                 errorEl.style.display = 'block';
-                errorEl.textContent = '⚠️ Letzter Sync mit Fehlern: ' + ouraStatus.lastSyncError;
+                setIconText(errorEl, 'alertCircle', 'Letzter Sync mit Fehlern: ' + ouraStatus.lastSyncError);
               } else {
                 errorEl.style.display = 'none';
               }
@@ -7298,38 +7389,38 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         // Voller Redirect (kein Popup) – ouraCallback leitet den Browser zurück auf die App
         window.location.href = OURA_FUNCTIONS_BASE + '/ouraAuthStart?idToken=' + encodeURIComponent(idToken);
       } catch(e) {
-        showToast('❌ Fehler: ' + e.message);
+        showToast('Fehler: ' + e.message, 'bad');
       }
     };
 
     window.syncOuraNow = async function() {
-      showToast('⏳ Oura wird synchronisiert...');
+      showToast('Oura wird synchronisiert...', 'wait');
       try {
         const syncFn = httpsCallable(fbFunctionsEU, 'syncOuraManual');
         const endMs = Date.now();
         const startMs = endMs - (7 * 24 * 3600 * 1000);
         const result = await syncFn({ startMs, endMs });
-        showToast('✓ ' + (result.data.days || 0) + ' Tage Oura-Daten synchronisiert');
+        showToast((result.data.days || 0) + ' Tage Oura-Daten synchronisiert', 'ok');
         // Oura-Tageswerte neu laden (inkl. Schritt-Fallback fürs Kalorienziel) und Ansichten aktualisieren
         await refreshOuraDaily();
         saveToCache();
         renderAll();
       } catch(e) {
         console.error('Oura sync error:', e);
-        showToast('❌ Sync fehlgeschlagen: ' + e.message);
+        showToast('Sync fehlgeschlagen: ' + e.message, 'bad');
       }
       await loadOuraStatus();
     };
 
     window.disconnectOura = async function() {
-      if (!await showConfirm('Oura Ring trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', '🔌', 'Trennen')) return;
+      if (!await showConfirm('Oura Ring trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', 'unlink', 'Trennen')) return;
       try {
         const disconnectFn = httpsCallable(fbFunctionsEU, 'ouraDisconnect');
         await disconnectFn();
         await loadOuraStatus(); // aktualisiert Settings-Karte, ouraStatus (Cache) und Tagesüberblick-Karte
-        showToast('✓ Oura Ring getrennt');
+        showToast('Oura Ring getrennt', 'ok');
       } catch(e) {
-        showToast('❌ Fehler: ' + e.message);
+        showToast('Fehler: ' + e.message, 'bad');
       }
     };
 
@@ -7491,7 +7582,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           });
           trainingPlan = plan;
           trainingPlanFrom = monday;
-          console.log('✓ Trainingsplan nach trainingplans/' + monday + ' migriert');
+          console.log('Trainingsplan nach trainingplans/' + monday + ' migriert');
         } else {
           trainingPlan = {};
           trainingPlanFrom = null;
@@ -7553,7 +7644,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     function planTypLabel(typ, fallbackLabel) {
       if (TYP_LABELS[typ]) return TYP_LABELS[typ];
       const custom = customTrainingTypes.find(t => t.id === typ);
-      return '🏅 ' + (custom?.label || fallbackLabel || (String(typ || '').startsWith('custom_') ? deriveCustomLabel(typ) : typ) || 'Aktivität');
+      return custom?.label || fallbackLabel || (String(typ || '').startsWith('custom_') ? deriveCustomLabel(typ) : typ) || 'Aktivität';
     }
 
     function planMinToZeit(min) {
@@ -7579,7 +7670,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     const ZIRKEL_SHORT_NAMES = { terraband_knie: 'Terraband' };
     function planUebungShort(x) {
       if (x.typ === 'kraft' && x.variant) return x.variant;
-      const name = ZIRKEL_SHORT_NAMES[x.typ] || planTypLabel(x.typ).split(' ').slice(1).join(' ');
+      const name = ZIRKEL_SHORT_NAMES[x.typ] || planTypLabel(x.typ);
       return x.variant ? name + ' ' + x.variant : name;
     }
 
@@ -7687,7 +7778,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         </div>`;
       if (!weekPlan) {
         container.innerHTML = weekHeader.replace('%STATUS%', '') +
-          `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:14px;">⏳ Lade Plan dieser Woche…</div>`;
+          `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:14px;">${foIcon('clock', 'fo-i--sm')} Lade Plan dieser Woche…</div>`;
         loadPlanForWeek(weekMonday);
         return;
       }
@@ -7711,8 +7802,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         result.forEach(({ unit: u, entry: e, via, status: matchStatus, cmp }) => {
           const isZirkel = u.typ === 'zirkel';
           const title = isZirkel
-            ? `<span style="font-size:13px;background:var(--surface2);color:var(--primary);padding:2px 8px;border-radius:6px;">${TYP_LABELS.zirkel}</span>`
-            : planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
+            ? `<span style="font-size:13px;background:var(--surface2);color:var(--primary);padding:2px 8px;border-radius:6px;">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
+            : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
           const target = isZirkel
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u.dauerMin))} kcal`].join(' · ')
             : planTarget(u);
@@ -7724,7 +7815,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           let left, status = '';
           if (e) {
             const boxColor = deviated ? 'var(--fo-text-2)' : 'var(--primary)';
-            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:var(--fo-on-primary);font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
+            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:var(--fo-on-primary);font-size:14px;flex-shrink:0;">${deviated ? '~' : foIcon('check', 'fo-i--sm')}</span>`;
             const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
             const kcalHtml = kcal > 0 ? ` · <span style="color:var(--fo-text);">${fmt(kcal)} kcal</span>` : '';
             const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
@@ -7740,7 +7831,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
                 e.distanz > 0 ? planFmtKm(parseFloat(e.distanz)) : '',
                 e.zeit || ''
               ].filter(Boolean).join(' · ');
-              status = `<div style="font-size:12px;color:var(--primary);">✓ ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
+              status = `<div style="font-size:12px;color:var(--primary);">${foIcon('check', 'fo-i--sm')} ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
             }
             if (via === 'plan') {
               status += `<button onclick="undoPlanUnit('${planEsc(e.id)}')" style="margin-top:4px;padding:2px 8px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;cursor:pointer;">Rückgängig</button>`;
@@ -7756,7 +7847,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
               <div style="font-weight:500;font-size:14px;${e ? 'opacity:.75;' : ''}">${title}</div>
               ${target ? `<div style="font-size:12px;color:var(--muted);">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
               ${zirkelList}
-              ${isZirkel && !e && !isFuture ? `<button onclick="openZirkelTimer('${ds}','${u.id}')" class="btn" style="margin-top:6px;padding:7px 16px;width:auto;font-size:13px;">▶ Start</button>` : ''}
+              ${isZirkel && !e && !isFuture ? `<button onclick="openZirkelTimer('${ds}','${u.id}')" class="btn" style="margin-top:6px;padding:7px 16px;width:auto;font-size:13px;">${foIcon('play', 'fo-i--sm')} Start</button>` : ''}
               ${u.notiz ? `<div style="font-size:12px;color:var(--muted);">${planEsc(u.notiz)}</div>` : ''}
               ${status}
             </div>
@@ -7764,7 +7855,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         });
 
         extra.forEach(e => {
-          const title = planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
+          const title = (typIcon(e.typ) ? typIcon(e.typ) + ' ' : '') + planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
           const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
           const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
           rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);opacity:.6;">
@@ -7792,7 +7883,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       container.innerHTML = weekHeader.replace('%STATUS%', totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : '') + `
         ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">${emptyText}</div>`}
         ${daysHtml}
-        <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">✏️ Plan bearbeiten</button>`;
+        <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">${foIcon('edit', 'fo-i--sm')} Plan bearbeiten</button>`;
     }
 
     window.shiftPlanWeek = function(dir) {
@@ -7803,13 +7894,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // ── Editor ────────────────────────────────────────────────────────────────
     function planTypeOptions(selected) {
       const opts = PLAN_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
-      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: t.label }); });
       // Typen aus dem Plan, die (noch) nicht in den Listen sind
       PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
-        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: '🏅 ' + (u.typLabel || u.typ) });
+        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: u.typLabel || u.typ });
       }));
       return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
-        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>➕ Neue Übung anlegen</option>`;
+        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>Neue Übung anlegen</option>`;
     }
 
     // Varianten für einen Typ: vordefinierte (Loggen-Formular) + in trainingEntries/Plan vorkommende
@@ -7843,19 +7934,19 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const sel = u._variantCustom ? PLAN_CUSTOM_OPTION : (opts.find(o => o.toLowerCase() === (u.variant || '').toLowerCase()) || '');
       return `<option value=""${sel === '' ? ' selected' : ''}>—</option>`
         + opts.map(o => `<option value="${planEsc(o)}"${o === sel ? ' selected' : ''}>${planEsc(o)}</option>`).join('')
-        + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>✏️ Eigene…</option>`;
+        + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>Eigene…</option>`;
     }
 
     function planZirkelTypeOptions(selected) {
       const opts = ZIRKEL_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
-      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: '🏅 ' + t.label }); });
+      getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: t.label }); });
       if (selected && !opts.find(o => o.id === selected)) opts.push({ id: selected, label: planTypLabel(selected) });
       return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
     }
 
     function planZirkelSummaryText(z) {
       const dauer = calcZirkelDauerMin(z);
-      return dauer > 0 ? `⏱ ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : '⏱ Wiederholungen eintragen';
+      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Wiederholungen eintragen`;
     }
 
     function updatePlanZirkelSummary(key, idx) {
@@ -7866,8 +7957,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     function renderPlanZirkelEditor(key, idx, z, inp, lbl) {
       let html = `<div style="border-top:1px solid var(--border);padding:10px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-weight:600;">🔄 Zirkel</span>
-          <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">🗑</button>
+          <span style="font-weight:600;">${foIcon('circuit', 'fo-i--sm')} Zirkel</span>
+          <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" aria-label="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">${foIcon('trash', 'fo-i--sm')}</button>
         </div>
         <div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Runden</label>
@@ -7880,7 +7971,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         html += `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <select onchange="planZirkelUebungType('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
-            <button onclick="planZirkelRemoveUebung('${key}',${idx},${j})" title="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">✕</button>
+            <button onclick="planZirkelRemoveUebung('${key}',${idx},${j})" title="Übung entfernen" aria-label="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
           </div>
           <div style="display:flex;gap:8px;">
             <select onchange="planZirkelUebungVariant('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planVariantOptions(x)}</select>
@@ -7899,7 +7990,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     function planStrengthDauerText(u) {
       const d = calcSetsDauerMin(planRepsList(u), planPauseSec(u)) ?? u.dauerMin;
-      return d > 0 ? `⏱ Zieldauer: ${d} min` : '⏱ Zieldauer: – (Sets und Wdh eintragen)';
+      return d > 0 ? `${foIcon('clock', 'fo-i--sm')} Zieldauer: ${d} min` : `${foIcon('clock', 'fo-i--sm')} Zieldauer: – (Sets und Wdh eintragen)`;
     }
 
     // Zielfelder je nach Typ: Ausdauer km + min · Zeit nur min · Kraft/Bodyweight Sets × Wdh (Dauer berechnet)
@@ -7962,7 +8053,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
                 <label style="${lbl}">Typ</label>
                 <select onchange="planEditType('${key}',${idx},this.value)" style="${inp}">${planTypeOptions(u.typ)}</select>
               </div>
-              <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">🗑</button>
+              <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" aria-label="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">${foIcon('trash', 'fo-i--sm')}</button>
             </div>
             ${isCustom ? `<div style="margin-bottom:8px;"><label style="${lbl}">Name des neuen Typs</label>
               <input type="text" value="${planEsc(u.typLabel)}" placeholder="z.B. Mobility" oninput="planEditField('${key}',${idx},'typLabel',this.value)" style="${inp}"></div>` : ''}
@@ -7982,7 +8073,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       });
 
       const fromEarlierWeek = trainingPlanFrom && trainingPlanFrom < planCurrentMonday();
-      html += `<button id="plan-save-btn" class="btn" onclick="saveTrainingPlan()" style="width:100%;margin-top:6px;">💾 ${fromEarlierWeek ? 'Speichern (gilt ab dieser Woche)' : 'Speichern'}</button>`;
+      html += `<button id="plan-save-btn" class="btn" onclick="saveTrainingPlan()" style="width:100%;margin-top:6px;">${foIcon('save', 'fo-i--sm')} ${fromEarlierWeek ? 'Speichern (gilt ab dieser Woche)' : 'Speichern'}</button>`;
       container.innerHTML = html;
     }
 
@@ -8128,13 +8219,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       for (const { key, label } of PLAN_DAYS) {
         for (const u of planDraft[key]) {
           if (u.typ === 'zirkel') {
-            if (!(parseInt(u.runden) >= 1)) { showToast(`❌ ${label}: Zirkel braucht mind. 1 Runde`); return; }
-            if (!u.uebungen.some(x => parseInt(x.wdh) > 0)) { showToast(`❌ ${label}: Zirkel braucht Übungen mit Wiederholungen`); return; }
+            if (!(parseInt(u.runden) >= 1)) { showToast(`${label}: Zirkel braucht mind. 1 Runde`, 'bad'); return; }
+            if (!u.uebungen.some(x => parseInt(x.wdh) > 0)) { showToast(`${label}: Zirkel braucht Übungen mit Wiederholungen`, 'bad'); return; }
             continue;
           }
           if (u.typ !== PLAN_CUSTOM_OPTION) continue;
           const name = (u.typLabel || '').trim();
-          if (!name) { showToast(`❌ ${label}: Namen für eigenen Typ eingeben`); return; }
+          if (!name) { showToast(`${label}: Namen für eigenen Typ eingeben`, 'bad'); return; }
           const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
           u.typ = id;
           u.typLabel = name;
@@ -8143,7 +8234,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       }
 
       const btn = document.getElementById('plan-save-btn');
-      if (btn) { btn.disabled = true; btn.textContent = '⏳ Speichere...'; }
+      if (btn) { btn.disabled = true; setIconText(btn, 'clock', 'Speichere...'); }
       try {
         for (const t of newTypes) {
           await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, addedBy: userId });
@@ -8166,10 +8257,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         planEditMode = false;
         planDraft = null;
         renderTrainingPlan(true);
-        showToast('✓ Trainingsplan gespeichert');
+        showToast('Trainingsplan gespeichert', 'ok');
       } catch (err) {
         console.error('Plan save error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
         // Gespeicherte Typ-IDs im Draft lassen; Editor neu zeichnen
         renderTrainingPlan(true);
       }
@@ -8330,7 +8421,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (!planCompleteCtx) return;
       const base = planCompleteEntryFromInputs();
       if (base.zeit === '00:00:00' && !(base.distanz > 0)) {
-        showToast('❌ Bitte Dauer angeben');
+        showToast('Bitte Dauer angeben', 'bad');
         return;
       }
       const timeNow = new Date().toTimeString().slice(0, 8);
@@ -8352,10 +8443,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         renderFoodLog();          // Kalorienziel + Aktivitäten
         renderTrainingHistory();  // rendert auch den Plan neu
         renderDataStats();
-        showToast('✓ Einheit eingetragen');
+        showToast('Einheit eingetragen', 'ok');
       } catch (err) {
         console.error('Plan complete error:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       } finally {
         btn.disabled = false;
       }
@@ -8371,10 +8462,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         renderFoodLog();
         renderTrainingHistory();
         renderDataStats();
-        showToast('✓ Rückgängig gemacht');
+        showToast('Rückgängig gemacht', 'ok');
       } catch (err) {
         console.error('Plan undo error:', err);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
@@ -8404,7 +8495,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           if (u.typ === 'zirkel') options.push({ unit: u, label: `${label}: ${planZirkelAdhocLabel(u)}` });
         });
       });
-      if (!options.length) { showToast('❌ Kein Zirkel im Trainingsplan angelegt'); return; }
+      if (!options.length) { showToast('Kein Zirkel im Trainingsplan angelegt', 'bad'); return; }
       window._zirkelAdhocOptions = options;
       document.getElementById('zirkel-adhoc-select').innerHTML = options.map((o, i) => `<option value="${i}">${planEsc(o.label)}</option>`).join('');
       pushModalState();
@@ -8438,19 +8529,19 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     function renderZirkelTimerIntro() {
       const { unit } = zirkelTimerState;
-      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">💪 ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
+      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">${foIcon('strength', 'fo-i--sm')} ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
       document.getElementById('zirkel-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:360px;">
-          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">🔄 ${planEsc(unit.notiz || 'Zirkel')}</div>
+          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">${foIcon('circuit', 'fo-i--lg')} ${planEsc(unit.notiz || 'Zirkel')}</div>
           <div style="color:var(--muted);margin-bottom:20px;">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'} · ${planFmtPause(unit.pauseSec)} Pause</div>
           <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;">${list}</div>
-          <button onclick="zirkelTimerBegin()" class="btn" style="width:100%;padding:18px;font-size:18px;">▶ Start</button>
+          <button onclick="zirkelTimerBegin()" class="btn" style="width:100%;padding:18px;font-size:18px;">${foIcon('play')} Start</button>
         </div>`;
     }
 
     function renderZirkelTimerExercise() {
       const { unit, currentRound, elapsedSec } = zirkelTimerState;
-      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">💪 ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
+      const list = unit.uebungen.map(x => `<div style="padding:4px 0;">${foIcon('strength', 'fo-i--sm')} ${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div>`).join('');
       const isLast = currentRound >= unit.runden;
       document.getElementById('zirkel-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:360px;">
@@ -8458,7 +8549,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <div id="zirkel-elapsed" style="font-size:20px;font-weight:600;margin-bottom:18px;">${fmtZirkelTime(elapsedSec)}</div>
           <div style="font-size:30px;font-weight:700;margin-bottom:16px;">Runde ${currentRound} von ${unit.runden}</div>
           <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;">${list}</div>
-          <button onclick="zirkelTimerRoundDone()" class="btn" style="width:100%;padding:18px;font-size:18px;">✓ ${isLast ? 'Letzte Runde fertig' : 'Runde fertig'}</button>
+          <button onclick="zirkelTimerRoundDone()" class="btn" style="width:100%;padding:18px;font-size:18px;">${foIcon('check')} ${isLast ? 'Letzte Runde fertig' : 'Runde fertig'}</button>
         </div>`;
     }
 
@@ -8478,7 +8569,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const kcal = calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(elapsedSec / 60) });
       document.getElementById('zirkel-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:360px;">
-          <div style="font-size:24px;font-weight:600;margin-bottom:20px;">Zirkel abgeschlossen! 🎉</div>
+          <div style="font-size:24px;font-weight:600;margin-bottom:20px;">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Gesamtzeit</div>
           <div style="font-size:26px;font-weight:700;margin-bottom:10px;">${fmtZirkelTime(elapsedSec)}</div>
           <div style="margin-bottom:4px;">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'}</div>
@@ -8581,7 +8672,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.requestCloseZirkelTimer = async function() {
       if (!zirkelTimerState) return;
       const submsg = zirkelTimerState.phase === 'done' ? 'Das Ergebnis wird nicht gespeichert.' : 'Dein Fortschritt geht verloren.';
-      const ok = await showConfirm('Zirkel abbrechen?', submsg, '⚠️', 'Abbrechen', true);
+      const ok = await showConfirm('Zirkel abbrechen?', submsg, 'alertCircle', 'Abbrechen', true);
       if (ok) closeZirkelTimerModal();
     };
 
@@ -8615,10 +8706,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         renderFoodLog();
         renderTrainingHistory();
         renderDataStats();
-        showToast('✓ Zirkel gespeichert');
+        showToast('Zirkel gespeichert', 'ok');
       } catch (err) {
         console.error('Zirkel-Timer Speichern Fehler:', err);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
         if (btn) btn.disabled = false;
       }
     };
@@ -8762,7 +8853,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       let html = `
         <div style="display:flex;gap:8px;margin-bottom:10px;">
           <select onchange="loadIntervalTemplate(this.value)" style="${sel}flex:1;">
-            <option value="">➕ Neuer Zirkel</option>
+            <option value="">Neuer Zirkel</option>
             ${intervalTemplates.map(t => `<option value="${planEsc(t.id)}" ${t.id === d.id ? 'selected' : ''}>${planEsc(t.name || 'Ohne Namen')}</option>`).join('')}
           </select>
         </div>
@@ -8780,9 +8871,9 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
             <span style="font-weight:600;flex:1;">Schritt ${i + 1}</span>
-            <button onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="${smallBtn}">↑</button>
-            <button onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} style="${smallBtn}">↓</button>
-            <button onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} title="Schritt entfernen" style="${smallBtn}">✕</button>
+            <button onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben" style="${smallBtn}">${foIcon('arrowUp', 'fo-i--sm')}</button>
+            <button onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} aria-label="Nach unten" style="${smallBtn}">${foIcon('arrowDown', 'fo-i--sm')}</button>
+            <button onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} title="Schritt entfernen" aria-label="Schritt entfernen" style="${smallBtn}">${foIcon('close', 'fo-i--sm')}</button>
           </div>
           <select onchange="intervalStepField(${i}, 'typ', this.value)" style="${sel}margin-bottom:8px;">
             ${options.map(o => `<option value="${planEsc(o.id)}" ${o.id === st.typ ? 'selected' : ''}>${planEsc(o.label)}</option>`).join('')}
@@ -8799,12 +8890,12 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Ist eine Rundenpause gesetzt, ersetzt sie die Pause nach dem letzten Schritt einer Runde.</div>
         <div id="interval-config-summary" style="font-size:14px;color:var(--primary);margin-bottom:14px;">${intervalConfigSummaryText()}</div>
         <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button onclick="saveIntervalTemplate()" style="flex:2;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">💾 Vorlage speichern</button>
-          ${d.id ? `<button onclick="deleteIntervalTemplate()" style="flex:1;padding:12px;background:none;border:1px solid var(--danger);border-radius:8px;color:var(--danger);cursor:pointer;">🗑 Löschen</button>` : ''}
+          <button onclick="saveIntervalTemplate()" style="flex:2;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">${foIcon('save', 'fo-i--sm')} Vorlage speichern</button>
+          ${d.id ? `<button onclick="deleteIntervalTemplate()" style="flex:1;padding:12px;background:none;border:1px solid var(--danger);border-radius:8px;color:var(--danger);cursor:pointer;">${foIcon('trash', 'fo-i--sm')} Löschen</button>` : ''}
         </div>
         <div style="display:flex;gap:8px;">
           <button onclick="closeIntervalConfig()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Schließen</button>
-          <button onclick="openIntervalTimer()" class="btn" style="flex:2;padding:14px;font-size:16px;">Weiter ▶</button>
+          <button onclick="openIntervalTimer()" class="btn" style="flex:2;padding:14px;font-size:16px;">Weiter ${foIcon('play', 'fo-i--sm')}</button>
         </div>`;
       document.getElementById('interval-config-body').innerHTML = html;
     }
@@ -8851,7 +8942,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     window.saveIntervalTemplate = async function() {
       const cfg = normalizeIntervalConfig(intervalDraft);
       if (!cfg.name) { showToast('Bitte einen Namen für die Vorlage eingeben'); return; }
-      if (!cfg.steps.length) { showToast('❌ Mindestens ein Schritt mit Haltezeit nötig'); return; }
+      if (!cfg.steps.length) { showToast('Mindestens ein Schritt mit Haltezeit nötig', 'bad'); return; }
       const id = cfg.id || ('iv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
       const data = { ...cfg, id, updatedAt: new Date().toISOString() };
       try {
@@ -8860,10 +8951,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         cachePut('intervalTemplates', intervalTemplates);
         intervalDraft = JSON.parse(JSON.stringify(data));
         renderIntervalConfig();
-        showToast('✓ Vorlage gespeichert');
+        showToast('Vorlage gespeichert', 'ok');
       } catch (e) {
         console.error('Interval template save error:', e);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
 
@@ -8878,17 +8969,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         cachePut('intervalTemplates', intervalTemplates);
         intervalDraft = newIntervalDraft();
         renderIntervalConfig();
-        showToast('✓ Vorlage gelöscht');
+        showToast('Vorlage gelöscht', 'ok');
       } catch (e) {
         console.error('Interval template delete error:', e);
-        showToast('❌ Löschen fehlgeschlagen');
+        showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
     // ── Ablauf ──
     window.openIntervalTimer = function() {
       const cfg = normalizeIntervalConfig(intervalDraft);
-      if (!cfg.steps.length) { showToast('❌ Mindestens ein Schritt mit Haltezeit nötig'); return; }
+      if (!cfg.steps.length) { showToast('Mindestens ein Schritt mit Haltezeit nötig', 'bad'); return; }
       document.getElementById('interval-config-modal').style.display = 'none';
       intervalTimer = {
         cfg, segs: buildIntervalSegments(cfg),
@@ -8911,10 +9002,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         `<div style="padding:4px 0;">${i + 1}. ${planEsc(st.typLabel)} · ${st.holdSec} s${st.pauseSec > 0 ? ` · ${st.pauseSec} s Pause` : ''}</div>`).join('');
       document.getElementById('interval-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:380px;">
-          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">⏱ ${planEsc(cfg.name || 'Intervall-Zirkel')}</div>
+          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">${foIcon('clock', 'fo-i--lg')} ${planEsc(cfg.name || 'Intervall-Zirkel')}</div>
           <div style="color:var(--muted);margin-bottom:16px;">${cfg.rounds} Runde${cfg.rounds === 1 ? '' : 'n'} · ${cfg.prepSec} s Vorbereitung · ${fmtZirkelTime(intervalTotalSec(segs))} gesamt</div>
           <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;max-height:40vh;overflow-y:auto;">${list}</div>
-          <button onclick="intervalTimerBegin()" class="btn" style="width:100%;padding:28px;font-size:24px;border-radius:14px;">▶ Start</button>
+          <button onclick="intervalTimerBegin()" class="btn" style="width:100%;padding:28px;font-size:24px;border-radius:14px;">${foIcon('play', 'fo-i--lg')} Start</button>
         </div>`;
     }
 
@@ -9128,7 +9219,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             <span>Runde ${seg.round} von ${t.cfg.rounds}</span>
             <span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span>
           </div>
-          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.text || ph.color};margin-bottom:6px;">${paused ? '⏸ Pausiert · ' : ''}${ph.label}</div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.text || ph.color};margin-bottom:6px;">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</div>
           <div style="font-size:24px;font-weight:600;margin-bottom:4px;min-height:30px;">${current ? currentPrefix + planEsc(current) : ''}</div>
           <div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>
           <div style="font-size:15px;color:var(--muted);margin:6px 0 16px;min-height:20px;">${after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '')}</div>
@@ -9137,11 +9228,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           </div>
           <div id="iv-progress-text" style="font-size:12px;color:var(--muted);margin-bottom:18px;"></div>
           <div style="display:flex;gap:8px;">
-            <button onclick="intervalTogglePause()" style="${btn}">${paused ? '▶ Weiter' : '⏸ Pause'}</button>
-            <button onclick="intervalSkip()" style="${btn}">⏭ Überspringen</button>
-            <button onclick="requestCloseIntervalTimer()" style="${btn}color:var(--danger);border-color:var(--danger);">✕ Abbrechen</button>
+            <button onclick="intervalTogglePause()" style="${btn}">${paused ? foIcon('play', 'fo-i--sm') + ' Weiter' : foIcon('pause', 'fo-i--sm') + ' Pause'}</button>
+            <button onclick="intervalSkip()" style="${btn}">${foIcon('skip', 'fo-i--sm')} Überspringen</button>
+            <button onclick="requestCloseIntervalTimer()" style="${btn}color:var(--danger);border-color:var(--danger);">${foIcon('close', 'fo-i--sm')} Abbrechen</button>
           </div>
-          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:var(--fo-text-2);margin-top:14px;">⚠️ Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
+          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:var(--fo-text-2);margin-top:14px;">${foIcon('alertCircle', 'fo-i--sm')} Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
         </div>`;
       updateIntervalRunningLive();
     }
@@ -9226,12 +9317,12 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const groups = intervalResultsByType();
       const list = groups.map(g => `<div style="padding:4px 0;">${planEsc(g.typLabel)}: ${fmtHoldSets(g.holdSec)}</div>`).join('')
         || '<div style="color:var(--muted);">Keine Haltezeit absolviert</div>';
-      const status = t.saving ? '⏳ Speichere…'
-        : t.saveError ? '❌ Speichern fehlgeschlagen'
-        : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? '✓ Im Trainingslog gespeichert' : '';
+      const status = t.saving ? foIcon('clock', 'fo-i--sm') + ' Speichere…'
+        : t.saveError ? foIcon('alertCircle', 'fo-i--sm fo-status-bad') + ' Speichern fehlgeschlagen'
+        : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? foIcon('okCircle', 'fo-i--sm fo-status-ok') + ' Im Trainingslog gespeichert' : '';
       document.getElementById('interval-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:380px;">
-          <div style="font-size:24px;font-weight:600;margin-bottom:16px;">Zirkel abgeschlossen! 🎉</div>
+          <div style="font-size:24px;font-weight:600;margin-bottom:16px;">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</div>
           <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:12px;">${list}</div>
           <div style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:20px;">${status}</div>
           <div style="display:flex;gap:8px;">
@@ -9271,11 +9362,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           t.savedTyps.add(g.typ);
         }
         window.trainingEntries = trainingEntries;
-        showToast('✓ Zirkel gespeichert');
+        showToast('Zirkel gespeichert', 'ok');
       } catch (err) {
         console.error('Intervall-Zirkel Speichern Fehler:', err);
         t.saveError = true;
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
       t.saving = false;
       saveToCache();
@@ -9303,14 +9394,14 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (t.segIdx < 0) { window.closeIntervalTimer(); return; } // noch nicht gestartet
       if (t.finished) {
         const unsaved = intervalResultsByType().some(g => !t.savedTyps.has(g.typ));
-        if (unsaved && !await showConfirm('Nicht gespeichert', 'Das Ergebnis wurde noch nicht gespeichert. Trotzdem schließen?', '⚠️', 'Schließen', true)) return;
+        if (unsaved && !await showConfirm('Nicht gespeichert', 'Das Ergebnis wurde noch nicht gespeichert. Trotzdem schließen?', 'alertCircle', 'Schließen', true)) return;
         window.closeIntervalTimer();
         return;
       }
       // Während der Rückfrage anhalten, damit keine Haltezeit unbemerkt weiterläuft
       const wasPaused = !!t.pausedAtMs;
       if (!wasPaused) window.intervalTogglePause();
-      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', '⚠️', 'Abbrechen', true);
+      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', 'alertCircle', 'Abbrechen', true);
       if (intervalTimer !== t) return;
       if (!ok) { if (!wasPaused) window.intervalTogglePause(); return; }
       // Laufende Haltezeit mit der tatsächlich gehaltenen Zeit übernehmen
@@ -9320,7 +9411,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       t.intervalId = null;
       intervalCancelTones();
       intervalReleaseWakeLock();
-      if (t.done.length && await showConfirm('Teilleistung speichern?', intervalResultsByType().map(g => `${g.typLabel}: ${fmtHoldSets(g.holdSec)}`).join(' · '), '💾', 'Speichern', false)) {
+      if (t.done.length && await showConfirm('Teilleistung speichern?', intervalResultsByType().map(g => `${g.typLabel}: ${fmtHoldSets(g.holdSec)}`).join(' · '), 'save', 'Speichern', false)) {
         await window.saveIntervalResults();
         if (t.saveError) { t.finished = true; renderIntervalDone(); return; } // Erneut-speichern-Option anbieten
       }
@@ -9365,7 +9456,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const missing = [...new Set(trainingEntries.map(e => e.typ).filter(t => String(t || '').startsWith('custom_') && !known.has(t)))];
       if (missing.length === 0) { showToast('Keine fehlenden Arten'); return; }
       const preview = missing.map(id => id + ' → ' + deriveCustomLabel(id)).join('\n');
-      if (!await showConfirm('Fehlende Arten anlegen?', preview, '🔄', 'Anlegen', false)) return;
+      if (!await showConfirm('Fehlende Arten anlegen?', preview, 'sync', 'Anlegen', false)) return;
       try {
         for (const id of missing) {
           const label = deriveCustomLabel(id);
@@ -9376,10 +9467,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         renderCustomTypes();
         updateTrainingTypeSelect();
         renderTrainingHistory();
-        showToast('✓ ' + missing.length + ' Art(en) angelegt');
+        showToast(missing.length + ' Art(en) angelegt', 'ok');
       } catch(e) {
         console.error('Migration custom types error:', e);
-        showToast('❌ Migration fehlgeschlagen');
+        showToast('Migration fehlgeschlagen', 'bad');
       }
     };
 
@@ -9407,16 +9498,16 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
           <input type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()"
             style="flex:1;min-width:0;padding:8px;background:var(--bg);border:1px solid var(--primary);border-radius:6px;color:var(--text);font-size:14px;">
-          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:var(--fo-on-primary);border-radius:6px;cursor:pointer;font-size:12px;">✓</button>
-          <button onclick="cancelCustomTypeRename()" title="Abbrechen" style="padding:4px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:12px;">✕</button>
+          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" aria-label="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:var(--fo-on-primary);border-radius:6px;cursor:pointer;font-size:12px;">${foIcon('check', 'fo-i--sm')}</button>
+          <button onclick="cancelCustomTypeRename()" title="Abbrechen" aria-label="Abbrechen" style="padding:4px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:12px;">${foIcon('close', 'fo-i--sm')}</button>
         </div>
       ` : `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:14px;flex:1;min-width:0;">${t.label}</span>
-          <button onclick="startCustomTypeRename(${i})" title="Umbenennen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">✏️</button>
+          <button onclick="startCustomTypeRename(${i})" title="Umbenennen" aria-label="Umbenennen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">${foIcon('edit', 'fo-i--sm')}</button>
           <button onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten"
-            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? 'var(--fo-on-primary)' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? '⏱ Haltezeit' : 'Wdh.'}</button>
-          <button onclick="removeCustomType(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕</button>
+            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? 'var(--fo-on-primary)' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
+          <button onclick="removeCustomType(${i})" aria-label="Entfernen" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">${foIcon('trash', 'fo-i--sm')}</button>
         </div>
       `).join('');
     }
@@ -9459,10 +9550,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         if (planEditMode) renderTrainingPlan(true); // offener Plan-Editor rendert aus planDraft, Eingaben bleiben
         renderFoodLog();
         if (document.getElementById('dashboard-tab')?.classList.contains('active')) renderDashboard();
-        showToast('✓ Umbenannt in ' + label);
+        showToast('Umbenannt in ' + label, 'ok');
       } catch (e) {
         console.error('Rename custom type error:', e);
-        showToast('❌ Umbenennen fehlgeschlagen – Name unverändert');
+        showToast('Umbenennen fehlgeschlagen – Name unverändert', 'bad');
       }
     };
 
@@ -9478,10 +9569,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         cachePut('customTrainingTypes', customTrainingTypes);
         renderCustomTypes();
         updateTrainingFormMode();
-        showToast(kind === 'hold' ? `✓ ${t.label}: Haltezeit` : `✓ ${t.label}: Wiederholungen`);
+        showToast(kind === 'hold' ? `${t.label}: Haltezeit` : `${t.label}: Wiederholungen`, 'ok');
       } catch (e) {
         console.error('Toggle hold type error:', e);
-        showToast('❌ Speichern fehlgeschlagen');
+        showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
 
@@ -9496,7 +9587,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     }
 
     // Eine Auswahlliste für das Loggen-Formular: eingebaute Optionen (statisch im HTML, vorn),
-    // dann Custom-Übungen, zuletzt "➕ Neue Übung anlegen". Aufruf jederzeit möglich, auch vor dem Laden
+    // dann Custom-Übungen, zuletzt "Neue Übung anlegen". Aufruf jederzeit möglich, auch vor dem Laden
     // der Typ-Dokumente; die Auswahl bleibt dabei erhalten.
     const NEW_EXERCISE_OPTION = '__new_exercise__';
     let pendingNewExerciseSelect = false; // true, wenn der Anlege-Ablauf über die Liste gestartet wurde
@@ -9515,7 +9606,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       });
       const newOpt = document.createElement('option');
       newOpt.value = NEW_EXERCISE_OPTION;
-      newOpt.textContent = '➕ Neue Übung anlegen';
+      newOpt.textContent = 'Neue Übung anlegen';
       newOpt.dataset.newExercise = '1';
       select.appendChild(newOpt);
       if (current && Array.from(select.options).some(o => o.value === current)) select.value = current;
@@ -9561,7 +9652,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       renderCustomTypes();
       updateTrainingTypeSelect();
       if (pendingNewExerciseSelect) selectTrainingType(id);
-      showToast('✓ ' + name + ' hinzugefügt');
+      showToast(name + ' hinzugefügt', 'ok');
     };
 
     window.removeCustomType = async function(index) {
@@ -9607,11 +9698,11 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         window.trainingEntries = trainingEntries;
         saveToCache();
         renderFoodLog();
-        console.log(`✓ Migration abgeschlossen: ${done} Einträge repariert.`);
-        showToast(`✓ ${done} Trainings migriert`);
+        console.log(`Migration abgeschlossen: ${done} Einträge repariert.`);
+        showToast(`${done} Trainings migriert`, 'ok');
       } catch (e) {
         console.error('migrateManualTrainings error:', e);
-        showToast('❌ Migration fehlgeschlagen');
+        showToast('Migration fehlgeschlagen', 'bad');
       }
     };
 
@@ -9657,13 +9748,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           window.removeEventListener('message', handler);
           popup?.close();
           await loadDriveStatus();
-          showToast('✓ Google Drive verbunden!');
+          showToast('Google Drive verbunden!', 'ok');
         }
       });
     };
 
     window.disconnectGoogleDrive = async function() {
-      if (!await showConfirm('Google Drive trennen?', 'Die Verbindung wird getrennt. Gesicherte Dateien bleiben in Drive erhalten.', '🔌', 'Trennen')) return;
+      if (!await showConfirm('Google Drive trennen?', 'Die Verbindung wird getrennt. Gesicherte Dateien bleiben in Drive erhalten.', 'unlink', 'Trennen')) return;
       try {
         const token = await getValidDriveToken();
         await fetch('https://oauth2.googleapis.com/revoke?token=' + token, { method: 'POST' }).catch(() => {});
@@ -9671,7 +9762,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       await deleteDoc(doc(db, 'users', userId, 'integrations', 'googledrive')).catch(() => {});
       document.getElementById('gdrive-connected').style.display = 'none';
       document.getElementById('gdrive-disconnected').style.display = 'block';
-      showToast('✓ Google Drive getrennt');
+      showToast('Google Drive getrennt', 'ok');
     };
 
     async function loadDriveStatus() {
@@ -9718,7 +9809,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
     window.backupToGoogleDrive = async function(silent = false) {
       const statusEl = document.getElementById('gdrive-backup-status');
-      if (statusEl && !silent) statusEl.textContent = '⏳ Erstelle Backup...';
+      if (statusEl && !silent) setIconText(statusEl, 'clock', 'Erstelle Backup...');
       try {
         const token = await getValidDriveToken();
         const backupMeta = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
@@ -9729,13 +9820,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         await setDoc(doc(db, 'users', userId, 'settings', 'backup'), {
           lastDriveBackup: now, lastDriveFileId: fileId, lastDriveFileName: 'fuelofit-backup.json'
         }, { merge: true });
-        if (statusEl) statusEl.textContent = `✅ Gesichert: fuelofit-backup.json`;
+        if (statusEl) setIconText(statusEl, 'okCircle', `Gesichert: fuelofit-backup.json`, 'fo-i--sm fo-status-ok');
         const el = document.getElementById('last-backup-time');
         if (el) el.textContent = new Date().toLocaleString('de-DE');
-        if (!silent) showToast('✓ Google Drive Backup erfolgreich');
+        if (!silent) showToast('Google Drive Backup erfolgreich', 'ok');
         console.log('Drive backup done', now);
       } catch(e) {
-        if (statusEl && !silent) statusEl.textContent = '❌ Fehler: ' + e.message;
+        if (statusEl && !silent) setIconText(statusEl, 'alertCircle', 'Fehler: ' + e.message, 'fo-i--sm fo-status-bad');
         console.warn('Drive backup error:', e);
       }
     };
@@ -9825,15 +9916,15 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     <video id="barcode-video" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline></video>
     <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:130px;border:2px solid rgba(255,255,255,0.8);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,0.5);pointer-events:none;"></div>
     <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);">
-      <span style="color:#fff;font-size:15px;font-weight:600;">📷 Barcode scannen</span>
+      <span style="color:#fff;font-size:15px;font-weight:600;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-barcode"/></svg> Barcode scannen</span>
       <div style="display:flex;gap:10px;align-items:center;">
-        <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
-        <button onclick="stopBarcodeScanner()" style="background:var(--fo-bad);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
+        <button id="torch-btn" onclick="toggleTorch()" aria-label="Taschenlampe" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
+        <button onclick="stopBarcodeScanner()" style="background:var(--fo-bad);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;" aria-label="Schließen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
       </div>
     </div>
     <div id="barcode-zoom-control" style="display:none;position:absolute;bottom:70px;left:20px;right:20px;">
       <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.6);padding:10px 16px;border-radius:10px;">
-        <span style="color:#fff;font-size:14px;">🔍</span>
+        <span style="color:#fff;font-size:14px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-search"/></svg></span>
         <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:var(--fo-primary);" oninput="applyZoom(this.value)">
         <span id="barcode-zoom-label" style="color:#fff;font-size:13px;min-width:30px;">1×</span>
       </div>

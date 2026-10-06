@@ -17,19 +17,390 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
+    /* =====================================================================
+       Fuelofit Designsystem v1 · fuelofit.css
+       Alles in diesem Block (TOKENS + KOMPONENTEN) gehört in die App.
+       Der Block "MOCK" am Ende ist nur für die Entwürfe auf dem Canvas.
+       ===================================================================== */
+
+    /* ---------- TOKENS · hell (Hauptthema) ---------- */
+    :root{
+      color-scheme: light;
+      /* Flächen */
+      --fo-bg:#FFFFFF;              /* Seitenhintergrund */
+      --fo-surface:#FFFFFF;         /* Karten, Sheets, Leisten */
+      --fo-surface-2:#F4F6F9;       /* eingelassen: Segment-Track, Kindzeilen, Info-Boxen */
+      --fo-surface-3:#E9EDF2;       /* Balken-Track, gedrückter Zustand */
+      --fo-line:#E2E6EC;            /* Konturen, Trenner */
+      --fo-line-strong:#C9D0DA;     /* Eingabefelder, sekundäre Buttons */
+      /* Text (alle ≥ 4.5:1 auf --fo-surface) */
+      --fo-text:#141A23;            /* 17.5:1 */
+      --fo-text-2:#4A5463;          /*  7.7:1 */
+      --fo-text-3:#626C7B;          /*  5.3:1 */
+      --fo-text-disabled:#A3ABB7;   /* nur für deaktiviert */
+      /* Primär = Struktur (Navigation, aktive Zustände, Hauptbuttons) */
+      --fo-primary:#1E5BD8;         /*  5.9:1 */
+      --fo-primary-pressed:#1847AA;
+      --fo-primary-tint:#EAF1FE;
+      --fo-on-primary:#FFFFFF;
+      /* Akzent Aktivität = Energie, Training (Icons, Linien, Flächen – nie Status) */
+      --fo-activity:#F25F1C;        /*  3.3:1 → nur Icons/Linien/große Ziffern */
+      --fo-activity-strong:#B9410A; /*  5.5:1 → falls Text in Akzentfarbe nötig */
+      --fo-activity-tint:#FEEFE7;
+      /* Status (nur zwei Zustände) */
+      --fo-ok:#0F7A4B;              /*  5.4:1 · im Soll */
+      --fo-ok-tint:#E6F4EC;
+      --fo-bad:#C41E3A;             /*  5.8:1 · außerhalb (Karminrot, klar vom Orange getrennt) */
+      --fo-bad-tint:#FCEAED;
+      --fo-bad-pressed:#9E1830;
+      /* Fokus */
+      --fo-focus-ring:0 0 0 3px rgba(30,91,216,.32);
+      /* Diagramme */
+      --fo-chart-1:var(--fo-primary);
+      --fo-chart-2:#4A5463;
+      --fo-chart-3:var(--fo-activity);
+      --fo-chart-grid:#EDF0F4;
+      /* Overlay */
+      --fo-scrim:rgba(20,26,35,.45);
+      --fo-toast-bg:#141A23;
+      --fo-toast-text:#FFFFFF;
+      --fo-toast-action:#8DB4FF;
+
+      /* Typografie: nur Systemschrift (Android = Roboto), offline ohne Einbettung */
+      --fo-font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+      --fo-font-mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+      --fo-fs-timer:clamp(96px,34vw,136px);
+      --fo-fs-display:28px;  --fo-lh-display:34px;   /* 700 */
+      --fo-fs-kpi:24px;      --fo-lh-kpi:28px;       /* 700, tabellarische Ziffern */
+      --fo-fs-title:17px;    --fo-lh-title:22px;     /* 650 */
+      --fo-fs-body:15px;     --fo-lh-body:20px;      /* 400 / 500 / 600 */
+      --fo-fs-small:13px;    --fo-lh-small:18px;     /* 400 / 600 */
+      --fo-fs-caption:12px;  --fo-lh-caption:16px;   /* 400 / 600 */
+      --fo-fs-micro:11px;    --fo-lh-micro:14px;     /* 600, Nav-Labels, Überschriften in Versalien */
+
+      /* Abstände: 4-px-Raster */
+      --fo-s1:4px; --fo-s2:8px; --fo-s3:12px; --fo-s4:16px; --fo-s5:20px; --fo-s6:24px; --fo-s8:32px;
+      --fo-gutter:12px;            /* Seitenrand */
+      --fo-gap:8px;                /* Abstand zwischen Karten */
+      /* Radien */
+      --fo-r-sm:6px; --fo-r-md:10px; --fo-r-lg:14px; --fo-r-xl:20px; --fo-r-pill:999px;
+      /* Schatten: Karten haben Kontur statt Schatten, nur schwebende Ebenen bekommen Schatten */
+      --fo-sh-1:0 1px 2px rgba(20,26,35,.06);
+      --fo-sh-2:0 8px 24px rgba(20,26,35,.12),0 1px 3px rgba(20,26,35,.08);
+      --fo-sh-3:0 -8px 32px rgba(20,26,35,.18);
+      /* Maße */
+      --fo-tap:44px;
+      --fo-appbar-h:52px;
+      --fo-nav-h:60px;
+    }
+
+    /* ---------- TOKENS · dunkel (optional, gleiche Namen) ---------- */
+    :root[data-theme="dark"]{
+      color-scheme: dark;
+      --fo-bg:#0F1318; --fo-surface:#171B22; --fo-surface-2:#1E232B; --fo-surface-3:#2A303A;
+      --fo-line:#2A303A; --fo-line-strong:#3A424E;
+      --fo-text:#E8ECF2; --fo-text-2:#B4BCC8; --fo-text-3:#8D97A5; --fo-text-disabled:#5A6370;
+      --fo-primary:#5B8DEF; --fo-primary-pressed:#7AA3F2; --fo-primary-tint:#1B2A45; --fo-on-primary:#0B1220;
+      --fo-activity:#FF7A3D; --fo-activity-strong:#FF9A66; --fo-activity-tint:#3A2216;
+      --fo-ok:#3FBF85; --fo-ok-tint:#123326; --fo-bad:#FF6B7F; --fo-bad-tint:#3A1820; --fo-bad-pressed:#FF8A9A;
+      --fo-chart-2:#B4BCC8; --fo-chart-grid:#252B34;
+      --fo-scrim:rgba(0,0,0,.6); --fo-toast-bg:#E8ECF2; --fo-toast-text:#141A23; --fo-toast-action:#1E5BD8;
+      --fo-sh-1:none; --fo-sh-2:0 8px 24px rgba(0,0,0,.5); --fo-sh-3:0 -8px 32px rgba(0,0,0,.55);
+    }
+
+    /* ---------- BASIS ---------- */
+    .fo-app{font-family:var(--fo-font);font-size:var(--fo-fs-body);line-height:var(--fo-lh-body);color:var(--fo-text);background:var(--fo-bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+    .fo-app *,.fo-app *::before,.fo-app *::after{box-sizing:border-box}
+    .fo-num{font-variant-numeric:tabular-nums}
+    .fo-muted{color:var(--fo-text-3)}
+    .fo-ok{color:var(--fo-ok)}
+    .fo-bad{color:var(--fo-bad)}
+    .fo-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+    /* Icons: 24er Raster, Linie 1.75, currentColor */
+    .fo-i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+    .fo-i--sm{width:16px;height:16px;stroke-width:2}
+    .fo-i--lg{width:24px;height:24px}
+    .fo-i--xl{width:32px;height:32px;stroke-width:1.6}
+
+    /* ---------- APP-LEISTE ---------- */
+    .fo-appbar{display:flex;align-items:center;gap:var(--fo-s2);min-height:var(--fo-appbar-h);padding:4px 4px 4px var(--fo-gutter);background:var(--fo-surface);border-bottom:1px solid var(--fo-line)}
+    .fo-appbar__text{flex:1;min-width:0}
+    .fo-appbar__title{margin:0;font-size:var(--fo-fs-title);line-height:var(--fo-lh-title);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fo-appbar__sub{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    /* ---------- BUTTONS ---------- */
+    .fo-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--fo-tap);padding:0 16px;border:1px solid transparent;border-radius:var(--fo-r-md);font:600 var(--fo-fs-body)/var(--fo-lh-body) var(--fo-font);white-space:nowrap;cursor:pointer;text-decoration:none;transition:background-color .12s,border-color .12s}
+    .fo-btn--primary{background:var(--fo-primary);color:var(--fo-on-primary)}
+    .fo-btn--primary:active,.fo-btn--primary.is-pressed{background:var(--fo-primary-pressed)}
+    .fo-btn--secondary{background:var(--fo-surface);color:var(--fo-text);border-color:var(--fo-line-strong)}
+    .fo-btn--secondary:active,.fo-btn--secondary.is-pressed{background:var(--fo-surface-3)}
+    .fo-btn--ghost{background:transparent;color:var(--fo-primary)}
+    .fo-btn--ghost:active,.fo-btn--ghost.is-pressed{background:var(--fo-primary-tint)}
+    .fo-btn--danger{background:var(--fo-surface);color:var(--fo-bad);border-color:var(--fo-line-strong)}
+    .fo-btn--danger:active,.fo-btn--danger.is-pressed{background:var(--fo-bad-tint);border-color:var(--fo-bad)}
+    .fo-btn--danger-solid{background:var(--fo-bad);color:#fff}
+    .fo-btn--danger-solid:active,.fo-btn--danger-solid.is-pressed{background:var(--fo-bad-pressed)}
+    .fo-btn--sm{padding:0 12px;font-size:var(--fo-fs-small)}
+    .fo-btn--block{display:flex;width:100%}
+    .fo-btn--dashed{background:transparent;color:var(--fo-primary);border:1px dashed var(--fo-line-strong)}
+    .fo-btn:disabled,.fo-btn.is-disabled{background:var(--fo-surface-2);color:var(--fo-text-disabled);border-color:transparent;cursor:not-allowed}
+    .fo-btn:focus-visible,.fo-iconbtn:focus-visible,.fo-seg__btn:focus-visible,.fo-chip:focus-visible,.fo-nav__item:focus-visible{outline:none;box-shadow:var(--fo-focus-ring)}
+    .fo-btnrow{display:flex;gap:var(--fo-s2)}
+    .fo-btnrow>.fo-btn{flex:1}
+
+    .fo-iconbtn{display:inline-grid;place-items:center;width:var(--fo-tap);height:var(--fo-tap);flex:none;padding:0;border:0;border-radius:var(--fo-r-md);background:transparent;color:var(--fo-text-2);cursor:pointer}
+    .fo-iconbtn:active,.fo-iconbtn.is-pressed{background:var(--fo-surface-3)}
+    .fo-iconbtn--boxed{border:1px solid var(--fo-line-strong);background:var(--fo-surface)}
+    .fo-iconbtn--primary{color:var(--fo-primary)}
+    .fo-iconbtn--danger{color:var(--fo-bad)}
+    .fo-iconbtn:disabled{color:var(--fo-text-disabled)}
+
+    /* ---------- SEGMENT-UMSCHALTER ---------- */
+    .fo-seg{display:flex;gap:2px;padding:3px;background:var(--fo-surface-2);border-radius:var(--fo-r-md)}
+    .fo-seg__btn{flex:1;min-height:38px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--fo-text-2);font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);cursor:pointer;white-space:nowrap}
+    .fo-seg__btn.is-active,.fo-seg__btn[aria-selected="true"]{background:var(--fo-surface);color:var(--fo-primary);box-shadow:var(--fo-sh-1),0 0 0 1px var(--fo-line)}
+    .fo-seg--inline{display:inline-flex}
+
+    /* ---------- DATUMSNAVIGATION ---------- */
+    .fo-datenav{display:flex;align-items:center;gap:4px}
+    .fo-datenav__label{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-height:var(--fo-tap);font-weight:650;font-size:16px}
+    .fo-tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:var(--fo-r-pill);background:var(--fo-primary-tint);color:var(--fo-primary);font:600 var(--fo-fs-micro)/var(--fo-lh-micro) var(--fo-font)}
+    .fo-tag--ok{background:var(--fo-ok-tint);color:var(--fo-ok)}
+    .fo-tag--bad{background:var(--fo-bad-tint);color:var(--fo-bad)}
+    .fo-tag--activity{background:var(--fo-activity-tint);color:var(--fo-activity-strong)}
+    .fo-tag--neutral{background:var(--fo-surface-2);color:var(--fo-text-2)}
+
+    /* ---------- KARTEN ---------- */
+    .fo-card{background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:var(--fo-r-lg);overflow:hidden}
+    .fo-card__head{display:flex;align-items:center;gap:var(--fo-s2);min-height:44px;padding:8px 8px 8px var(--fo-s3)}
+    .fo-card__title{margin:0;flex:1;min-width:0;font-size:var(--fo-fs-body);line-height:var(--fo-lh-body);font-weight:650}
+    .fo-card__meta{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-card__body{padding:var(--fo-s3)}
+    .fo-card__foot{padding:8px var(--fo-s3);border-top:1px solid var(--fo-line);font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-overline{margin:0;font:600 var(--fo-fs-micro)/var(--fo-lh-micro) var(--fo-font);letter-spacing:.06em;text-transform:uppercase;color:var(--fo-text-3)}
+
+    /* ---------- KENNZAHL-KACHELN ---------- */
+    .fo-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--fo-gap)}
+    .fo-kpi{display:flex;flex-direction:column;gap:2px;padding:10px var(--fo-s3);background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:var(--fo-r-lg);min-width:0}
+    .fo-kpi__label{font:600 var(--fo-fs-caption)/var(--fo-lh-caption) var(--fo-font);color:var(--fo-text-2)}
+    .fo-kpi__value{font:700 var(--fo-fs-kpi)/var(--fo-lh-kpi) var(--fo-font);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--fo-text)}
+    .fo-kpi__unit{font-size:var(--fo-fs-small);font-weight:600;color:var(--fo-text-3);margin-left:2px}
+    .fo-kpi .fo-bar{margin:6px 0 4px}
+    .fo-kpi__goal{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3);font-variant-numeric:tabular-nums}
+    .fo-delta{display:inline-flex;align-items:center;gap:3px;font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);font-variant-numeric:tabular-nums}
+    .fo-delta.is-ok,.is-ok>.fo-delta{color:var(--fo-ok)}
+    .fo-delta.is-bad,.is-bad>.fo-delta{color:var(--fo-bad)}
+    .fo-bar{height:4px;border-radius:var(--fo-r-pill);background:var(--fo-surface-3);overflow:hidden}
+    .fo-bar>span{display:block;height:100%;border-radius:inherit;background:var(--fo-primary)}
+    .fo-bar.is-ok>span{background:var(--fo-ok)}
+    .fo-bar.is-bad>span{background:var(--fo-bad)}
+    .fo-bar--activity>span{background:var(--fo-activity)}
+    .fo-bar--thick{height:8px}
+
+    /* ---------- LISTEN & ZEILEN ---------- */
+    .fo-list{list-style:none;margin:0;padding:0}
+    .fo-list>li+li{border-top:1px solid var(--fo-line)}
+    .fo-row{display:flex;align-items:center;gap:var(--fo-s3);min-height:52px;padding:6px var(--fo-s3);background:var(--fo-surface);width:100%;border:0;text-align:left;font:inherit;color:inherit}
+    button.fo-row{cursor:pointer}
+    button.fo-row:active{background:var(--fo-surface-2)}
+    .fo-row__icon{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:8px;background:var(--fo-activity-tint);color:var(--fo-activity)}
+    .fo-row__icon--rec{background:var(--fo-primary-tint);color:var(--fo-primary)}
+    .fo-row__icon--neutral{background:var(--fo-surface-2);color:var(--fo-text-2)}
+    .fo-row__main{flex:1;min-width:0}
+    .fo-row__title{display:flex;align-items:center;gap:6px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fo-row__sub{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+    .fo-row__end{flex:none;text-align:right;font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);font-variant-numeric:tabular-nums;white-space:nowrap}
+    .fo-row__end small{display:block;font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);font-weight:400;color:var(--fo-text-3)}
+    .fo-row__actions{display:flex;flex:none;margin-right:-8px}
+    .fo-row--child{padding-left:56px;background:var(--fo-surface-2);min-height:48px}
+    .fo-count{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--fo-r-pill);background:var(--fo-surface-2);color:var(--fo-text-2);font:600 var(--fo-fs-micro)/18px var(--fo-font);font-variant-numeric:tabular-nums}
+    .fo-chev{color:var(--fo-text-3);transition:transform .15s}
+    [aria-expanded="true"] .fo-chev{transform:rotate(180deg)}
+    .fo-kcal{display:inline-flex;align-items:center;gap:3px}
+    .fo-kcal .fo-i{color:var(--fo-activity);width:14px;height:14px;stroke-width:2}
+
+    /* Wischaktion: Inhalt verschiebt sich, Aktionen liegen darunter */
+    .fo-swipe{position:relative;overflow:hidden}
+    .fo-swipe__actions{position:absolute;inset:0 0 0 auto;display:flex}
+    .fo-swipe__action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:72px;border:0;font:600 var(--fo-fs-micro)/var(--fo-lh-micro) var(--fo-font);color:#fff;cursor:pointer}
+    .fo-swipe__action--primary{background:var(--fo-primary)}
+    .fo-swipe__action--danger{background:var(--fo-bad)}
+    .fo-swipe__content{position:relative;transform:translateX(0);transition:transform .2s}
+    .fo-swipe.is-open .fo-swipe__content{transform:translateX(-144px)}
+
+    /* ---------- ERHOLUNG (Oura) ---------- */
+    .fo-rec{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+    .fo-rec__cell{display:flex;gap:10px;align-items:flex-start;padding:10px var(--fo-s3);min-width:0}
+    .fo-rec__cell:nth-child(odd){border-right:1px solid var(--fo-line)}
+    .fo-rec__cell:nth-child(n+3){border-top:1px solid var(--fo-line)}
+    .fo-rec__icon{color:var(--fo-primary);margin-top:2px}
+    .fo-rec__label{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-rec__value{font:700 19px/24px var(--fo-font);font-variant-numeric:tabular-nums}
+    .fo-rec__value small{font-size:var(--fo-fs-small);font-weight:600;color:var(--fo-text-3)}
+    .fo-rec__trend{display:flex;align-items:center;gap:3px;font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-2);font-variant-numeric:tabular-nums}
+
+    /* ---------- ERNÄHRUNG ---------- */
+    .fo-sum{display:flex;flex-direction:column;gap:8px;padding:10px var(--fo-s3)}
+    .fo-sum__top{display:flex;align-items:baseline;gap:8px;font-variant-numeric:tabular-nums}
+    .fo-sum__kcal{font:700 20px/24px var(--fo-font)}
+    .fo-sum__goal{font-size:var(--fo-fs-small);color:var(--fo-text-3)}
+    .fo-sum__top .fo-delta{margin-left:auto}
+    .fo-macros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .fo-macro__label{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-macro__value{font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);font-variant-numeric:tabular-nums;color:var(--fo-text-3)}
+    .fo-macro__value b{font-weight:700}
+    .fo-macro__value.is-ok b{color:var(--fo-ok)}
+    .fo-macro__value.is-bad b{color:var(--fo-bad)}
+
+    .fo-meal{background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:var(--fo-r-lg);overflow:hidden}
+    .fo-meal__head{display:flex;align-items:center;gap:8px;min-height:56px;padding:6px 4px 6px 8px}
+    .fo-meal__toggle{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:44px;padding:0 4px;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:var(--fo-r-md)}
+    .fo-meal__name{font-weight:650}
+    .fo-meal__range{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-meal__nums{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums}
+    .fo-meal__kcal{font-weight:650;font-size:var(--fo-fs-body)}
+    .fo-meal__kcal small{font-weight:400;font-size:var(--fo-fs-caption);color:var(--fo-text-3);margin-left:2px}
+    .fo-meal__mac{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3);white-space:nowrap}
+    .fo-meal__body{border-top:1px solid var(--fo-line)}
+
+    .fo-food__star{color:var(--fo-line-strong)}
+    .fo-food__star.is-on{color:var(--fo-primary)}
+    .fo-food__star.is-on .fo-i{fill:currentColor}
+
+    /* ---------- FORMULARE ---------- */
+    .fo-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+    .fo-label{font:600 var(--fo-fs-caption)/var(--fo-lh-caption) var(--fo-font);color:var(--fo-text-2)}
+    .fo-help{font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3)}
+    .fo-help.is-error{color:var(--fo-bad)}
+    .fo-input,.fo-select select{width:100%;height:var(--fo-tap);padding:0 12px;border:1px solid var(--fo-line-strong);border-radius:var(--fo-r-md);background:var(--fo-surface);color:var(--fo-text);font:400 var(--fo-fs-body) var(--fo-font);font-variant-numeric:tabular-nums}
+    .fo-input::placeholder{color:var(--fo-text-3)}
+    .fo-input:focus,.fo-select select:focus,.fo-input.is-focus{outline:none;border-color:var(--fo-primary);box-shadow:var(--fo-focus-ring)}
+    .fo-input.is-error,.fo-input[aria-invalid="true"]{border-color:var(--fo-bad);box-shadow:0 0 0 1px var(--fo-bad)}
+    .fo-input:disabled,.fo-input[readonly],.fo-select select:disabled{background:var(--fo-surface-2);color:var(--fo-text-2);border-color:var(--fo-line)}
+    .fo-select{position:relative;min-width:0}
+    .fo-select select{appearance:none;-webkit-appearance:none;padding-right:36px;text-overflow:ellipsis}
+    .fo-select>.fo-i{position:absolute;right:10px;top:50%;margin-top:-10px;color:var(--fo-text-3);pointer-events:none}
+    .fo-select--compact select{font-size:var(--fo-fs-small);padding-left:10px;padding-right:30px}
+    .fo-select--compact>.fo-i{right:8px;width:16px;height:16px;margin-top:-8px}
+    .fo-inputicon{position:relative;flex:1;min-width:0}
+    .fo-inputicon>.fo-i{position:absolute;left:12px;top:50%;margin-top:-10px;color:var(--fo-text-3);pointer-events:none}
+    .fo-inputicon>.fo-input{padding-left:40px}
+    .fo-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--fo-s2)}
+    .fo-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--fo-s2)}
+    .fo-stepper{display:inline-flex;align-items:center;border:1px solid var(--fo-line-strong);border-radius:var(--fo-r-md);background:var(--fo-surface)}
+    .fo-stepper .fo-iconbtn{border-radius:0}
+    .fo-stepper__val{min-width:40px;text-align:center;font:650 var(--fo-fs-title)/var(--fo-lh-title) var(--fo-font);font-variant-numeric:tabular-nums}
+    .fo-setrow{display:grid;grid-template-columns:56px minmax(0,1fr);align-items:center;gap:var(--fo-s2)}
+    .fo-setrow__label{font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);color:var(--fo-text-2)}
+
+    /* ---------- CHIPS ---------- */
+    .fo-chips{display:flex;flex-wrap:wrap;gap:6px}
+    .fo-chip{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid var(--fo-line-strong);border-radius:var(--fo-r-pill);background:var(--fo-surface);color:var(--fo-text-2);font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);cursor:pointer;white-space:nowrap}
+    .fo-chip::after{content:"";position:absolute;inset:-4px 0}
+    .fo-chip.is-active,.fo-chip[aria-pressed="true"]{background:var(--fo-primary-tint);border-color:var(--fo-primary);color:var(--fo-primary)}
+    .fo-chip:disabled{color:var(--fo-text-disabled);border-color:var(--fo-line)}
+
+    /* ---------- TOAST ---------- */
+    .fo-toast{display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 4px 4px 14px;border-radius:12px;background:var(--fo-toast-bg);color:var(--fo-toast-text);box-shadow:var(--fo-sh-2);font-size:var(--fo-fs-small);line-height:var(--fo-lh-small)}
+    .fo-toast__text{flex:1;min-width:0}
+    .fo-toast__action{min-height:40px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--fo-toast-action);font:700 var(--fo-fs-small) var(--fo-font);cursor:pointer}
+    .fo-toast .fo-i.is-ok{color:#4CC38A}
+    .fo-toast .fo-i.is-bad{color:#FF8A9A}
+
+    /* ---------- SHEETS & MODALS ---------- */
+    .fo-scrim{background:var(--fo-scrim)}
+    .fo-sheet{display:flex;flex-direction:column;background:var(--fo-surface);border-radius:var(--fo-r-xl) var(--fo-r-xl) 0 0;box-shadow:var(--fo-sh-3);overflow:hidden}
+    .fo-sheet__grab{width:36px;height:4px;margin:8px auto 0;border-radius:var(--fo-r-pill);background:var(--fo-line-strong)}
+    .fo-sheet__head,.fo-modalbar{display:flex;align-items:center;gap:4px;min-height:52px;padding:4px 4px 4px var(--fo-s4);border-bottom:1px solid var(--fo-line);background:var(--fo-surface)}
+    .fo-modalbar{position:sticky;top:0;z-index:2;padding-left:4px;padding-right:var(--fo-s2)}
+    .fo-sheet__title{flex:1;min-width:0;margin:0;font-size:var(--fo-fs-title);line-height:var(--fo-lh-title);font-weight:650}
+    .fo-sheet__body{display:flex;flex-direction:column;gap:var(--fo-s3);padding:var(--fo-s3);overflow:auto}
+    .fo-sheet__foot{display:flex;gap:var(--fo-s2);padding:var(--fo-s3);border-top:1px solid var(--fo-line);background:var(--fo-surface)}
+    .fo-sheet__foot>.fo-btn{flex:1}
+    .fo-dialog{background:var(--fo-surface);border-radius:var(--fo-r-xl);box-shadow:var(--fo-sh-2);padding:var(--fo-s5) var(--fo-s4) var(--fo-s4)}
+
+    /* ---------- TABELLE ---------- */
+    .fo-tablewrap{overflow-x:auto;border:1px solid var(--fo-line);border-radius:var(--fo-r-lg)}
+    .fo-table{width:100%;border-collapse:collapse;font-size:var(--fo-fs-small);line-height:var(--fo-lh-small);font-variant-numeric:tabular-nums}
+    .fo-table th{padding:8px 10px;text-align:right;font:600 var(--fo-fs-micro)/var(--fo-lh-micro) var(--fo-font);letter-spacing:.04em;text-transform:uppercase;color:var(--fo-text-3);background:var(--fo-surface-2);border-bottom:1px solid var(--fo-line);white-space:nowrap}
+    .fo-table td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--fo-line);white-space:nowrap}
+    .fo-table th:first-child,.fo-table td:first-child{text-align:left}
+    .fo-table tr:last-child td{border-bottom:0}
+
+    /* ---------- DIAGRAMM-RAHMEN ---------- */
+    .fo-chart{display:flex;flex-direction:column;gap:8px;padding:var(--fo-s3);background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:var(--fo-r-lg)}
+    .fo-chart__head{display:flex;align-items:center;gap:8px}
+    .fo-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-2)}
+    .fo-legend__item{display:inline-flex;align-items:center;gap:6px}
+    .fo-legend__bar{width:10px;height:10px;border-radius:2px;background:var(--fo-chart-1)}
+    .fo-legend__line{width:14px;height:2px;border-radius:2px;background:var(--fo-chart-2)}
+    .fo-chart svg{display:block;width:100%;height:auto}
+    .fo-chart__axis{font:400 11px var(--fo-font);fill:var(--fo-text-3);font-variant-numeric:tabular-nums}
+
+    /* ---------- PLAN / CHECKBOX ---------- */
+    .fo-check{display:grid;place-items:center;width:26px;height:26px;flex:none;border:2px solid var(--fo-line-strong);border-radius:8px;background:var(--fo-surface);color:transparent}
+    .fo-check.is-on{background:var(--fo-primary);border-color:var(--fo-primary);color:#fff}
+    .fo-checkhit{display:grid;place-items:center;width:44px;height:44px;flex:none;margin:-6px 0 -6px -10px;border:0;background:transparent;cursor:pointer}
+
+    /* ---------- BOTTOM-NAVIGATION ---------- */
+    .fo-nav{display:flex;align-items:stretch;height:var(--fo-nav-h);padding:0 4px;background:var(--fo-surface);border-top:1px solid var(--fo-line)}
+    .fo-nav__item{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 2px;border:0;background:transparent;color:var(--fo-text-3);font:600 var(--fo-fs-micro)/var(--fo-lh-micro) var(--fo-font);letter-spacing:-.005em;text-decoration:none;white-space:nowrap;cursor:pointer}
+    .fo-nav__pill{display:grid;place-items:center;width:52px;height:28px;border-radius:var(--fo-r-pill)}
+    .fo-nav__item .fo-i{width:22px;height:22px}
+    .fo-nav__item.is-active,.fo-nav__item[aria-current="page"]{color:var(--fo-primary)}
+    .fo-nav__item.is-active .fo-nav__pill,.fo-nav__item[aria-current="page"] .fo-nav__pill{background:var(--fo-primary-tint)}
+
+    /* ---------- INTERVALL-ZIRKEL (Vollbild) ---------- */
+    .fo-timer{display:flex;flex-direction:column;background:var(--fo-surface);min-height:100%}
+    .fo-timer__top{display:flex;align-items:center;gap:8px;padding:4px 4px 4px var(--fo-s4);min-height:52px}
+    .fo-timer__count{flex:1;display:flex;gap:16px;font:650 var(--fo-fs-body)/var(--fo-lh-body) var(--fo-font);color:var(--fo-text-2);font-variant-numeric:tabular-nums}
+    .fo-timer__count b{color:var(--fo-text)}
+    .fo-timer__total{padding:0 var(--fo-s4)}
+    .fo-timer__totalmeta{display:flex;justify-content:space-between;margin-top:6px;font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-3);font-variant-numeric:tabular-nums}
+    .fo-timer__center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:var(--fo-s6) var(--fo-s4)}
+    .fo-phase{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--fo-r-pill);font:700 18px/24px var(--fo-font);letter-spacing:.08em;text-transform:uppercase}
+    .fo-phase--hold{background:var(--fo-activity-tint);color:var(--fo-activity-strong)}
+    .fo-phase--pause{background:var(--fo-primary-tint);color:var(--fo-primary)}
+    .fo-phase--prep{background:var(--fo-surface-2);color:var(--fo-text-2)}
+    .fo-timer__time{font:700 var(--fo-fs-timer)/1 var(--fo-font);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--fo-text)}
+    .fo-timer--hold .fo-timer__time{color:var(--fo-activity)}
+    .fo-timer--pause .fo-timer__time{color:var(--fo-primary)}
+    .fo-timer__phasebar{width:100%;max-width:320px}
+    .fo-timer--hold .fo-timer__phasebar>span{background:var(--fo-activity)}
+    .fo-timer--pause .fo-timer__phasebar>span{background:var(--fo-primary)}
+    .fo-timer__now{margin:6px 0 0;text-align:center;font:700 var(--fo-fs-display)/var(--fo-lh-display) var(--fo-font)}
+    .fo-timer__next{display:flex;align-items:center;gap:12px;margin:0 var(--fo-s4);padding:12px var(--fo-s4);background:var(--fo-surface-2);border-radius:var(--fo-r-lg)}
+    .fo-timer__nextname{font:650 var(--fo-fs-title)/var(--fo-lh-title) var(--fo-font)}
+    .fo-timer__controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:8px;padding:var(--fo-s5) var(--fo-s4) var(--fo-s6)}
+    .fo-roundbtn{display:flex;flex-direction:column;align-items:center;gap:6px;justify-self:center;border:0;background:transparent;color:var(--fo-text-2);font:600 var(--fo-fs-small)/var(--fo-lh-small) var(--fo-font);cursor:pointer}
+    .fo-roundbtn__c{display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:var(--fo-surface-2);color:var(--fo-text)}
+    .fo-roundbtn--main .fo-roundbtn__c{width:84px;height:84px;background:var(--fo-primary);color:var(--fo-on-primary)}
+    .fo-roundbtn--main{color:var(--fo-text)}
+    .fo-roundbtn--danger .fo-roundbtn__c{color:var(--fo-bad)}
+
+    /* ── Übergang bis Lauf 2: altes Markup auf den Tokens ─────────────────── */
+    /* Zeilenhöhe des alten Markups bleibt 1.5 (die Paket-Basis setzt 20px, das alte Markup hat viele größere Schriften ohne eigene Zeilenhöhe) */
+    body.fo-app { line-height: 1.5; }
+    /* Statusfarbe der Kachel-Differenz und der kompakten Tagebuch-Zeile, gesetzt per Klasse aus kpiStatus */
+    .fo-kpistat { color: var(--fo-text); }
+    [data-kpi-diff].is-ok, .fo-kpistat.is-ok { color: var(--fo-ok); }
+    [data-kpi-diff].is-bad, .fo-kpistat.is-bad { color: var(--fo-bad); }
+    [data-kpi-diff] { color: var(--fo-text-3); }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     :root {
-      --bg: #0a0a0a;
-      --surface: #1a1a1a;
-      --surface2: #2a2a2a;
-      --border: #333;
-      --text: #e8e8e8;
-      --muted: #888;
-      --primary: #4a9eff;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
+      --bg: var(--fo-bg);
+      --surface: var(--fo-surface);
+      --surface2: var(--fo-surface-2);
+      --border: var(--fo-line);
+      --text: var(--fo-text);
+      --muted: var(--fo-text-3);
+      --primary: var(--fo-primary);
+      --success: var(--fo-ok);
+      --danger: var(--fo-bad);
+      --warning: var(--fo-text-2);
     }
     
     *, *::before, *::after {
@@ -83,7 +454,7 @@
     
     .btn {
       background: var(--primary);
-      color: white;
+      color: var(--fo-on-primary);
       border: none;
       padding: 12px 24px;
       border-radius: 8px;
@@ -344,7 +715,7 @@
     .dash-btn.active {
       background: var(--primary);
       border-color: var(--primary);
-      color: white;
+      color: var(--fo-on-primary);
     }
 
     /* ── Responsive / Mobile-First ────────────────────────────────────────── */
@@ -478,7 +849,7 @@
     #bulk-kategorie-modal select.bk-sel { flex: 0 0 140px; width: 140px; min-width: 0; min-height: 44px; padding: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; }
   </style>
 </head>
-<body>
+<body class="fo-app">
   <!-- Login Screen -->
   <div id="login-screen" class="login-screen">
     <div class="login-box">
@@ -656,36 +1027,36 @@
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));grid-auto-rows:1fr;gap:12px;margin-bottom:20px;">
         <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
           <div style="font-size:26px;font-weight:600;line-height:1.15;" id="daily-kcal">0</div>
-          <div data-kpi-diff="kcal" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;color:var(--muted);">&nbsp;</div>
-          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
-            <div id="bar-kcal" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+          <div data-kpi-diff="kcal" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
+          <div class="fo-bar fo-bar--thick" style="position:relative;">
+            <span id="bar-kcal" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-kcal-label" style="display:none;">0%</span>
           </div>
           <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-kcal-goal">kcal</div>
         </div>
         <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:#4a9eff;" id="daily-protein">0g</div>
-          <div data-kpi-diff="protein" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;color:var(--muted);">&nbsp;</div>
-          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
-            <div id="bar-protein" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-protein">0g</div>
+          <div data-kpi-diff="protein" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
+          <div class="fo-bar fo-bar--thick" style="position:relative;">
+            <span id="bar-protein" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-protein-label" style="display:none;">0%</span>
           </div>
           <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-protein-goal">Protein</div>
         </div>
         <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:#ffd93d;" id="daily-carbs">0g</div>
-          <div data-kpi-diff="kh" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;color:var(--muted);">&nbsp;</div>
-          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
-            <div id="bar-carbs" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-carbs">0g</div>
+          <div data-kpi-diff="kh" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
+          <div class="fo-bar fo-bar--thick" style="position:relative;">
+            <span id="bar-carbs" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-carbs-label" style="display:none;">0%</span>
           </div>
           <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-carbs-goal">Kohlenhydrate</div>
         </div>
         <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:#ff6b9d;" id="daily-fat">0g</div>
-          <div data-kpi-diff="fett" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;color:var(--muted);">&nbsp;</div>
-          <div style="background:var(--bg);border-radius:6px;height:12px;overflow:hidden;position:relative;">
-            <div id="bar-fat" style="height:100%;width:0%;background:#22c55e;border-radius:6px;transition:width 0.4s;"></div>
+          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-fat">0g</div>
+          <div data-kpi-diff="fett" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
+          <div class="fo-bar fo-bar--thick" style="position:relative;">
+            <span id="bar-fat" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-fat-label" style="display:none;">0%</span>
           </div>
           <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-fat-goal">Fett</div>
@@ -854,7 +1225,7 @@
               </optgroup>
             </select>
             <div style="display:flex;gap:6px;margin-top:6px;">
-              <button id="dash-type1-bar" onclick="setDashType1('bar',this)" style="flex:1;padding:5px;font-size:12px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer;">▋ Balken</button>
+              <button id="dash-type1-bar" onclick="setDashType1('bar',this)" style="flex:1;padding:5px;font-size:12px;background:var(--fo-primary);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">▋ Balken</button>
               <button id="dash-type1-line" onclick="setDashType1('line',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">╱ Linie</button>
             </div>
           </div>
@@ -885,7 +1256,7 @@
             <div id="dash-var2-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:5px;">Nicht verfügbar bei Aufschlüsselung</div>
             <div id="dash-type2-btns" style="display:flex;gap:6px;margin-top:6px;">
               <button id="dash-type2-bar" onclick="setDashType2('bar',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">▋ Balken</button>
-              <button id="dash-type2-line" onclick="setDashType2('line',this)" style="flex:1;padding:5px;font-size:12px;background:#e8e8e8;color:#111;border:none;border-radius:6px;cursor:pointer;">╱ Linie</button>
+              <button id="dash-type2-line" onclick="setDashType2('line',this)" style="flex:1;padding:5px;font-size:12px;background:var(--fo-chart-2);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">╱ Linie</button>
             </div>
           </div>
         </div>
@@ -905,7 +1276,7 @@
           </select>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:14px;">
-          <button id="workout-metric-total" onclick="setWorkoutMetric('total',this)" style="padding:5px 12px;font-size:12px;background:#4a9eff;color:#fff;border:none;border-radius:6px;cursor:pointer;">Σ Gesamt</button>
+          <button id="workout-metric-total" onclick="setWorkoutMetric('total',this)" style="padding:5px 12px;font-size:12px;background:var(--fo-primary);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">Σ Gesamt</button>
           <button id="workout-metric-max" onclick="setWorkoutMetric('max',this)" style="padding:5px 12px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">↑ Max/Set</button>
         </div>
         <div style="position:relative;height:220px;">
@@ -1092,12 +1463,12 @@
               <!-- Google Fit Integration -->
               <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
+                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
                   <h3 style="margin:0;">Google Fit</h3>
                 </div>
                 <div id="gfit-disconnected">
                   <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
-                  <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
+                  <button class="btn" onclick="connectGoogleFit()" style="background:var(--fo-primary);border-color:var(--fo-primary);width:100%;">Mit Google Fit verbinden</button>
                 </div>
                 <div id="gfit-connected" style="display:none;">
                   <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
@@ -1115,18 +1486,18 @@
               <!-- Oura Ring Integration -->
               <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:#1a1a2e;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
+                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
                   <h3 style="margin:0;">Oura Ring</h3>
                 </div>
                 <div id="oura-disconnected">
                   <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
-                  <button class="btn" onclick="connectOura()" style="background:#1a1a2e;border-color:#1a1a2e;width:100%;">Mit Oura verbinden</button>
+                  <button class="btn" onclick="connectOura()" style="background:var(--fo-primary);border-color:var(--fo-primary);width:100%;">Mit Oura verbinden</button>
                 </div>
                 <div id="oura-connected" style="display:none;">
                   <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
                     <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
                     <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
-                    <div style="font-size:12px;color:#f97316;margin-top:4px;display:none;" id="oura-error"></div>
+                    <div style="font-size:12px;color:var(--fo-bad);margin-top:4px;display:none;" id="oura-error"></div>
                   </div>
                   <button class="btn" onclick="syncOuraNow()" style="width:100%;">🔄 Jetzt synchronisieren</button>
                   <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
@@ -1151,7 +1522,7 @@
                   <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
                   <!-- Disconnected State -->
                   <div id="gdrive-disconnected">
-                    <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:#4285f4;border-color:#4285f4;">Mit Google Drive verbinden</button>
+                    <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:var(--fo-primary);border-color:var(--fo-primary);">Mit Google Drive verbinden</button>
                   </div>
                   <!-- Connected State -->
                   <div id="gdrive-connected" style="display:none;">
@@ -1215,21 +1586,21 @@
   <div id="toast" class="toast"></div>
 
   <!-- Custom Confirm Dialog -->
-  <div id="confirm-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;padding:20px;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+  <div id="confirm-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:99999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:340px;width:100%;box-shadow:var(--fo-sh-2);">
       <div id="confirm-icon" style="font-size:32px;text-align:center;margin-bottom:12px;">🗑️</div>
       <div id="confirm-message" style="font-size:16px;font-weight:500;text-align:center;margin-bottom:8px;color:var(--text);">Löschen?</div>
       <div id="confirm-submessage" style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;"></div>
       <div style="display:flex;gap:10px;">
         <button id="confirm-cancel" onclick="confirmDialogResolve(false)" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;cursor:pointer;">Abbrechen</button>
-        <button id="confirm-ok" onclick="confirmDialogResolve(true)" style="flex:1;padding:12px;background:var(--danger);border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer;">Löschen</button>
+        <button id="confirm-ok" onclick="confirmDialogResolve(true)" style="flex:1;padding:12px;background:var(--danger);border:none;border-radius:10px;color:var(--fo-on-primary);font-size:15px;font-weight:600;cursor:pointer;">Löschen</button>
       </div>
     </div>
   </div>
   
 
   <!-- Recipe Edit Modal -->
-  <div id="edit-recipe-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">
+  <div id="edit-recipe-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:10000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">
     <div style="max-width:650px;width:100%;background:var(--surface);border-radius:16px;border:1px solid var(--border);margin:30px auto;">
       <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <h3 id="recipe-modal-title">Rezept bearbeiten</h3>
@@ -1294,9 +1665,9 @@
 
       <!-- Legende -->
       <div style="display:flex;gap:8px;margin:12px 0;font-size:12px;flex-wrap:wrap;">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#1a3a1a;border:1px solid #10b981;border-radius:4px;padding:2px 8px;color:#10b981;">✓ Behalten</span> = Master dieser Gruppe</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#1a2a3a;border:1px solid #4a9eff;border-radius:4px;padding:2px 8px;color:#4a9eff;">⇒ Mergen</span> = wird in Master aufgelöst</span>
-        <span style="display:flex;align-items:center;gap:4px;"><span style="background:#2a1a2a;border:1px solid #a855f7;border-radius:4px;padding:2px 8px;color:#a855f7;">↗ Eigene Gruppe</span> = aus Gruppe entfernen</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-ok-tint);border:1px solid var(--fo-ok);border-radius:4px;padding:2px 8px;color:var(--fo-ok);">✓ Behalten</span> = Master dieser Gruppe</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-primary-tint);border:1px solid var(--fo-primary);border-radius:4px;padding:2px 8px;color:var(--fo-primary);">⇒ Mergen</span> = wird in Master aufgelöst</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="background:var(--fo-surface-2);border:1px solid var(--fo-text-2);border-radius:4px;padding:2px 8px;color:var(--fo-text-2);">↗ Eigene Gruppe</span> = aus Gruppe entfernen</span>
       </div>
 
       <div id="consolidate-groups"></div>
@@ -1304,7 +1675,7 @@
   </div>
 
   <!-- Bulk Zeit Modal -->
-  <div id="bulk-time-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+  <div id="bulk-time-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 16px;">🕐 Zeit ändern</h3>
       <div id="bulk-time-entry-list" style="max-height:200px;overflow-y:auto;margin-bottom:16px;"></div>
@@ -1320,7 +1691,7 @@
   </div>
 
   <!-- Plan-Einheit abhaken Modal -->
-  <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
+  <div id="plan-complete-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanComplete()">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">✓ Einheit eintragen</h3>
       <div id="plan-complete-title" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
@@ -1366,7 +1737,7 @@
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Notiz (optional)</label>
         <input type="text" id="plan-complete-notiz" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
       </div>
-      <div id="plan-complete-preview" style="font-size:13px;color:#f97316;margin-bottom:16px;"></div>
+      <div id="plan-complete-preview" style="font-size:13px;color:var(--fo-text);margin-bottom:16px;"></div>
       <div style="display:flex;gap:8px;">
         <button onclick="closePlanComplete()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
         <button id="plan-complete-save" onclick="savePlanComplete()" class="btn" style="flex:2;padding:12px;">Eintragen</button>
@@ -1375,7 +1746,7 @@
   </div>
 
   <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
-  <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
+  <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 16px;">🔄 Ad-hoc Zirkel starten</h3>
       <select id="zirkel-adhoc-select" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px;"></select>
@@ -1395,7 +1766,7 @@
   </div>
 
   <!-- Intervall-Zirkel konfigurieren (Haltezeit-Schritte mit Pausen, Vorlagen) -->
-  <div id="interval-config-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+  <div id="interval-config-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 20px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;max-height:92vh;overflow-y:auto;">
       <h3 style="margin:0 0 14px;">⏱ Intervall-Zirkel</h3>
       <div id="interval-config-body"></div>
@@ -1411,7 +1782,7 @@
   </div>
 
   <!-- Kopieren Modal -->
-  <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+  <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">⧉ Eintrag kopieren</h3>
       <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
@@ -1453,7 +1824,7 @@
   </div>
 
   <!-- FoodDB Edit Modal -->
-  <div id="edit-fooddb-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+  <div id="edit-fooddb-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:10000;align-items:center;justify-content:center;padding:20px;">
     <div style="max-width:500px;width:100%;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
       <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <h3 id="fooddb-modal-title">Lebensmittel bearbeiten</h3>
@@ -1517,7 +1888,7 @@
   </div>
   
   <!-- Add Food Modal -->
-  <div id="add-food-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;">
+  <div id="add-food-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;overflow-y:auto;">
     <div style="max-width:600px;margin:0 auto;background:var(--surface);border-radius:0 0 16px 16px;border:1px solid var(--border);min-height:100vh;">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <h3 id="add-food-title" style="font-size:16px;">Essen hinzufügen</h3>
@@ -1527,7 +1898,7 @@
       <div style="padding:12px 16px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
         <!-- Mode Toggle: Lebensmittel | Rezepte -->
         <div id="add-food-mode-tabs" style="display:flex;gap:0;margin-bottom:12px;background:var(--bg);border-radius:8px;padding:4px;">
-          <button id="mode-tab-food" onclick="setAddFoodMode('food')" style="flex:1;padding:8px;background:var(--primary);border:none;border-radius:6px;color:white;font-size:14px;font-weight:500;cursor:pointer;">Lebensmittel</button>
+          <button id="mode-tab-food" onclick="setAddFoodMode('food')" style="flex:1;padding:8px;background:var(--primary);border:none;border-radius:6px;color:var(--fo-on-primary);font-size:14px;font-weight:500;cursor:pointer;">Lebensmittel</button>
           <button id="mode-tab-recipe" onclick="setAddFoodMode('recipe')" style="flex:1;padding:8px;background:none;border:none;border-radius:6px;color:var(--muted);font-size:14px;cursor:pointer;">Rezepte</button>
         </div>
 
@@ -1603,7 +1974,7 @@
               <div style="font-size:12px;color:var(--muted);margin-bottom:10px;" id="selected-recipe-info"></div>
               <!-- Toggle Portionen / Gramm -->
               <div style="display:flex;gap:0;margin-bottom:10px;background:var(--surface);border-radius:6px;padding:3px;">
-                <button id="recipe-mode-portions-btn" onclick="setRecipeInputMode('portions')" style="flex:1;padding:6px;background:var(--primary);border:none;border-radius:4px;color:white;font-size:13px;cursor:pointer;">Portionen</button>
+                <button id="recipe-mode-portions-btn" onclick="setRecipeInputMode('portions')" style="flex:1;padding:6px;background:var(--primary);border:none;border-radius:4px;color:var(--fo-on-primary);font-size:13px;cursor:pointer;">Portionen</button>
                 <button id="recipe-mode-grams-btn" onclick="setRecipeInputMode('grams')" style="flex:1;padding:6px;background:none;border:none;border-radius:4px;color:var(--muted);font-size:13px;cursor:pointer;">Gramm</button>
               </div>
               <div id="recipe-input-portions">
@@ -2145,32 +2516,32 @@
 
     window.setWorkoutMetric = function(metric, el) {
       workoutMetric = metric;
-      document.getElementById('workout-metric-total').style.background = metric === 'total' ? '#4a9eff' : 'var(--bg)';
-      document.getElementById('workout-metric-total').style.color = metric === 'total' ? '#fff' : 'var(--muted)';
+      document.getElementById('workout-metric-total').style.background = metric === 'total' ? 'var(--fo-primary)' : 'var(--bg)';
+      document.getElementById('workout-metric-total').style.color = metric === 'total' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('workout-metric-total').style.border = metric === 'total' ? 'none' : '1px solid var(--border)';
-      document.getElementById('workout-metric-max').style.background = metric === 'max' ? '#4a9eff' : 'var(--bg)';
-      document.getElementById('workout-metric-max').style.color = metric === 'max' ? '#fff' : 'var(--muted)';
+      document.getElementById('workout-metric-max').style.background = metric === 'max' ? 'var(--fo-primary)' : 'var(--bg)';
+      document.getElementById('workout-metric-max').style.color = metric === 'max' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('workout-metric-max').style.border = metric === 'max' ? 'none' : '1px solid var(--border)';
       renderWorkoutChart();
     };
 
     window.setDashType1 = function(type, el) {
       dashChart1 = type;
-      document.getElementById('dash-type1-bar').style.background = type === 'bar' ? '#4a9eff' : 'var(--bg)';
-      document.getElementById('dash-type1-bar').style.color = type === 'bar' ? '#fff' : 'var(--muted)';
+      document.getElementById('dash-type1-bar').style.background = type === 'bar' ? 'var(--fo-primary)' : 'var(--bg)';
+      document.getElementById('dash-type1-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('dash-type1-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
-      document.getElementById('dash-type1-line').style.background = type === 'line' ? '#4a9eff' : 'var(--bg)';
-      document.getElementById('dash-type1-line').style.color = type === 'line' ? '#fff' : 'var(--muted)';
+      document.getElementById('dash-type1-line').style.background = type === 'line' ? 'var(--fo-primary)' : 'var(--bg)';
+      document.getElementById('dash-type1-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('dash-type1-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
       renderDashboard();
     };
     window.setDashType2 = function(type, el) {
       dashChart2 = type;
-      document.getElementById('dash-type2-bar').style.background = type === 'bar' ? '#e8e8e8' : 'var(--bg)';
-      document.getElementById('dash-type2-bar').style.color = type === 'bar' ? '#111' : 'var(--muted)';
+      document.getElementById('dash-type2-bar').style.background = type === 'bar' ? 'var(--fo-chart-2)' : 'var(--bg)';
+      document.getElementById('dash-type2-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('dash-type2-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
-      document.getElementById('dash-type2-line').style.background = type === 'line' ? '#e8e8e8' : 'var(--bg)';
-      document.getElementById('dash-type2-line').style.color = type === 'line' ? '#111' : 'var(--muted)';
+      document.getElementById('dash-type2-line').style.background = type === 'line' ? 'var(--fo-chart-2)' : 'var(--bg)';
+      document.getElementById('dash-type2-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('dash-type2-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
       renderDashboard();
     };
@@ -2459,6 +2830,18 @@
     const TYPE_LABELS_W = {
       pullups: 'Pull-ups', pushups: 'Push-ups', lunges: 'Lunges'
     };
+    // Diagrammfarben zur Laufzeit aus den Fuelofit-Variablen (Fallback = Werte des hellen Themas, z. B. wenn getComputedStyle keine Custom Properties liefert)
+    const FO_CHART_FALLBACK = { 'chart-1': '#1E5BD8', 'chart-2': '#4A5463', 'chart-3': '#F25F1C', 'chart-grid': '#EDF0F4', 'text': '#141A23', 'text-3': '#626C7B' };
+    function foColor(name) {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--fo-' + name).trim();
+      return v || FO_CHART_FALLBACK[name];
+    }
+    function foAlpha(hex, a) {
+      const m = /^#([0-9a-f]{6})$/i.exec(hex);
+      if (!m) return hex;
+      const n = parseInt(m[1], 16);
+      return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+    }
     const WORKOUT_COLORS = ['#4a9eff','#f97316','#22c55e','#a78bfa','#ffd93d','#ff6b9d','#10b981','#f43f5e','#06b6d4'];
 
     function populateWorkoutTypeSelect() {
@@ -2577,13 +2960,13 @@
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            legend: { labels: { color: '#e8e8e8', font: { size: 11 }, boxWidth: 12 } },
+            legend: { labels: { color: foColor('text'), font: { size: 11 }, boxWidth: 12 } },
             tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y} Wdh.` } }
           },
           scales: {
-            x: { ticks: { color: '#888', maxRotation: 45 }, grid: { color: '#2a2a2a' } },
-            y: { ticks: { color: '#888' }, grid: { color: '#2a2a2a' }, beginAtZero: true,
-                 title: { display: true, text: yLabel, color: '#888' } }
+            x: { ticks: { color: foColor('text-3'), maxRotation: 45 }, grid: { color: foColor('chart-grid') } },
+            y: { ticks: { color: foColor('text-3') }, grid: { color: foColor('chart-grid') }, beginAtZero: true,
+                 title: { display: true, text: yLabel, color: foColor('text-3') } }
           }
         }
       });
@@ -2663,16 +3046,16 @@
           data: {
             labels: bLabels,
             datasets: [
-              { label: 'Basis (BMR)', data: basisArr, backgroundColor: '#3b82f6', stack: 'kcal' },
-              { label: 'Aktivität (Sport)', data: actArr, backgroundColor: '#f97316', stack: 'kcal' },
-              { label: 'Alltag (Schritte)', data: dailyArr, backgroundColor: '#22c55e', stack: 'kcal' }
+              { label: 'Basis (BMR)', data: basisArr, backgroundColor: foColor('chart-1'), stack: 'kcal' },
+              { label: 'Aktivität (Sport)', data: actArr, backgroundColor: foColor('chart-3'), stack: 'kcal' },
+              { label: 'Alltag (Schritte)', data: dailyArr, backgroundColor: foColor('chart-2'), stack: 'kcal' }
             ]
           },
           options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: { labels: { color: '#e8e8e8', font: { size: 12 } } },
+              legend: { labels: { color: foColor('text'), font: { size: 12 } } },
               tooltip: {
                 callbacks: {
                   footer: (items) => {
@@ -2683,8 +3066,8 @@
               }
             },
             scales: {
-              x: { stacked: true, ticks: { color: '#888', maxTicksLimit: 12 }, grid: { color: '#222' } },
-              y: { stacked: true, ticks: { color: '#888' }, grid: { color: '#222' }, title: { display: true, text: 'kcal', color: '#888' } }
+              x: { stacked: true, ticks: { color: foColor('text-3'), maxTicksLimit: 12 }, grid: { color: foColor('chart-grid') } },
+              y: { stacked: true, ticks: { color: foColor('text-3') }, grid: { color: foColor('chart-grid') }, title: { display: true, text: 'kcal', color: foColor('text-3') } }
             }
           }
         });
@@ -2791,7 +3174,7 @@
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: { labels: { color: '#e8e8e8', font: { size: 11 }, boxWidth: 12 } },
+              legend: { labels: { color: foColor('text'), font: { size: 11 }, boxWidth: 12 } },
               tooltip: {
                 callbacks: {
                   label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%`,
@@ -2805,11 +3188,11 @@
               }
             },
             scales: {
-              x: { stacked: true, ticks: { color: '#888', maxTicksLimit: 14 }, grid: { color: '#222' } },
+              x: { stacked: true, ticks: { color: foColor('text-3'), maxTicksLimit: 14 }, grid: { color: foColor('chart-grid') } },
               y: { stacked: true, min: 0, max: 100,
-                   ticks: { color: '#888', callback: v => v + '%' },
-                   grid: { color: '#222' },
-                   title: { display: true, text: 'Anteil (%)', color: '#888' } }
+                   ticks: { color: foColor('text-3'), callback: v => v + '%' },
+                   grid: { color: foColor('chart-grid') },
+                   title: { display: true, text: 'Anteil (%)', color: foColor('text-3') } }
             }
           }
         });
@@ -2832,8 +3215,8 @@
         };
         const sameAxis = !var2 || unitGroup(var1) === unitGroup(var2);
 
-        const COL1 = '#4a9eff';
-        const COL2 = '#e8e8e8';
+        const COL1 = foColor('chart-1');
+        const COL2 = foColor('chart-2');
 
         const chartLabels = alignedLabels;
         const datasets = [];
@@ -2852,7 +3235,7 @@
           label: getVarLabel(var1),
           data: aligned1.map(d => d.value),
           borderColor: COL1,
-          backgroundColor: dashChart1 === 'bar' ? COL1 : 'rgba(74,158,255,0.15)',
+          backgroundColor: dashChart1 === 'bar' ? COL1 : foAlpha(COL1, 0.15),
           tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
           yAxisID: 'y', spanGaps: true, order: dashChart1 === 'line' ? 0 : 1
         });
@@ -2861,7 +3244,7 @@
           label: getVarLabel(var2),
           data: aligned2.map(d => d.value),
           borderColor: COL2,
-          backgroundColor: dashChart2 === 'bar' ? COL2 : 'rgba(232,232,232,0.15)',
+          backgroundColor: dashChart2 === 'bar' ? COL2 : foAlpha(COL2, 0.15),
           tension: 0.3, pointRadius: chartLabels.length > 60 ? 0 : 3,
           yAxisID: sameAxis ? 'y' : 'y2', spanGaps: true, order: dashChart2 === 'line' ? 0 : 1
         });
@@ -2874,12 +3257,12 @@
           options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { labels: { color: '#e8e8e8', font: { size: 12 } } } },
+            plugins: { legend: { labels: { color: foColor('text'), font: { size: 12 } } } },
             scales: {
-              x: { ticks: { color: '#888', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: '#222' } },
-              y: { ticks: { color: '#888' }, grid: { color: '#222' }, position: 'left' },
+              x: { ticks: { color: foColor('text-3'), maxTicksLimit: 12, maxRotation: 0 }, grid: { color: foColor('chart-grid') } },
+              y: { ticks: { color: foColor('text-3') }, grid: { color: foColor('chart-grid') }, position: 'left' },
               y2: {
-                ticks: { color: '#888' }, grid: { display: false }, position: 'right',
+                ticks: { color: foColor('text-3') }, grid: { display: false }, position: 'right',
                 display: !sameAxis
               }
             }
@@ -2906,15 +3289,15 @@
       };
 
       const tiles = [
-        { label: 'Ø Kalorien (7 Tage)', value: avg('kcal'), unit: 'kcal', color: '#4a9eff' },
-        { label: 'Ø Protein (7 Tage)', value: avg('protein'), unit: 'g', color: '#4a9eff' },
-        { label: 'Aktuelles Gewicht', value: latest('weight'), unit: 'kg', color: '#10b981' },
-        { label: 'Laufkm (7 Tage)', value: sum('run_km'), unit: 'km', color: '#22d3ee' },
-        { label: 'Ø Gesamtschritte', value: avg('steps_total'), unit: '', color: '#a78bfa' },
-        { label: 'Ø Aktivitätsschritte', value: avg('steps_activity'), unit: '', color: '#f59e0b' },
-        { label: 'Ø Alltagsschritte', value: avg('steps_daily'), unit: '', color: '#34d399' },
-        { label: 'Ø Aktivitätskalorien', value: avg('act_kcal_calc'), unit: 'kcal', color: '#f97316' },
-        { label: 'Trainings (7 Tage)', value: sum('trainings'), unit: '', color: '#818cf8' },
+        { label: 'Ø Kalorien (7 Tage)', value: avg('kcal'), unit: 'kcal', color: 'var(--fo-text)' },
+        { label: 'Ø Protein (7 Tage)', value: avg('protein'), unit: 'g', color: 'var(--fo-text)' },
+        { label: 'Aktuelles Gewicht', value: latest('weight'), unit: 'kg', color: 'var(--fo-text)' },
+        { label: 'Laufkm (7 Tage)', value: sum('run_km'), unit: 'km', color: 'var(--fo-text)' },
+        { label: 'Ø Gesamtschritte', value: avg('steps_total'), unit: '', color: 'var(--fo-text)' },
+        { label: 'Ø Aktivitätsschritte', value: avg('steps_activity'), unit: '', color: 'var(--fo-text)' },
+        { label: 'Ø Alltagsschritte', value: avg('steps_daily'), unit: '', color: 'var(--fo-text)' },
+        { label: 'Ø Aktivitätskalorien', value: avg('act_kcal_calc'), unit: 'kcal', color: 'var(--fo-text)' },
+        { label: 'Trainings (7 Tage)', value: sum('trainings'), unit: '', color: 'var(--fo-text)' },
       ];
 
       document.getElementById('dash-tiles').innerHTML = tiles.map(t => `
@@ -2952,14 +3335,14 @@
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
             const label = typeLabels[typ] || customTypeLabel(typ, e);
-            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:#1a2a3a;color:#4285f4;padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
+            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:var(--fo-surface-2);color:var(--fo-text-2);padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:var(--fo-primary-tint);color:var(--fo-primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
             return `
               <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div style="font-weight:500;font-size:14px;">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
                   <div style="font-size:12px;color:var(--muted);">${e.datum} · ${isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || '')}</div>
                 </div>
-                ${calcKcal > 0 ? `<div style="font-size:14px;font-weight:600;color:#f97316;">${fmt(calcKcal)} kcal</div>` : ''}
+                ${calcKcal > 0 ? `<div style="font-size:14px;font-weight:600;color:var(--fo-text);">${fmt(calcKcal)} kcal</div>` : ''}
               </div>
             `;
           }).join('');
@@ -3048,7 +3431,7 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? '#FFD93D' : 'var(--muted)'};padding:4px;">★</button>
+            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;">★</button>
             <button onclick="editFoodDB('${f.id}')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;">Bearbeiten</button>
             <button onclick="deleteFoodDB('${f.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
           </div>
@@ -3140,21 +3523,21 @@
             ${group.map((f, fi) => {
               const d = decisions[fi];
               const isMaster = d === 'keep' && fi === masterIdx;
-              const borderColor = d === 'keep' ? '#10b981' : d === 'merge' ? '#4a9eff' : '#a855f7';
-              const bg = d === 'keep' ? 'rgba(16,185,129,0.08)' : d === 'merge' ? 'rgba(74,158,255,0.08)' : 'rgba(168,85,247,0.08)';
+              const borderColor = d === 'keep' ? 'var(--fo-ok)' : d === 'merge' ? 'var(--fo-primary)' : 'var(--fo-text-2)';
+              const bg = d === 'keep' ? 'var(--fo-ok-tint)' : d === 'merge' ? 'var(--fo-primary-tint)' : 'var(--fo-surface-2)';
               return `
                 <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px;background:${bg};border:1px solid ${borderColor}30;">
                   <div style="flex:1;min-width:0;">
-                    <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}${isMaster ? ' <span style="font-size:10px;background:#10b981;color:#000;padding:1px 5px;border-radius:3px;margin-left:4px;">MASTER</span>' : ''}</div>
+                    <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}${isMaster ? ' <span style="font-size:10px;background:var(--fo-ok);color:var(--fo-on-primary);padding:1px 5px;border-radius:3px;margin-left:4px;">MASTER</span>' : ''}</div>
                     <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
                   </div>
                   <div style="display:flex;gap:4px;flex-shrink:0;">
                     <button onclick="setDecision(${gi},${fi},'keep')"
-                      style="padding:5px 10px;border-radius:6px;border:1px solid #10b981;background:${d==='keep'?'#10b981':'transparent'};color:${d==='keep'?'#000':'#10b981'};cursor:pointer;font-size:12px;font-weight:600;">✓ Behalten</button>
+                      style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-ok);background:${d==='keep'?'var(--fo-ok)':'transparent'};color:${d==='keep'?'var(--fo-on-primary)':'var(--fo-ok)'};cursor:pointer;font-size:12px;font-weight:600;">✓ Behalten</button>
                     <button onclick="setDecision(${gi},${fi},'merge')"
-                      style="padding:5px 10px;border-radius:6px;border:1px solid #4a9eff;background:${d==='merge'?'#4a9eff':'transparent'};color:${d==='merge'?'#000':'#4a9eff'};cursor:pointer;font-size:12px;font-weight:600;">⇒ Mergen</button>
+                      style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-primary);background:${d==='merge'?'var(--fo-primary)':'transparent'};color:${d==='merge'?'var(--fo-on-primary)':'var(--fo-primary)'};cursor:pointer;font-size:12px;font-weight:600;">⇒ Mergen</button>
                     <button onclick="setDecision(${gi},${fi},'split')"
-                      style="padding:5px 10px;border-radius:6px;border:1px solid #a855f7;background:${d==='split'?'#a855f7':'transparent'};color:${d==='split'?'#000':'#a855f7'};cursor:pointer;font-size:12px;font-weight:600;">↗ Eigene</button>
+                      style="padding:5px 10px;border-radius:6px;border:1px solid var(--fo-text-2);background:${d==='split'?'var(--fo-text-2)':'transparent'};color:${d==='split'?'var(--fo-on-primary)':'var(--fo-text-2)'};cursor:pointer;font-size:12px;font-weight:600;">↗ Eigene</button>
                   </div>
                 </div>`;
             }).join('')}
@@ -3579,7 +3962,7 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:12px;">
               <button onclick="event.stopPropagation();toggleFavorite('recipe_${r.id}', event)"
-                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? '#FFD93D' : 'var(--muted)'};padding:4px;">★</button>
+                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;">★</button>
               <button onclick="event.stopPropagation();deleteRecipe('${r.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
             </div>
           </div>
@@ -3659,15 +4042,15 @@
             <div style="font-size:10px;color:var(--muted);">kcal</div>
           </div>
           <div style="background:var(--bg);padding:8px 4px;border-radius:8px;text-align:center;min-width:0;">
-            <div style="font-size:16px;font-weight:600;color:#4a9eff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.protein)}g</div>
+            <div style="font-size:16px;font-weight:600;color:var(--fo-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.protein)}g</div>
             <div style="font-size:10px;color:var(--muted);">Protein</div>
           </div>
           <div style="background:var(--bg);padding:8px 4px;border-radius:8px;text-align:center;min-width:0;">
-            <div style="font-size:16px;font-weight:600;color:#ffd93d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.carbs)}g</div>
+            <div style="font-size:16px;font-weight:600;color:var(--fo-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.carbs)}g</div>
             <div style="font-size:10px;color:var(--muted);">KH</div>
           </div>
           <div style="background:var(--bg);padding:8px 4px;border-radius:8px;text-align:center;min-width:0;">
-            <div style="font-size:16px;font-weight:600;color:#ff6b9d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.fat)}g</div>
+            <div style="font-size:16px;font-weight:600;color:var(--fo-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fmt(nutr.fat)}g</div>
             <div style="font-size:10px;color:var(--muted);">Fett</div>
           </div>
         </div>
@@ -4115,23 +4498,26 @@
         const istR = Math.round(Number(ist) || 0);
         const zielR = Math.round(Number(ziel) || 0);
         const status = kpiStatus(kennzahl, istR, zielR).status;
-        const color = status === 'green' ? 'var(--success)' : status === 'red' ? 'var(--danger)' : null;
+        const cls = status === 'green' ? 'is-ok' : status === 'red' ? 'is-bad' : null;
         const d = istR - zielR;
-        return { istR, zielR, color, diffText: `${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(d))}` };
+        return { istR, zielR, cls, diffText: `${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(d))}` };
       };
       const setBar = (id, pct, kennzahl, ist, ziel, unit) => {
-        const { color, diffText } = kpiDisplay(kennzahl, ist, ziel);
+        const { cls, diffText } = kpiDisplay(kennzahl, ist, ziel);
         const bar = document.getElementById(id);
         const label = document.getElementById(id + '-label');
         if (bar) {
           bar.style.width = Math.min(100, pct) + '%';
-          bar.style.background = color || (pct > 100 ? '#ef4444' : '#22c55e');
+          const barCls = cls || (pct > 100 ? 'is-bad' : 'is-ok');
+          bar.parentElement.classList.toggle('is-ok', barCls === 'is-ok');
+          bar.parentElement.classList.toggle('is-bad', barCls === 'is-bad');
         }
         if (label) label.textContent = pct + '%';
         const diffEl = document.querySelector(`[data-kpi-diff="${kennzahl}"]`);
         if (diffEl) {
-          diffEl.textContent = color ? `${diffText} ${unit}` : 'kein Ziel';
-          diffEl.style.color = color || 'var(--muted)';
+          diffEl.textContent = cls ? `${diffText} ${unit}` : 'kein Ziel';
+          diffEl.classList.toggle('is-ok', cls === 'is-ok');
+          diffEl.classList.toggle('is-bad', cls === 'is-bad');
         }
       };
       setBar('bar-kcal', kcalPct, 'kcal', totalKcal, todayGoal, 'kcal');
@@ -4148,8 +4534,8 @@
       const kcalLine = document.getElementById('diary-kcal-line');
       if (kcalLine) {
         const k = kpiDisplay('kcal', totalKcal, todayGoal);
-        kcalLine.innerHTML = k.color
-          ? `${fmt(k.istR)} / ${fmt(k.zielR)} kcal · <span style="color:${k.color};">${k.diffText}</span>`
+        kcalLine.innerHTML = k.cls
+          ? `${fmt(k.istR)} / ${fmt(k.zielR)} kcal · <span class="fo-kpistat ${k.cls}">${k.diffText}</span>`
           : `${fmt(k.istR)} kcal · <span style="color:var(--muted);">kein Ziel</span>`;
       }
       const macroLine = document.getElementById('diary-macro-line');
@@ -4157,7 +4543,7 @@
         macroLine.innerHTML = [['protein', 'Protein', totalProtein, proteinGoal], ['kh', 'Kohlenhydrate', totalCarbs, carbsGoal], ['fett', 'Fett', totalFat, fatGoal]]
           .map(([kennzahl, label, ist, ziel]) => {
             const m = kpiDisplay(kennzahl, ist, ziel);
-            return `${label} <span style="color:${m.color || 'var(--text)'};">${fmt(m.istR)}</span>${m.color ? ' / ' + fmt(m.zielR) : ''} g`;
+            return `${label} <span class="fo-kpistat ${m.cls || ''}">${fmt(m.istR)}</span>${m.cls ? ' / ' + fmt(m.zielR) : ''} g`;
           }).join(' · ');
       }
 
@@ -4213,7 +4599,7 @@
                 ${details ? `<div style="font-size:12px;color:var(--muted);">${details}</div>` : ''}
               </div>
             </div>
-            ${kcal > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;">${fmt(kcal)} kcal</span>` : ''}
+            ${kcal > 0 ? `<span style="font-size:13px;color:var(--fo-text);font-weight:600;">${fmt(kcal)} kcal</span>` : ''}
           </div>`;
         };
 
@@ -4249,7 +4635,7 @@
                   ${sumMeta ? `<div style="font-size:12px;color:var(--muted);">${sumMeta}</div>` : ''}
                 </div>
               </div>
-              ${kcalSum > 0 ? `<span style="font-size:13px;color:#f97316;font-weight:600;flex-shrink:0;">${fmt(kcalSum)} kcal</span>` : ''}
+              ${kcalSum > 0 ? `<span style="font-size:13px;color:var(--fo-text);font-weight:600;flex-shrink:0;">${fmt(kcalSum)} kcal</span>` : ''}
             </div>
             <div class="activity-group-items" style="display:${isOpen ? 'block' : 'none'};">
               ${g.items.map(activityRowHtml).join('')}
@@ -4345,9 +4731,9 @@
           <div class="meal-header" onclick="toggleMeal(this)">
             <div class="meal-title">${isExpanded ? '▼' : '▶'} ${mealName}</div>
             <div style="display:flex;gap:8px;align-items:center;font-size:12px;">
-              <span style="color:#4a9eff;">P ${Math.round(mealProtein)}g</span>
-              <span style="color:#ffd93d;">K ${Math.round(mealCarbs)}g</span>
-              <span style="color:#ff6b9d;">F ${Math.round(mealFat)}g</span>
+              <span style="color:var(--fo-text-3);">P ${Math.round(mealProtein)}g</span>
+              <span style="color:var(--fo-text-3);">K ${Math.round(mealCarbs)}g</span>
+              <span style="color:var(--fo-text-3);">F ${Math.round(mealFat)}g</span>
               <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
               <button onclick="event.stopPropagation();openBulkTimeEdit('${key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern">🕐</button>
             </div>
@@ -4450,9 +4836,9 @@
       document.getElementById('mode-food').style.display = mode === 'food' ? 'block' : 'none';
       document.getElementById('mode-recipe').style.display = mode === 'recipe' ? 'block' : 'none';
       document.getElementById('mode-tab-food').style.background = mode === 'food' ? 'var(--primary)' : 'none';
-      document.getElementById('mode-tab-food').style.color = mode === 'food' ? 'white' : 'var(--muted)';
+      document.getElementById('mode-tab-food').style.color = mode === 'food' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('mode-tab-recipe').style.background = mode === 'recipe' ? 'var(--primary)' : 'none';
-      document.getElementById('mode-tab-recipe').style.color = mode === 'recipe' ? 'white' : 'var(--muted)';
+      document.getElementById('mode-tab-recipe').style.color = mode === 'recipe' ? 'var(--fo-on-primary)' : 'var(--muted)';
       // Suchbegriff in beiden Tabs setzen und im aktiven Tab suchen
       if (foodSearchEl) foodSearchEl.value = term;
       if (recipeSearchEl) recipeSearchEl.value = term;
@@ -4488,9 +4874,9 @@
       document.getElementById('recipe-input-portions').style.display = mode === 'portions' ? 'block' : 'none';
       document.getElementById('recipe-input-grams').style.display = mode === 'grams' ? 'block' : 'none';
       document.getElementById('recipe-mode-portions-btn').style.background = mode === 'portions' ? 'var(--primary)' : 'none';
-      document.getElementById('recipe-mode-portions-btn').style.color = mode === 'portions' ? 'white' : 'var(--muted)';
+      document.getElementById('recipe-mode-portions-btn').style.color = mode === 'portions' ? 'var(--fo-on-primary)' : 'var(--muted)';
       document.getElementById('recipe-mode-grams-btn').style.background = mode === 'grams' ? 'var(--primary)' : 'none';
-      document.getElementById('recipe-mode-grams-btn').style.color = mode === 'grams' ? 'white' : 'var(--muted)';
+      document.getElementById('recipe-mode-grams-btn').style.color = mode === 'grams' ? 'var(--fo-on-primary)' : 'var(--muted)';
       updateRecipeNutrition();
     };
 
@@ -4682,7 +5068,7 @@
           <div style="font-weight:500;font-size:14px;">${food.name}</div>
           <div style="font-size:11px;color:var(--muted);">${fmt(food.kcal)} kcal · P ${fmt(food.protein,1)}g · K ${fmt(food.carbs,1)}g · F ${fmt(food.fat,1)}g / 100g</div>
         </div>
-        <span style="font-size:11px;color:var(--success);padding:2px 6px;background:#0a2a1a;border-radius:4px;">OFF</span>
+        <span style="font-size:11px;color:var(--success);padding:2px 6px;background:var(--fo-ok-tint);border-radius:4px;">OFF</span>
       `;
       div.onclick = async () => {
         const saved = await saveOFFFood(food);
@@ -4791,8 +5177,8 @@
       torchOn = !torchOn;
       try {
         await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-        document.getElementById('torch-btn').style.background = torchOn ? 'var(--warning)' : 'none';
-        document.getElementById('torch-btn').style.color = torchOn ? '#000' : 'var(--text)';
+        document.getElementById('torch-btn').style.background = torchOn ? 'var(--fo-surface)' : 'none';
+        document.getElementById('torch-btn').style.color = torchOn ? 'var(--fo-text)' : '#fff';
       } catch(e) { showToast('Taschenlampe nicht verfügbar'); torchOn = false; }
     };
 
@@ -4950,10 +5336,10 @@
     function renderFoodItem(f, isRecipe = false, usageCount = 0) {
       const key = isRecipe ? 'recipe_' + f.id : 'food_' + f.id;
       const isFav = favorites.has(key);
-      const starColor = isFav ? '#FFD93D' : 'var(--muted)';
+      const starColor = isFav ? 'var(--fo-primary)' : 'var(--muted)';
       const countBadge = usageCount > 0 ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">×${usageCount}</span>` : '';
       const typeLabel = isRecipe
-        ? `<span style="font-size:10px;color:#a78bfa;background:#1e1a3a;padding:1px 5px;border-radius:4px;margin-right:4px;">Rezept</span>`
+        ? `<span style="font-size:10px;color:var(--fo-primary);background:var(--fo-primary-tint);padding:1px 5px;border-radius:4px;margin-right:4px;">Rezept</span>`
         : '';
       const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       const macroLine = `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
@@ -4990,7 +5376,7 @@
         const freqRecipes = recipes.filter(r => !favorites.has('recipe_' + r.id) && counts['recipe_' + r.id])
           .sort((a, b) => (counts['recipe_' + b.id] || 0) - (counts['recipe_' + a.id] || 0)).slice(0, 8);
         if (favRecipes.length > 0) {
-          html += `<div style="padding:6px 12px;font-size:11px;color:#FFD93D;font-weight:600;background:var(--bg);">★ Favoriten</div>`;
+          html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">★ Favoriten</div>`;
           favRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
         }
         if (freqRecipes.length > 0) {
@@ -5006,7 +5392,7 @@
       const freqFoods = foodDB.filter(f => !favorites.has('food_' + f.id) && counts['food_' + f.id])
         .sort((a, b) => (counts['food_' + b.id] || 0) - (counts['food_' + a.id] || 0)).slice(0, 8);
       if (favFoods.length > 0) {
-        html += `<div style="padding:6px 12px;font-size:11px;color:#FFD93D;font-weight:600;background:var(--bg);">★ Favoriten</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">★ Favoriten</div>`;
         favFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       if (freqFoods.length > 0) {
@@ -5078,7 +5464,7 @@
           results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Rezepte gefunden</div>';
           return;
         }
-        html += `<div style="padding:6px 12px;font-size:11px;color:#a78bfa;font-weight:600;background:var(--bg);">📋 Rezepte</div>`;
+        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-text-3);font-weight:600;background:var(--bg);">📋 Rezepte</div>`;
         recipeMatches.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
       } else {
         const foodMatches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 20);
@@ -6124,7 +6510,7 @@
         } else {
           setsDisplay = `<span style="font-size:12px;color:var(--muted);">${e.sets || ''}</span>`;
         }
-        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:#1a3a1a;color:#10b981;padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
+        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:var(--fo-surface-2);color:var(--fo-text-2);padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">⏱ ${fmtHoldSets(e.holdSec)}</span>`;
@@ -6138,7 +6524,7 @@
             <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">
               ${setsDisplay}
               ${setsTotal > 0 ? `<span style="color:var(--primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
-              ${showKcal ? `<span style="color:#f97316;margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
+              ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
             </div>
             <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
@@ -6495,7 +6881,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const isUser = role === 'user';
       const bubble = document.createElement('div');
       bubble.id = id;
-      bubble.style.cssText = `align-self:${isUser ? 'flex-end' : 'flex-start'};max-width:85%;background:${isUser ? 'var(--primary)' : 'var(--surface2)'};color:${isUser ? '#fff' : 'var(--text)'};padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;`;
+      bubble.style.cssText = `align-self:${isUser ? 'flex-end' : 'flex-start'};max-width:85%;background:${isUser ? 'var(--primary)' : 'var(--surface2)'};color:${isUser ? 'var(--fo-on-primary)' : 'var(--text)'};padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;`;
       bubble.textContent = isLoading ? '…' : text;
       container.appendChild(bubble);
       container.scrollTop = container.scrollHeight;
@@ -6612,7 +6998,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <span style="color:var(--primary);">Gesamt: ${fmt(actualKcal)} kcal</span>
         <br><br>
         <button onclick="applyMacroSuggestion(${protein},${carbs},${fat})" 
-          style="padding:7px 14px;background:var(--primary);border:none;border-radius:6px;color:white;cursor:pointer;font-size:13px;">
+          style="padding:7px 14px;background:var(--primary);border:none;border-radius:6px;color:var(--fo-on-primary);cursor:pointer;font-size:13px;">
           Vorschlag übernehmen
         </button>
       `;
@@ -6842,7 +7228,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
 
       let statusHtml = statusLines.map(line => `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${line}</div>`).join('');
       if (ouraStatus.lastSyncError) {
-        statusHtml += `<div style="font-size:11px;color:#f97316;margin-top:4px;">⚠️ ${ouraStatus.lastSyncError}</div>`;
+        statusHtml += `<div style="font-size:11px;color:var(--fo-bad);margin-top:4px;">⚠️ ${ouraStatus.lastSyncError}</div>`;
       }
 
       card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">💍 Oura Ring</div>` + rows.join('') + scoreHtml + statusHtml;
@@ -7337,17 +7723,17 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           const deviated = matchStatus === 'deviated';
           let left, status = '';
           if (e) {
-            const boxColor = deviated ? '#f59e0b' : 'var(--primary)';
-            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:#fff;font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
+            const boxColor = deviated ? 'var(--fo-text-2)' : 'var(--primary)';
+            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:var(--fo-on-primary);font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
             const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
-            const kcalHtml = kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : '';
+            const kcalHtml = kcal > 0 ? ` · <span style="color:var(--fo-text);">${fmt(kcal)} kcal</span>` : '';
             const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
             if (deviated) {
               const DONE_VERBS = { laufen: 'Gelaufen', rad: 'Gefahren', rad_ebike: 'Gefahren', gehen: 'Gegangen', wandern: 'Gewandert', schwimmen: 'Geschwommen' };
               const fmtVal = v => cmp.kind === 'distanz' ? planFmtKm(v) : Math.round(v) + ' min';
               const istLabel = cmp.kind === 'distanz' ? (DONE_VERBS[u.typ] || 'Ist') : 'Dauer';
-              status = `<div style="font-size:12px;color:#f59e0b;">~ ${viaWord} · Geplant: ${fmtVal(cmp.plan)} · ${istLabel}: ${fmtVal(cmp.actual)}</div>`;
-              if (kcal > 0) status += `<div style="font-size:12px;color:#f97316;">${fmt(kcal)} kcal</div>`;
+              status = `<div style="font-size:12px;color:var(--fo-text-2);">~ ${viaWord} · Geplant: ${fmtVal(cmp.plan)} · ${istLabel}: ${fmtVal(cmp.actual)}</div>`;
+              if (kcal > 0) status += `<div style="font-size:12px;color:var(--fo-text);">${fmt(kcal)} kcal</div>`;
             } else {
               const actual = [
                 e.runden > 0 ? `${e.runden} Runde${e.runden === 1 ? '' : 'n'}` : '',
@@ -7504,7 +7890,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         </div>`;
       });
       html += `<button onclick="planZirkelAddUebung('${key}',${idx})" style="width:100%;margin-bottom:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Übung</button>
-        <div id="zsum-${key}-${idx}" style="font-size:13px;color:#f97316;margin-bottom:8px;">${planZirkelSummaryText(z)}</div>
+        <div id="zsum-${key}-${idx}" style="font-size:13px;color:var(--fo-text);margin-bottom:8px;">${planZirkelSummaryText(z)}</div>
         <div><label style="${lbl}">Notiz (optional)</label>
           <input type="text" value="${planEsc(z.notiz)}" oninput="planZirkelField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
       </div>`;
@@ -8096,7 +8482,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Gesamtzeit</div>
           <div style="font-size:26px;font-weight:700;margin-bottom:10px;">${fmtZirkelTime(elapsedSec)}</div>
           <div style="margin-bottom:4px;">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'}</div>
-          <div style="color:#f97316;margin-bottom:28px;">≈ ${fmt(kcal)} kcal</div>
+          <div style="color:var(--fo-text);margin-bottom:28px;">≈ ${fmt(kcal)} kcal</div>
           <div style="display:flex;gap:8px;">
             <button onclick="discardZirkelTimer()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Verwerfen</button>
             <button id="zirkel-timer-save-btn" onclick="saveZirkelTimer()" class="btn" style="flex:2;padding:14px;">Speichern</button>
@@ -8248,10 +8634,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     // Unabhängig vom Kraft-Zirkel (zirkelTimerState), der unverändert bleibt.
     const INTERVAL_DEFAULTS = { prepSec: 10, rounds: 1, roundPauseSec: 0, holdSec: 30, pauseSec: 5 };
     const INTERVAL_PHASES = {
-      prep:       { label: 'Vorbereitung', color: '#f59e0b' },
-      hold:       { label: 'Halten',       color: '#22c55e' },
-      pause:      { label: 'Pause',        color: '#3b82f6' },
-      roundpause: { label: 'Rundenpause',  color: '#3b82f6' }
+      prep:       { label: 'Vorbereitung', color: 'var(--fo-text-2)' },
+      hold:       { label: 'Halten',       color: 'var(--fo-activity)', text: 'var(--fo-activity-strong)' },
+      pause:      { label: 'Pause',        color: 'var(--fo-primary)' },
+      roundpause: { label: 'Rundenpause',  color: 'var(--fo-primary)' }
     };
     let intervalDraft = null;  // Konfiguration im Modal (Arbeitskopie, Werte ggf. noch als Text aus den Feldern)
     let intervalTimer = null;  // laufender Ablauf
@@ -8742,7 +9128,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             <span>Runde ${seg.round} von ${t.cfg.rounds}</span>
             <span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span>
           </div>
-          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.color};margin-bottom:6px;">${paused ? '⏸ Pausiert · ' : ''}${ph.label}</div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.text || ph.color};margin-bottom:6px;">${paused ? '⏸ Pausiert · ' : ''}${ph.label}</div>
           <div style="font-size:24px;font-weight:600;margin-bottom:4px;min-height:30px;">${current ? currentPrefix + planEsc(current) : ''}</div>
           <div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>
           <div style="font-size:15px;color:var(--muted);margin:6px 0 16px;min-height:20px;">${after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '')}</div>
@@ -8755,7 +9141,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
             <button onclick="intervalSkip()" style="${btn}">⏭ Überspringen</button>
             <button onclick="requestCloseIntervalTimer()" style="${btn}color:var(--danger);border-color:var(--danger);">✕ Abbrechen</button>
           </div>
-          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:#f59e0b;margin-top:14px;">⚠️ Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
+          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:var(--fo-text-2);margin-top:14px;">⚠️ Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
         </div>`;
       updateIntervalRunningLive();
     }
@@ -9021,7 +9407,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
           <input type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()"
             style="flex:1;min-width:0;padding:8px;background:var(--bg);border:1px solid var(--primary);border-radius:6px;color:var(--text);font-size:14px;">
-          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:12px;">✓</button>
+          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:var(--fo-on-primary);border-radius:6px;cursor:pointer;font-size:12px;">✓</button>
           <button onclick="cancelCustomTypeRename()" title="Abbrechen" style="padding:4px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:12px;">✕</button>
         </div>
       ` : `
@@ -9029,7 +9415,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           <span style="font-size:14px;flex:1;min-width:0;">${t.label}</span>
           <button onclick="startCustomTypeRename(${i})" title="Umbenennen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">✏️</button>
           <button onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten"
-            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? '#fff' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? '⏱ Haltezeit' : 'Wdh.'}</button>
+            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? 'var(--fo-on-primary)' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? '⏱ Haltezeit' : 'Wdh.'}</button>
           <button onclick="removeCustomType(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">✕</button>
         </div>
       `).join('');
@@ -9442,13 +9828,13 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       <span style="color:#fff;font-size:15px;font-weight:600;">📷 Barcode scannen</span>
       <div style="display:flex;gap:10px;align-items:center;">
         <button id="torch-btn" onclick="toggleTorch()" style="display:none;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;cursor:pointer;font-size:15px;padding:7px 12px;border-radius:8px;">🔦</button>
-        <button onclick="stopBarcodeScanner()" style="background:rgba(220,38,38,0.8);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
+        <button onclick="stopBarcodeScanner()" style="background:var(--fo-bad);border:none;color:#fff;cursor:pointer;font-size:15px;padding:7px 16px;border-radius:8px;font-weight:600;">✕</button>
       </div>
     </div>
     <div id="barcode-zoom-control" style="display:none;position:absolute;bottom:70px;left:20px;right:20px;">
       <div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.6);padding:10px 16px;border-radius:10px;">
         <span style="color:#fff;font-size:14px;">🔍</span>
-        <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:#4a9eff;" oninput="applyZoom(this.value)">
+        <input type="range" id="barcode-zoom" min="1" max="5" step="0.1" value="1" style="flex:1;accent-color:var(--fo-primary);" oninput="applyZoom(this.value)">
         <span id="barcode-zoom-label" style="color:#fff;font-size:13px;min-width:30px;">1×</span>
       </div>
     </div>

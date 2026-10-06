@@ -501,7 +501,6 @@
     <div class="tabs tab-bar" id="bottom-nav">
       <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
       <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
-      <button class="tab" data-tab="dashboard"><span style="font-size:18px;">📊</span>Dashboard</button>
       <button class="tab" data-tab="analyse"><span style="font-size:18px;">🤖</span>Analyse</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
     </div>
@@ -763,7 +762,14 @@
       
     </div>
     
-    <div id="dashboard-tab" class="tab-content">
+    <!-- Analyse: Unterbereiche Grafiken (bisheriger Dashboard-Tab, id dashboard-tab) | KI-Analyse (bisheriger Analyse-Tab, id analyse-tab) -->
+    <div id="analyse-bereich-tab" class="tab-content">
+      <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);">
+        <button class="sub-tab active" data-subtab="grafiken" data-subtab-panel="dashboard-tab">Grafiken</button>
+        <button class="sub-tab" data-subtab="ki-analyse" data-subtab-panel="analyse-tab">KI-Analyse</button>
+      </div>
+
+    <div id="dashboard-tab" class="subtab-content active">
 
       <!-- ── Haupt-Chart ──────────────────────────────────────────────── -->
       <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
@@ -909,7 +915,7 @@
 
     </div>
 
-    <div id="analyse-tab" class="tab-content">
+    <div id="analyse-tab" class="subtab-content">
       <div class="analyse-fixed-top">
         <h2 style="margin-bottom:10px;">🤖 Analyse</h2>
         <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Stelle Fragen an Claude zu deinen Trainings- und Ernährungsdaten. Dein API Key liegt in deinen Einstellungen in Firestore und wird direkt vom Gerät an Anthropic gesendet.</p>
@@ -934,6 +940,7 @@
         <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;">Senden</button>
       </div>
     </div>
+    </div><!-- /analyse-bereich-tab -->
 
     <div id="einstellungen-tab" class="tab-content">
       <div style="max-width:800px;margin:0 auto;">
@@ -5500,14 +5507,18 @@
     const START_TAB = 'ernaehrung';
     // Alte Tab-Werte (Deeplink ?tab=, openTabFromWidget, alte Links/Widget-Aufrufe) → neue Tabs
     const OLD_TAB_ALIASES = {
-      daten: 'einstellungen' // Daten-Tab aufgelöst: Lebensmittel/Rezepte → Ernährung, Import/Backup/Statistik → Einstellungen
+      daten: 'einstellungen', // Daten-Tab aufgelöst: Lebensmittel/Rezepte → Ernährung, Import/Backup/Statistik → Einstellungen
+      dashboard: 'analyse'    // Dashboard ist jetzt Analyse › Grafiken
     };
     const resolveTab = name => OLD_TAB_ALIASES[name] || name;
+    // Panel-id je Tab, falls sie nicht <tab>-tab lautet (dashboard-tab/analyse-tab sind jetzt Unterbereiche)
+    const TAB_PANEL_IDS = { analyse: 'analyse-bereich-tab' };
+    const tabPanelId = tab => TAB_PANEL_IDS[tab] || tab + '-tab';
 
     // Setzt nur die Klassen von Leiste und Panel (ohne Lade-/Render-Schritte eines Klicks)
     function showTabPanel(target) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === target + '-tab'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === tabPanelId(target)));
     }
     // Öffnet einen Tab wie ein Klick auf seinen Button; alte Werte über OLD_TAB_ALIASES
     function switchTab(name) {
@@ -5525,14 +5536,6 @@
       tab.addEventListener('click', async () => {
         const target = tab.dataset.tab;
         showTabPanel(target);
-        // Re-render dashboard when tab becomes visible (canvas needs to be in DOM)
-        if (target === 'dashboard') {
-          requestAnimationFrame(() => {
-            renderDashboard();
-            populateWorkoutTypeSelect();
-            renderWorkoutChart();
-          });
-        }
         if (target === 'einstellungen' && userId) {
           // Verbindungen und Backup (bisher beim Öffnen des Daten-Tabs geladen)
           loadGoogleFitStatus();
@@ -5542,10 +5545,7 @@
           loadDriveStatus();
           loadOuraStatus();
         }
-        if (target === 'analyse' && userId) {
-          updateAnalyseKeyState();
-          requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
-        }
+        if (target === 'analyse') showAnalyseSubtab();
         if (target === 'ernaehrung' && userId) {
           // Silent background sync for last 2 days
           const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
@@ -5625,11 +5625,27 @@
         parent.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
         
         e.target.classList.add('active');
-        document.getElementById(target + '-subtab').classList.add('active');
+        document.getElementById(e.target.dataset.subtabPanel || (target + '-subtab')).classList.add('active');
 
         if (target === 'training-plan') renderTrainingPlan();
+        if (target === 'grafiken' || target === 'ki-analyse') showAnalyseSubtab();
       }
     });
+
+    // Analyse-Tab: Lade-/Render-Schritte des sichtbaren Unterbereichs (wie bisher beim Öffnen von Dashboard bzw. Analyse)
+    function showAnalyseSubtab() {
+      if (document.getElementById('dashboard-tab')?.classList.contains('active')) {
+        // Re-render dashboard when it becomes visible (canvas needs to be in DOM)
+        requestAnimationFrame(() => {
+          renderDashboard();
+          populateWorkoutTypeSelect();
+          renderWorkoutChart();
+        });
+      } else if (userId) {
+        updateAnalyseKeyState();
+        requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
+      }
+    }
 
     // Einklappbare Abschnitte in den Einstellungen (Verbindungen, Backup, Statistik), Muster wie toggleActivityGroup
     window.toggleSettingsSection = function(header) {

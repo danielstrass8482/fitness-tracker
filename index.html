@@ -499,10 +499,23 @@
     </div>
     
     <div class="tabs tab-bar" id="bottom-nav">
+      <button class="tab" data-tab="uebersicht"><span style="font-size:18px;">🏠</span>Übersicht</button>
       <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
       <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
       <button class="tab" data-tab="analyse"><span style="font-size:18px;">🤖</span>Analyse</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
+    </div>
+
+    <!-- Gemeinsame Datumsnavigation (ein Element, Zustand currentDate): sichtbar in Übersicht und Ernährung › Tagebuch -->
+    <div id="shared-date-nav" style="display:none;">
+      <!-- Date Navigation -->
+      <div style="text-align:center;margin-bottom:16px;">
+        <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
+        <div style="display:flex;justify-content:center;gap:16px;">
+          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(-1)">←</button>
+          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(1)">→</button>
+        </div>
+      </div>
     </div>
     
     <div id="training-tab" class="tab-content">
@@ -637,24 +650,8 @@
       </div>
     </div>
     
-    <div id="ernaehrung-tab" class="tab-content">
-      <!-- Unterbereiche: Tagebuch | Lebensmittel | Rezepte (Lebensmittel und Rezepte bisher im Daten-Tab) -->
-      <div style="display:flex;gap:4px;margin-bottom:30px;border-bottom:1px solid var(--border);">
-        <button class="sub-tab active" data-subtab="tagebuch" style="padding:10px 14px;">Tagebuch</button>
-        <button class="sub-tab" data-subtab="lebensmittel" style="padding:10px 14px;">Lebensmittel</button>
-        <button class="sub-tab" data-subtab="rezepte" style="padding:10px 14px;">Rezepte</button>
-      </div>
-
-      <div id="tagebuch-subtab" class="subtab-content active">
-      <!-- Date Navigation -->
-      <div style="text-align:center;margin-bottom:16px;">
-        <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
-        <div style="display:flex;justify-content:center;gap:16px;">
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(-1)">←</button>
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(1)">→</button>
-        </div>
-      </div>
-      
+    <!-- Übersicht: Kacheln, Schritte & Aktivitäten, Oura-Karte (bisher im Ernährung-Tab) -->
+    <div id="uebersicht-tab" class="tab-content">
       <!-- Daily Summary – Kachel: Ist-Wert, Differenz zum Ziel (Farbe nach KPI_RULES), Balken, Ziel -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));grid-auto-rows:1fr;gap:12px;margin-bottom:20px;">
         <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
@@ -694,15 +691,31 @@
           <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-fat-goal">Fett</div>
         </div>
       </div>
-      
-      <!-- Add Food Button -->
-      <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
 
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
 
       <!-- Oura Ring: Schlaf / Readiness / Aktivität (immer sichtbar wenn Oura verbunden ist, auch ohne Daten für den Tag) -->
       <div id="oura-daily-card" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:16px;"></div>
+    </div>
+
+    <div id="ernaehrung-tab" class="tab-content">
+      <!-- Unterbereiche: Tagebuch | Lebensmittel | Rezepte (Lebensmittel und Rezepte bisher im Daten-Tab) -->
+      <div style="display:flex;gap:4px;margin-bottom:30px;border-bottom:1px solid var(--border);">
+        <button class="sub-tab active" data-subtab="tagebuch" style="padding:10px 14px;">Tagebuch</button>
+        <button class="sub-tab" data-subtab="lebensmittel" style="padding:10px 14px;">Lebensmittel</button>
+        <button class="sub-tab" data-subtab="rezepte" style="padding:10px 14px;">Rezepte</button>
+      </div>
+
+      <div id="tagebuch-subtab" class="subtab-content active">
+      <!-- Kompakte Kalorienzeile (gefüllt in renderFoodLog mit denselben Werten und Farben wie die Kacheln in der Übersicht) -->
+      <div id="diary-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:10px 14px;margin-bottom:12px;">
+        <div id="diary-kcal-line" style="font-size:15px;font-weight:600;"></div>
+        <div id="diary-macro-line" style="font-size:12px;color:var(--muted);margin-top:2px;"></div>
+      </div>
+
+      <!-- Add Food Button -->
+      <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
 
       <!-- Meals Container -->
       <div id="meals-container"></div>
@@ -4097,11 +4110,17 @@
       // Balken = Füllstand in dieser Farbe; ohne gültiges Ziel ('none') wie bisher: rot über 100 %, sonst grün.
       // Zeile 2 der Kachel: Differenz gerundetes Ist − gerundetes Ziel mit Vorzeichen, ohne Ziel "kein Ziel".
       // Die Prozentzahl (bar-*-label) ist ausgeblendet, wird aber weiter gesetzt.
-      const setBar = (id, pct, kennzahl, ist, ziel, unit) => {
+      // kpiDisplay: gerundetes Ist/Ziel, Farbe und Differenztext – gemeinsam für Kacheln und kompakte Tagebuch-Zeile
+      const kpiDisplay = (kennzahl, ist, ziel) => {
         const istR = Math.round(Number(ist) || 0);
         const zielR = Math.round(Number(ziel) || 0);
         const status = kpiStatus(kennzahl, istR, zielR).status;
         const color = status === 'green' ? 'var(--success)' : status === 'red' ? 'var(--danger)' : null;
+        const d = istR - zielR;
+        return { istR, zielR, color, diffText: `${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(d))}` };
+      };
+      const setBar = (id, pct, kennzahl, ist, ziel, unit) => {
+        const { color, diffText } = kpiDisplay(kennzahl, ist, ziel);
         const bar = document.getElementById(id);
         const label = document.getElementById(id + '-label');
         if (bar) {
@@ -4111,8 +4130,7 @@
         if (label) label.textContent = pct + '%';
         const diffEl = document.querySelector(`[data-kpi-diff="${kennzahl}"]`);
         if (diffEl) {
-          const d = istR - zielR;
-          diffEl.textContent = color ? `${d > 0 ? '+' : d < 0 ? '−' : '±'}${fmt(Math.abs(d))} ${unit}` : 'kein Ziel';
+          diffEl.textContent = color ? `${diffText} ${unit}` : 'kein Ziel';
           diffEl.style.color = color || 'var(--muted)';
         }
       };
@@ -4125,6 +4143,23 @@
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `Ziel ${fmt(proteinGoal)} g Protein` : 'Protein';
       document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0 ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate` : 'Kohlenhydrate';
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `Ziel ${fmt(fatGoal)} g Fett` : 'Fett';
+
+      // Kompakte Kalorienzeile im Tagebuch: "2.231 / 2.541 kcal · −310", darunter Makros Ist / Ziel (gleiche Farben wie die Kacheln)
+      const kcalLine = document.getElementById('diary-kcal-line');
+      if (kcalLine) {
+        const k = kpiDisplay('kcal', totalKcal, todayGoal);
+        kcalLine.innerHTML = k.color
+          ? `${fmt(k.istR)} / ${fmt(k.zielR)} kcal · <span style="color:${k.color};">${k.diffText}</span>`
+          : `${fmt(k.istR)} kcal · <span style="color:var(--muted);">kein Ziel</span>`;
+      }
+      const macroLine = document.getElementById('diary-macro-line');
+      if (macroLine) {
+        macroLine.innerHTML = [['protein', 'Protein', totalProtein, proteinGoal], ['kh', 'Kohlenhydrate', totalCarbs, carbsGoal], ['fett', 'Fett', totalFat, fatGoal]]
+          .map(([kennzahl, label, ist, ziel]) => {
+            const m = kpiDisplay(kennzahl, ist, ziel);
+            return `${label} <span style="color:${m.color || 'var(--text)'};">${fmt(m.istR)}</span>${m.color ? ' / ' + fmt(m.zielR) : ''} g`;
+          }).join(' · ');
+      }
 
       // ── Schritte + Aktivitäten unter den Kacheln ─────────────────────────
       const activityContainer = document.getElementById('daily-activity-summary');
@@ -5519,6 +5554,15 @@
     function showTabPanel(target) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === tabPanelId(target)));
+      updateSharedDateNav();
+    }
+    // Gemeinsame Datumsnavigation: sichtbar in Übersicht und in Ernährung › Tagebuch, sonst verborgen
+    function updateSharedDateNav() {
+      const nav = document.getElementById('shared-date-nav');
+      if (!nav) return;
+      const tab = document.querySelector('.tab.active')?.dataset.tab;
+      const show = tab === 'uebersicht' || (tab === 'ernaehrung' && document.getElementById('tagebuch-subtab')?.classList.contains('active'));
+      nav.style.display = show ? 'block' : 'none';
     }
     // Öffnet einen Tab wie ein Klick auf seinen Button; alte Werte über OLD_TAB_ALIASES
     function switchTab(name) {
@@ -5546,7 +5590,7 @@
           loadOuraStatus();
         }
         if (target === 'analyse') showAnalyseSubtab();
-        if (target === 'ernaehrung' && userId) {
+        if ((target === 'ernaehrung' || target === 'uebersicht') && userId) {
           // Silent background sync for last 2 days
           const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
           if (gfitSnap.exists()) {
@@ -5629,6 +5673,7 @@
 
         if (target === 'training-plan') renderTrainingPlan();
         if (target === 'grafiken' || target === 'ki-analyse') showAnalyseSubtab();
+        updateSharedDateNav();
       }
     });
 

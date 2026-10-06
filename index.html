@@ -1415,22 +1415,22 @@
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <h3 style="margin:0 0 4px;">⧉ Eintrag kopieren</h3>
       <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-        <div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:16px;">
+        <div style="min-width:0;">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Datum</label>
-          <input type="date" id="copy-entry-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+          <input type="date" id="copy-entry-date" style="width:100%;min-width:0;min-height:44px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
         </div>
-        <div>
+        <div style="min-width:0;">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Uhrzeit</label>
           <div style="display:flex;gap:6px;">
-            <input type="time" id="copy-entry-time" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
-            <button onclick="setCopyTimeToNow()" style="padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;">Jetzt</button>
+            <input type="time" id="copy-entry-time" style="flex:1;min-width:0;min-height:44px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+            <button onclick="setCopyTimeToNow()" title="Datum und Uhrzeit auf jetzt setzen" style="flex-shrink:0;min-width:44px;min-height:44px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;">Jetzt</button>
           </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button onclick="document.getElementById('copy-entry-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="applyCopyEntry()" class="btn" style="flex:2;padding:12px;">⧉ Kopieren</button>
+        <button onclick="document.getElementById('copy-entry-modal').style.display='none'" style="flex:1;min-height:44px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
+        <button onclick="applyCopyEntry()" class="btn" style="flex:2;min-height:44px;padding:12px;">⧉ Kopieren</button>
       </div>
     </div>
   </div>
@@ -5357,6 +5357,16 @@
     // ── Kopieren mit Datum/Zeit Modal ────────────────────────────────────────
     let copySourceEntryId = null;
 
+    // Aktuelles Datum ("YYYY-MM-DD") und Uhrzeit ("HH:MM") in Berliner Zeit, unabhängig von der Gerätezeitzone
+    function berlinNowDateTime() {
+      const now = new Date();
+      const date = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+      const parts = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+      const hh = parts.find(p => p.type === 'hour').value.padStart(2, '0');
+      const mm = parts.find(p => p.type === 'minute').value.padStart(2, '0');
+      return { date, time: `${hh}:${mm}` };
+    }
+
     window.copyEntry = function(id) {
       let entry = null;
       for (const date in foodLog) {
@@ -5367,17 +5377,18 @@
 
       copySourceEntryId = id;
       document.getElementById('copy-entry-name').textContent = entry.name;
-      const now = new Date();
-      document.getElementById('copy-entry-date').value = currentDate;
-      document.getElementById('copy-entry-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      setCopyTimeToNow(); // Vorbelegung: heute und jetzt (Berlin), nicht der Tag des Originals oder der angezeigte Tag
       document.getElementById('copy-entry-modal').style.display = 'flex';
       pushModalState();
     };
 
-    window.setCopyTimeToNow = function() {
-      const now = new Date();
-      document.getElementById('copy-entry-time').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    };
+    // "Jetzt": setzt Datum UND Uhrzeit auf den aktuellen Berliner Zeitpunkt
+    function setCopyTimeToNow() {
+      const { date, time } = berlinNowDateTime();
+      document.getElementById('copy-entry-date').value = date;
+      document.getElementById('copy-entry-time').value = time;
+    }
+    window.setCopyTimeToNow = setCopyTimeToNow;
 
     window.applyCopyEntry = async function() {
       const targetDate = document.getElementById('copy-entry-date').value;
@@ -5403,9 +5414,10 @@
         foodLog[targetDate].push(newEntry);
         window.foodLog = foodLog;
         saveToCache();
-        if (targetDate !== currentDate) currentDate = targetDate;
+        // Die App bleibt auf dem angezeigten Tag; liegt das Ziel dort, erscheint der Eintrag sofort
         renderFoodLog();
-        showToast(`✓ Kopiert nach ${targetDate} ${targetTime}`);
+        const targetLabel = new Date(targetDate + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+        showToast(`✓ Kopiert auf ${targetLabel}, ${targetTime}`);
       } catch(e) {
         showToast('❌ Kopieren fehlgeschlagen');
       }

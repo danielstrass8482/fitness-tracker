@@ -1982,8 +1982,8 @@
 
         const actList = allTrainingEntries || trainingEntries;
         const dayActivity = actList
-          .filter(e => e.datum === date && countsAsActivity(e, actList))
-          .reduce((sum, e) => sum + calcActivityKcal(e), 0);
+          .filter(e => e.datum === date)
+          .reduce((sum, e) => sum + activityKcalForGoal(e, actList), 0);
 
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
         const daySteps = getKcalStepsForDate(date, dayLog);
@@ -2908,7 +2908,7 @@
           recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivitäten</div>';
         } else {
           recentContainer.innerHTML = recent.map(e => {
-            const calcKcal = hideActivityKcal(e) ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
+            const calcKcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
             const label = typeLabels[typ] || customTypeLabel(typ, e);
@@ -3919,6 +3919,23 @@
       return !(list || trainingEntries).some(o => isAutoActivity(o) && o.datum === e.datum && o.typ === e.typ);
     }
 
+    // ── Einzige Regel: was ins Kalorienziel zählt und was eine Kalorienzahl anzeigt ──────────────
+    // Automatische Einträge (Garmin/Google Fit/Strava, auch Gehen/Wandern) zählen immer mit vollem Wert.
+    // Manuell geloggte und im Plan abgehakte Einträge (source 'manual'/'plan', inkl. Plan-Zirkel und
+    // Haltezeit) zählen nur, wenn ihre berechnete Kalorienzahl JE EINTRAG mindestens MIN_MANUAL_KCAL
+    // beträgt, dann mit vollem Wert, darunter mit 0 und ohne Kalorienzahl in den Listen.
+    const MIN_MANUAL_KCAL = 50;
+    // Liefert die Kalorien, mit denen der Eintrag ins Tagesziel zählt (0 = zählt nicht, keine Zahl anzeigen).
+    // Genutzt von calcHistoricalKcalGoal und allen Anzeigestellen. Die Regeln aus countsAsActivity gelten weiter
+    // (Plan neben Auto-Eintrag gleichen Typs zählt nicht, Einträge ohne source zählen nicht).
+    // Gespeicherte act_kcal_calc-Werte bleiben unverändert (calcActivityKcal selbst ist ohne Schwelle).
+    function activityKcalForGoal(e, list) {
+      if (!countsAsActivity(e, list)) return 0;
+      const kcal = calcActivityKcal(e);
+      if (isAutoActivity(e)) return kcal;
+      return kcal >= MIN_MANUAL_KCAL ? kcal : 0;
+    }
+
     // Render Food Log
     // ── Farbregeln der Tageskacheln (einzige Stelle, jederzeit änderbar) ───────
     // Je Kennzahl eine Regel auf ratio = ist / ziel (Grenzen inklusive):
@@ -3963,18 +3980,6 @@
         g.items.push(a);
       });
       return groups;
-    }
-
-    // Kalorienzahl einer Aktivität in Listen ausblenden? Reine Anzeige, gespeicherte Werte und Tagesziel unberührt.
-    // Betrifft nur manuell geloggte Einträge: source 'manual' (wie bisher immer ausgeblendet) sowie Einträge ohne
-    // source-Feld, die eindeutig manuell sind (keine zeit, keine distanz, kein Plan-Bezug, keine Garmin-kalorien).
-    // Letztere zeigen eine Zahl nur, wenn sie mit > 0 kcal ins Tagesziel zählen (countsAsActivity + calcActivityKcal).
-    // Plan-, Garmin-/Google-Fit-/Strava- und sonstige Einträge bleiben unverändert.
-    function hideActivityKcal(e) {
-      if (e.source === 'manual') return true;
-      const noSource = e.source === undefined || e.source === null || e.source === '';
-      const looksManual = noSource && !e.zeit && !(parseFloat(e.distanz) > 0) && !e.planUnitId && !(e.kalorien > 0);
-      return looksManual && !(countsAsActivity(e) && calcActivityKcal(e) > 0);
     }
 
     function renderFoodLog() {
@@ -4118,9 +4123,9 @@
           </div>`;
         }
 
-        // Angezeigte Kalorien einer Aktivitätszeile.
-        // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert, siehe hideActivityKcal)
-        const activityRowKcal = a => hideActivityKcal(a) ? 0 : (a.act_kcal_calc || a.kalorien || 0);
+        // Angezeigte Kalorien einer Aktivitätszeile: nur wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal),
+        // Wert wie bisher der gespeicherte act_kcal_calc bzw. kalorien
+        const activityRowKcal = a => activityKcalForGoal(a) > 0 ? (a.act_kcal_calc || a.kalorien || 0) : 0;
 
         // Eine Aktivitätszeile (Einzeldarstellung, unverändert)
         const activityRowHtml = a => {
@@ -6006,8 +6011,8 @@
           : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">⏱ ${fmtHoldSets(e.holdSec)}</span>`;
-        // Manuelle Einzelübungen: keine Kalorienzahl anzeigen (gespeichertes act_kcal_calc bleibt unverändert, siehe hideActivityKcal)
-        const showKcal = !hideActivityKcal(e) && (e.act_kcal_calc > 0 || e.kalorien > 0);
+        // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
+        const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
         const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
         <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
@@ -7217,7 +7222,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           if (e) {
             const boxColor = deviated ? '#f59e0b' : 'var(--primary)';
             left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:#fff;font-size:14px;flex-shrink:0;">${deviated ? '~' : '✓'}</span>`;
-            const kcal = hideActivityKcal(e) ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
+            const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
             const kcalHtml = kcal > 0 ? ` · <span style="color:#f97316;">${fmt(kcal)} kcal</span>` : '';
             const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
             if (deviated) {
@@ -7258,7 +7263,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
         extra.forEach(e => {
           const title = planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
           const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
-          const kcal = hideActivityKcal(e) ? 0 : calcActivityKcal(e); // manuelle Einzelübungen ohne Kalorienzahl
+          const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
           rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);opacity:.6;">
             <span style="width:24px;text-align:center;flex-shrink:0;font-size:12px;color:var(--muted);">+</span>
             <div style="flex:1;min-width:0;">

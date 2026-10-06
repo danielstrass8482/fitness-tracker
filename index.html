@@ -396,6 +396,15 @@
     .toast { display: flex; align-items: center; gap: 8px; }
     .toast .fo-i.is-ok, .fo-status-ok { color: var(--fo-ok); }
     .toast .fo-i.is-bad, .fo-status-bad { color: var(--fo-bad); }
+    /* Gerüst: App-Leiste randlos im App-Container, Bottom-Navigation, Segment (Klasse active = aria-selected) */
+    .app-container > .fo-appbar { margin: -20px -20px 16px; }
+    #bottom-nav.fo-nav { margin-bottom: 16px; }
+    .fo-nav__label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .fo-seg__btn.active { background: var(--fo-surface); color: var(--fo-primary); box-shadow: var(--fo-sh-1), 0 0 0 1px var(--fo-line); }
+    @media (max-width: 768px) {
+      .app-container > .fo-appbar { margin: -12px -12px 12px; }
+      #bottom-nav.fo-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; margin: 0; height: auto; min-height: var(--fo-nav-h); padding: 0 4px env(safe-area-inset-bottom, 0px); }
+    }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -522,14 +531,14 @@
     }
     
     /* Tabs */
-    .tabs {
+    .tabs:not(.fo-nav) {
       display: flex;
       gap: 0;
       border-bottom: 1px solid var(--border);
       margin-bottom: 30px;
     }
     
-    .tab {
+    .tab:not(.fo-nav__item) {
       padding: 12px 24px;
       background: none;
       border: none;
@@ -540,8 +549,8 @@
       transition: all 0.2s;
     }
     
-    .tab:hover { color: var(--text); }
-    .tab.active {
+    .tab:not(.fo-nav__item):hover { color: var(--text); }
+    .tab.active:not(.fo-nav__item) {
       color: var(--primary);
       border-bottom-color: var(--primary);
     }
@@ -685,7 +694,7 @@
     }
     
     /* Sub-Tabs */
-    .sub-tab {
+    .sub-tab:not(.fo-seg__btn) {
       padding: 10px 20px;
       background: none;
       border: none;
@@ -696,8 +705,8 @@
       transition: all 0.2s;
     }
     
-    .sub-tab:hover { color: var(--text); }
-    .sub-tab.active {
+    .sub-tab:not(.fo-seg__btn):hover { color: var(--text); }
+    .sub-tab.active:not(.fo-seg__btn) {
       color: var(--primary);
       border-bottom-color: var(--primary);
     }
@@ -760,7 +769,7 @@
         margin: 0 !important;
       }
 
-      .tab {
+      .tab:not(.fo-nav__item) {
         flex: 1 !important;
         font-size: 10px !important;
         padding: 4px 2px !important;
@@ -927,39 +936,37 @@
   
   <!-- App Container -->
   <div id="app-container" class="app-container">
-    <div class="header">
-      <h1>Training & Ernährung</h1>
-      <div class="user-info">
-        <span id="user-email"></span>
-        <button class="btn btn-logout" onclick="handleLogout()">Abmelden</button>
+    <header class="fo-appbar">
+      <div class="fo-appbar__text">
+        <h1 class="fo-appbar__title">Training & Ernährung</h1>
+        <span id="user-email" class="fo-appbar__sub" style="display:block;"></span>
       </div>
-    </div>
+      <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="handleLogout()" style="color:var(--fo-text-2);"><svg class="fo-i" aria-hidden="true"><use href="#i-logout"/></svg>Abmelden</button>
+    </header>
     
-    <div class="tabs tab-bar" id="bottom-nav">
-      <button class="tab" data-tab="uebersicht"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-home"/></svg></span>Übersicht</button>
-      <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-food"/></svg></span>Ernährung</button>
-      <button class="tab" data-tab="training"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-training"/></svg></span>Training</button>
-      <button class="tab" data-tab="analyse"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-chart"/></svg></span>Analyse</button>
-      <button class="tab" data-tab="einstellungen"><span style="font-size:18px;"><svg class="fo-i" aria-hidden="true"><use href="#i-settings"/></svg></span>Einstellungen</button>
-    </div>
+    <nav class="fo-nav" id="bottom-nav" aria-label="Hauptnavigation">
+      <button class="tab fo-nav__item" type="button" data-tab="uebersicht"><span class="fo-nav__pill"><svg class="fo-i" aria-hidden="true"><use href="#i-home"/></svg></span><span class="fo-nav__label">Übersicht</span></button>
+      <button class="tab fo-nav__item" type="button" data-tab="ernaehrung"><span class="fo-nav__pill"><svg class="fo-i" aria-hidden="true"><use href="#i-food"/></svg></span><span class="fo-nav__label">Ernährung</span></button>
+      <button class="tab fo-nav__item" type="button" data-tab="training"><span class="fo-nav__pill"><svg class="fo-i" aria-hidden="true"><use href="#i-training"/></svg></span><span class="fo-nav__label">Training</span></button>
+      <button class="tab fo-nav__item" type="button" data-tab="analyse"><span class="fo-nav__pill"><svg class="fo-i" aria-hidden="true"><use href="#i-chart"/></svg></span><span class="fo-nav__label">Analyse</span></button>
+      <button class="tab fo-nav__item" type="button" data-tab="einstellungen"><span class="fo-nav__pill"><svg class="fo-i" aria-hidden="true"><use href="#i-settings"/></svg></span><span class="fo-nav__label">Einstellungen</span></button>
+    </nav>
 
     <!-- Gemeinsame Datumsnavigation (ein Element, Zustand currentDate): sichtbar in Übersicht und Ernährung › Tagebuch -->
     <div id="shared-date-nav" style="display:none;">
       <!-- Date Navigation -->
-      <div style="text-align:center;margin-bottom:16px;">
-        <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
-        <div style="display:flex;justify-content:center;gap:16px;">
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(-1)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
-          <button class="btn" style="width:auto;padding:10px 32px;" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
-        </div>
+      <div class="fo-datenav" style="margin-bottom:12px;">
+        <button class="fo-iconbtn" type="button" onclick="changeDate(-1)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
+        <h2 id="current-date-display" class="fo-datenav__label" style="margin:0;"></h2>
+        <button class="fo-iconbtn" type="button" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
       </div>
     </div>
     
     <div id="training-tab" class="tab-content">
       <!-- Sub-Tabs -->
-      <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);">
-        <button class="sub-tab active" data-subtab="training-log">Loggen</button>
-        <button class="sub-tab" data-subtab="training-plan">Plan</button>
+      <div class="fo-seg" role="tablist" aria-label="Training" style="margin-bottom:16px;">
+        <button class="sub-tab fo-seg__btn active" type="button" role="tab" aria-selected="true" data-subtab="training-log">Loggen</button>
+        <button class="sub-tab fo-seg__btn" type="button" role="tab" aria-selected="false" data-subtab="training-plan">Plan</button>
       </div>
 
       <div id="training-log-subtab" class="subtab-content active">
@@ -1138,10 +1145,10 @@
 
     <div id="ernaehrung-tab" class="tab-content">
       <!-- Unterbereiche: Tagebuch | Lebensmittel | Rezepte (Lebensmittel und Rezepte bisher im Daten-Tab) -->
-      <div style="display:flex;gap:4px;margin-bottom:30px;border-bottom:1px solid var(--border);">
-        <button class="sub-tab active" data-subtab="tagebuch" style="padding:10px 14px;">Tagebuch</button>
-        <button class="sub-tab" data-subtab="lebensmittel" style="padding:10px 14px;">Lebensmittel</button>
-        <button class="sub-tab" data-subtab="rezepte" style="padding:10px 14px;">Rezepte</button>
+      <div class="fo-seg" role="tablist" aria-label="Ernährung" style="margin-bottom:16px;">
+        <button class="sub-tab fo-seg__btn active" type="button" role="tab" aria-selected="true" data-subtab="tagebuch">Tagebuch</button>
+        <button class="sub-tab fo-seg__btn" type="button" role="tab" aria-selected="false" data-subtab="lebensmittel">Lebensmittel</button>
+        <button class="sub-tab fo-seg__btn" type="button" role="tab" aria-selected="false" data-subtab="rezepte">Rezepte</button>
       </div>
 
       <div id="tagebuch-subtab" class="subtab-content active">
@@ -1214,9 +1221,9 @@
     
     <!-- Analyse: Unterbereiche Grafiken (bisheriger Dashboard-Tab, id dashboard-tab) | KI-Analyse (bisheriger Analyse-Tab, id analyse-tab) -->
     <div id="analyse-bereich-tab" class="tab-content">
-      <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);">
-        <button class="sub-tab active" data-subtab="grafiken" data-subtab-panel="dashboard-tab">Grafiken</button>
-        <button class="sub-tab" data-subtab="ki-analyse" data-subtab-panel="analyse-tab">KI-Analyse</button>
+      <div class="fo-seg" role="tablist" aria-label="Analyse" style="margin-bottom:16px;">
+        <button class="sub-tab fo-seg__btn active" type="button" role="tab" aria-selected="true" data-subtab="grafiken" data-subtab-panel="dashboard-tab">Grafiken</button>
+        <button class="sub-tab fo-seg__btn" type="button" role="tab" aria-selected="false" data-subtab="ki-analyse" data-subtab-panel="analyse-tab">KI-Analyse</button>
       </div>
 
     <div id="dashboard-tab" class="subtab-content active">
@@ -6045,7 +6052,10 @@
 
     // Setzt nur die Klassen von Leiste und Panel (ohne Lade-/Render-Schritte eines Klicks)
     function showTabPanel(target) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === target);
+        if (t.dataset.tab === target) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+      });
       document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === tabPanelId(target)));
       updateSharedDateNav();
     }
@@ -6158,10 +6168,11 @@
         const target = e.target.dataset.subtab;
         const parent = e.target.closest('.tab-content');
         
-        parent.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+        parent.querySelectorAll('.sub-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
         parent.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
         
         e.target.classList.add('active');
+        e.target.setAttribute('aria-selected', 'true');
         document.getElementById(e.target.dataset.subtabPanel || (target + '-subtab')).classList.add('active');
 
         if (target === 'training-plan') renderTrainingPlan();

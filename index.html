@@ -502,7 +502,7 @@
       <button class="tab" data-tab="uebersicht"><span style="font-size:18px;">🏠</span>Übersicht</button>
       <button class="tab" data-tab="ernaehrung"><span style="font-size:18px;">🍎</span>Ernährung</button>
       <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
-      <button class="tab" data-tab="analyse"><span style="font-size:18px;">🤖</span>Analyse</button>
+      <button class="tab" data-tab="analyse"><span style="font-size:18px;">📊</span>Analyse</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
     </div>
 
@@ -5537,10 +5537,14 @@
     }
     window.showToast = showToast;
     
-    // Tab Switching
-    // Start-Tab beim App-Start: einzige Stelle, an der er festgelegt wird.
+    // ── Tab Switching ──────────────────────────────────────────────────────────
+    // Tabs (data-tab): uebersicht, ernaehrung, training, analyse, einstellungen.
+    // START_TAB: Tab beim App-Start. Einzige Stelle, an der er festgelegt wird (showTabPanel beim Laden,
+    // Rückfall in renderAll). Der zuletzt offene Tab wird nicht gespeichert (die App tat das auch vorher nicht).
     const START_TAB = 'ernaehrung';
-    // Alte Tab-Werte (Deeplink ?tab=, openTabFromWidget, alte Links/Widget-Aufrufe) → neue Tabs
+    // OLD_TAB_ALIASES: alte Tab-Werte → neue Tabs, damit Deeplinks (?tab=), openTabFromWidget und alte
+    // Links nicht ins Leere laufen. switchTab wendet sie an. Das Android-Widget öffnet 'ernaehrung' (existiert weiter)
+    // und klickt den Button direkt; ein alter Wert dort würde nicht über die Aliase laufen.
     const OLD_TAB_ALIASES = {
       daten: 'einstellungen', // Daten-Tab aufgelöst: Lebensmittel/Rezepte → Ernährung, Import/Backup/Statistik → Einstellungen
       dashboard: 'analyse'    // Dashboard ist jetzt Analyse › Grafiken

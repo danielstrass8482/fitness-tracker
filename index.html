@@ -503,7 +503,6 @@
       <button class="tab" data-tab="training"><span style="font-size:18px;">💪</span>Training</button>
       <button class="tab" data-tab="dashboard"><span style="font-size:18px;">📊</span>Dashboard</button>
       <button class="tab" data-tab="analyse"><span style="font-size:18px;">🤖</span>Analyse</button>
-      <button class="tab" data-tab="daten"><span style="font-size:18px;">📥</span>Daten</button>
       <button class="tab" data-tab="einstellungen"><span style="font-size:18px;">⚙️</span>Einstellungen</button>
     </div>
     
@@ -639,7 +638,15 @@
       </div>
     </div>
     
-    <div id="ernaehrung-tab" class="tab-content active">
+    <div id="ernaehrung-tab" class="tab-content">
+      <!-- Unterbereiche: Tagebuch | Lebensmittel | Rezepte (Lebensmittel und Rezepte bisher im Daten-Tab) -->
+      <div style="display:flex;gap:4px;margin-bottom:30px;border-bottom:1px solid var(--border);">
+        <button class="sub-tab active" data-subtab="tagebuch" style="padding:10px 14px;">Tagebuch</button>
+        <button class="sub-tab" data-subtab="lebensmittel" style="padding:10px 14px;">Lebensmittel</button>
+        <button class="sub-tab" data-subtab="rezepte" style="padding:10px 14px;">Rezepte</button>
+      </div>
+
+      <div id="tagebuch-subtab" class="subtab-content active">
       <!-- Date Navigation -->
       <div style="text-align:center;margin-bottom:16px;">
         <h2 id="current-date-display" style="font-size:18px;margin:0 0 10px 0;"></h2>
@@ -700,6 +707,60 @@
 
       <!-- Meals Container -->
       <div id="meals-container"></div>
+      </div><!-- /tagebuch-subtab -->
+
+      <!-- Lebensmittel-DB -->
+      <div id="lebensmittel-subtab" class="subtab-content">
+        <div style="margin-bottom:12px;">
+          <input type="text" id="fooddb-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchFoodDB()">
+          <select id="fooddb-kategorie-filter" onchange="searchFoodDB()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;font-size:13px;">
+            <option value="">— Alle Kategorien —</option>
+            <option value="__none__">⚪ Ohne Kategorie</option>
+            <option value="fleisch_fisch">🥩 Fleisch & Fisch</option>
+            <option value="milchprodukte">🧀 Milchprodukte</option>
+            <option value="obst_gemuese">🥦 Obst & Gemüse</option>
+            <option value="getreide_brot">🍞 Getreide & Brot</option>
+            <option value="suesswaren">🍫 Süßigkeiten</option>
+            <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
+            <option value="getraenke">🥤 Getränke</option>
+            <option value="supplements">🏋️ Supplements &amp; Protein</option>
+            <option value="sonstiges">📦 Sonstiges</option>
+          </select>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
+            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;">📥 CSV Export</button>
+          </div>
+          <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
+          <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
+          <button onclick="repairFoodIds()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔧 Tagebuch-IDs reparieren</button>
+        </div>
+        
+        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
+          <span id="fooddb-count">0</span> Lebensmittel
+          <span style="margin:0 10px;">·</span>
+          <label style="cursor:pointer;">
+            <input type="checkbox" id="fooddb-local-only" onchange="searchFoodDB()"> 
+            Nur lokal (0 anzeigen)
+          </label>
+        </div>
+        
+        <div id="fooddb-list" style="max-height:600px;overflow-y:auto;"></div>
+      </div>
+      
+      <!-- Rezepte -->
+      <div id="rezepte-subtab" class="subtab-content">
+        <div style="margin-bottom:12px;">
+          <input type="text" id="recipe-search" placeholder="Rezept suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchRecipes()">
+          <button class="btn" onclick="openAddRecipe()" style="width:100%;">+ Neu</button>
+        </div>
+        
+        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
+          <span id="recipe-count">0</span> Rezepte
+        </div>
+        
+        <div id="recipe-list" style="max-height:600px;overflow-y:auto;"></div>
+      </div>
+      
     </div>
     
     <div id="dashboard-tab" class="tab-content">
@@ -1000,172 +1061,134 @@
           <input type="password" id="settings-anthropic-key" placeholder="sk-ant-..." style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
           <div style="font-size:12px;color:var(--muted);margin-top:6px;">Dein API Key wird mit deinen Einstellungen in deinem Firebase-Konto gespeichert (Firestore, users/…/settings/main) und bei Anfragen direkt vom Gerät an Anthropic gesendet. Erforderlich für den "Analyse"-Tab.</div>
         </div>
+
+        <!-- Verbindungen: Google Fit und Oura (bisher Daten › Import, interne id import-subtab) -->
+        <div class="meal-category">
+          <div class="meal-header" onclick="toggleSettingsSection(this)">
+            <div class="meal-title"><span class="settings-section-arrow">▶</span> Verbindungen</div>
+          </div>
+          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
+            <div id="import-subtab">
+              <!-- Google Fit Integration -->
+              <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+                  <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
+                  <h3 style="margin:0;">Google Fit</h3>
+                </div>
+                <div id="gfit-disconnected">
+                  <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
+                  <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
+                </div>
+                <div id="gfit-connected" style="display:none;">
+                  <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
+                    <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
+                  </div>
+                  <div style="display:flex;gap:10px;">
+                    <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
+                    <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
+                  </div>
+                  <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
+                </div>
+            </div>
+
+              <!-- Oura Ring Integration -->
+              <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
+                  <div style="background:#1a1a2e;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
+                  <h3 style="margin:0;">Oura Ring</h3>
+                </div>
+                <div id="oura-disconnected">
+                  <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
+                  <button class="btn" onclick="connectOura()" style="background:#1a1a2e;border-color:#1a1a2e;width:100%;">Mit Oura verbinden</button>
+                </div>
+                <div id="oura-connected" style="display:none;">
+                  <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
+                    <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
+                    <div style="font-size:12px;color:#f97316;margin-top:4px;display:none;" id="oura-error"></div>
+                  </div>
+                  <button class="btn" onclick="syncOuraNow()" style="width:100%;">🔄 Jetzt synchronisieren</button>
+                  <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
+                </div>
+            </div>
+            </div><!-- /import-subtab -->
+          </div>
+        </div>
+
+        <!-- Backup: Google Drive (bisher Daten › Backup, interne id export-subtab) -->
+        <div class="meal-category">
+          <div class="meal-header" onclick="toggleSettingsSection(this)">
+            <div class="meal-title"><span class="settings-section-arrow">▶</span> Backup</div>
+          </div>
+          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
+            <div id="export-subtab">
+              <div style="display:flex;flex-direction:column;gap:16px;">
+
+                <!-- Google Drive Auto-Backup -->
+                <div style="background:var(--bg);padding:20px;border-radius:12px;border:1px solid var(--border);">
+                  <h3 style="margin-bottom:8px;font-size:15px;">☁️ Google Drive Backup</h3>
+                  <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
+                  <!-- Disconnected State -->
+                  <div id="gdrive-disconnected">
+                    <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:#4285f4;border-color:#4285f4;">Mit Google Drive verbinden</button>
+                  </div>
+                  <!-- Connected State -->
+                  <div id="gdrive-connected" style="display:none;">
+                    <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
+                    <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;">☁️ Jetzt in Google Drive sichern</button>
+                    <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
+                    <button onclick="disconnectGoogleDrive()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Drive trennen</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statistik (bisher Daten › Statistik, interne id statistik-subtab) -->
+        <div class="meal-category">
+          <div class="meal-header" onclick="toggleSettingsSection(this)">
+            <div class="meal-title"><span class="settings-section-arrow">▶</span> Statistik</div>
+          </div>
+          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
+            <div id="statistik-subtab">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
+                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Lebensmittel-DB</div>
+                  <div style="font-size:32px;font-weight:600;" id="stat-fooddb">0</div>
+                </div>
+          
+                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Rezepte</div>
+                  <div style="font-size:32px;font-weight:600;" id="stat-recipes">0</div>
+                </div>
+          
+                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Einträge</div>
+                  <div style="font-size:32px;font-weight:600;" id="stat-diary">0</div>
+                </div>
+          
+                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Tage</div>
+                  <div style="font-size:32px;font-weight:600;" id="stat-days">0</div>
+                </div>
+          
+                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
+                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Training Einträge</div>
+                  <div style="font-size:32px;font-weight:600;" id="stat-training">0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Daten-Tab aufgelöst (Inhalte in Ernährung und Einstellungen). Leerer Platzhalter, damit die id erhalten bleibt. -->
+    <div id="daten-tab" style="display:none;"></div>
     
-    <div id="daten-tab" class="tab-content">
-      <!-- Sub-Tabs -->
-      <div style="display:flex;gap:10px;margin-bottom:30px;border-bottom:1px solid var(--border);">
-        <button class="sub-tab active" data-subtab="lebensmittel">Lebensmittel-DB</button>
-        <button class="sub-tab" data-subtab="rezepte">Rezepte</button>
-        <button class="sub-tab" data-subtab="import">Import</button>
-        <button class="sub-tab" data-subtab="export">Backup</button>
-        <button class="sub-tab" data-subtab="statistik">Statistik</button>
-      </div>
-      
-      <!-- Lebensmittel-DB -->
-      <div id="lebensmittel-subtab" class="subtab-content active">
-        <div style="margin-bottom:12px;">
-          <input type="text" id="fooddb-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchFoodDB()">
-          <select id="fooddb-kategorie-filter" onchange="searchFoodDB()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;font-size:13px;">
-            <option value="">— Alle Kategorien —</option>
-            <option value="__none__">⚪ Ohne Kategorie</option>
-            <option value="fleisch_fisch">🥩 Fleisch & Fisch</option>
-            <option value="milchprodukte">🧀 Milchprodukte</option>
-            <option value="obst_gemuese">🥦 Obst & Gemüse</option>
-            <option value="getreide_brot">🍞 Getreide & Brot</option>
-            <option value="suesswaren">🍫 Süßigkeiten</option>
-            <option value="gerichte">🍽️ Gerichte & Mahlzeiten</option>
-            <option value="getraenke">🥤 Getränke</option>
-            <option value="supplements">🏋️ Supplements &amp; Protein</option>
-            <option value="sonstiges">📦 Sonstiges</option>
-          </select>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
-            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;">📥 CSV Export</button>
-          </div>
-          <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
-          <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
-          <button onclick="repairFoodIds()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔧 Tagebuch-IDs reparieren</button>
-        </div>
-        
-        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
-          <span id="fooddb-count">0</span> Lebensmittel
-          <span style="margin:0 10px;">·</span>
-          <label style="cursor:pointer;">
-            <input type="checkbox" id="fooddb-local-only" onchange="searchFoodDB()"> 
-            Nur lokal (0 anzeigen)
-          </label>
-        </div>
-        
-        <div id="fooddb-list" style="max-height:600px;overflow-y:auto;"></div>
-      </div>
-      
-      <!-- Rezepte -->
-      <div id="rezepte-subtab" class="subtab-content">
-        <div style="margin-bottom:12px;">
-          <input type="text" id="recipe-search" placeholder="Rezept suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchRecipes()">
-          <button class="btn" onclick="openAddRecipe()" style="width:100%;">+ Neu</button>
-        </div>
-        
-        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
-          <span id="recipe-count">0</span> Rezepte
-        </div>
-        
-        <div id="recipe-list" style="max-height:600px;overflow-y:auto;"></div>
-      </div>
-      
-      <!-- Import -->
-      <div id="import-subtab" class="subtab-content">
-        <!-- Google Fit Integration -->
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-            <div style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">❤️</div>
-            <h3 style="margin:0;">Google Fit</h3>
-          </div>
-          <div id="gfit-disconnected">
-            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
-            <button class="btn" onclick="connectGoogleFit()" style="background:#4285f4;border-color:#4285f4;width:100%;">Mit Google Fit verbinden</button>
-          </div>
-          <div id="gfit-connected" style="display:none;">
-            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
-            </div>
-            <div style="display:flex;gap:10px;">
-              <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;">🔄 Neue Daten sync</button>
-              <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);">📥 Alles neu laden</button>
-            </div>
-            <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
-          </div>
-      </div>
-
-        <!-- Oura Ring Integration -->
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-            <div style="background:#1a1a2e;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💍</div>
-            <h3 style="margin:0;">Oura Ring</h3>
-          </div>
-          <div id="oura-disconnected">
-            <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
-            <button class="btn" onclick="connectOura()" style="background:#1a1a2e;border-color:#1a1a2e;width:100%;">Mit Oura verbinden</button>
-          </div>
-          <div id="oura-connected" style="display:none;">
-            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-              <div style="font-size:13px;color:var(--success);">✓ Verbunden</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
-              <div style="font-size:12px;color:#f97316;margin-top:4px;display:none;" id="oura-error"></div>
-            </div>
-            <button class="btn" onclick="syncOuraNow()" style="width:100%;">🔄 Jetzt synchronisieren</button>
-            <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
-          </div>
-      </div>
-      </div><!-- /import-subtab -->
-
-      <!-- Backup (Google Drive); interne id bleibt export-subtab -->
-      <div id="export-subtab" class="subtab-content">
-        <div style="display:flex;flex-direction:column;gap:16px;">
-
-          <!-- Google Drive Auto-Backup -->
-          <div style="background:var(--bg);padding:20px;border-radius:12px;border:1px solid var(--border);">
-            <h3 style="margin-bottom:8px;font-size:15px;">☁️ Google Drive Backup</h3>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
-            <!-- Disconnected State -->
-            <div id="gdrive-disconnected">
-              <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:#4285f4;border-color:#4285f4;">Mit Google Drive verbinden</button>
-            </div>
-            <!-- Connected State -->
-            <div id="gdrive-connected" style="display:none;">
-              <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
-              <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;">☁️ Jetzt in Google Drive sichern</button>
-              <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
-              <button onclick="disconnectGoogleDrive()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Drive trennen</button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Statistik -->
-      <div id="statistik-subtab" class="subtab-content">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
-          <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Lebensmittel-DB</div>
-            <div style="font-size:32px;font-weight:600;" id="stat-fooddb">0</div>
-          </div>
-          
-          <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Rezepte</div>
-            <div style="font-size:32px;font-weight:600;" id="stat-recipes">0</div>
-          </div>
-          
-          <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Einträge</div>
-            <div style="font-size:32px;font-weight:600;" id="stat-diary">0</div>
-          </div>
-          
-          <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Tage</div>
-            <div style="font-size:32px;font-weight:600;" id="stat-days">0</div>
-          </div>
-          
-          <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Training Einträge</div>
-            <div style="font-size:32px;font-weight:600;" id="stat-training">0</div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
   
   <!-- Toast -->
@@ -2081,10 +2104,7 @@
     // Render All
     function renderAll() {
       const activeTab = document.querySelector('.tab.active');
-      if (!activeTab) {
-        const ernaehrungBtn = document.querySelector('[data-tab="ernaehrung"]');
-        if (ernaehrungBtn) ernaehrungBtn.classList.add('active');
-      }
+      if (!activeTab) showTabPanel(START_TAB);
       renderFoodLog();
       renderDataStats();
       renderFoodDB();
@@ -5476,16 +5496,35 @@
     window.showToast = showToast;
     
     // Tab Switching
+    // Start-Tab beim App-Start: einzige Stelle, an der er festgelegt wird.
+    const START_TAB = 'ernaehrung';
+    // Alte Tab-Werte (Deeplink ?tab=, openTabFromWidget, alte Links/Widget-Aufrufe) → neue Tabs
+    const OLD_TAB_ALIASES = {
+      daten: 'einstellungen' // Daten-Tab aufgelöst: Lebensmittel/Rezepte → Ernährung, Import/Backup/Statistik → Einstellungen
+    };
+    const resolveTab = name => OLD_TAB_ALIASES[name] || name;
+
+    // Setzt nur die Klassen von Leiste und Panel (ohne Lade-/Render-Schritte eines Klicks)
+    function showTabPanel(target) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === target + '-tab'));
+    }
+    // Öffnet einen Tab wie ein Klick auf seinen Button; alte Werte über OLD_TAB_ALIASES
+    function switchTab(name) {
+      const btn = document.querySelector('.tab[data-tab="' + resolveTab(name) + '"]');
+      if (btn) btn.click();
+      return !!btn;
+    }
+    window.switchTab = switchTab;
+    showTabPanel(START_TAB);
+
     // Init sets UI immediately if training tab is active on load
     setTimeout(() => { if (document.getElementById('training-tab')?.classList.contains('active')) initSetsUI(''); }, 200);
 
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', async () => {
         const target = tab.dataset.tab;
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(target + '-tab').classList.add('active');
+        showTabPanel(target);
         // Re-render dashboard when tab becomes visible (canvas needs to be in DOM)
         if (target === 'dashboard') {
           requestAnimationFrame(() => {
@@ -5495,19 +5534,17 @@
           });
         }
         if (target === 'einstellungen' && userId) {
-          // settings tab opened
-        }
-        if (target === 'analyse' && userId) {
-          updateAnalyseKeyState();
-          requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
-        }
-        if (target === 'daten' && userId) {
+          // Verbindungen und Backup (bisher beim Öffnen des Daten-Tabs geladen)
           loadGoogleFitStatus();
           // Health Connect Section nur in App anzeigen
           const hcSection = document.getElementById('health-connect-section');
           if (hcSection) hcSection.style.display = 'block';
           loadDriveStatus();
           loadOuraStatus();
+        }
+        if (target === 'analyse' && userId) {
+          updateAnalyseKeyState();
+          requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
         }
         if (target === 'ernaehrung' && userId) {
           // Silent background sync for last 2 days
@@ -5568,17 +5605,13 @@
     
     // Feature 2: Widget-Klick öffnet Tab per URL-Parameter oder Android-Bridge
     window.openTabFromWidget = function(tabName) {
-      const btn = document.querySelector('[data-tab="' + tabName + '"]');
-      if (btn) btn.click();
+      switchTab(tabName);
     };
     (function checkDeeplink() {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
       if (tabParam) {
-        setTimeout(() => {
-          const btn = document.querySelector('[data-tab="' + tabParam + '"]');
-          if (btn) btn.click();
-        }, 500);
+        setTimeout(() => switchTab(tabParam), 500);
       }
     })();
 
@@ -5595,12 +5628,19 @@
         document.getElementById(target + '-subtab').classList.add('active');
 
         if (target === 'training-plan') renderTrainingPlan();
-
-        if (target === 'export') {
-          loadDriveStatus();
-        }
       }
     });
+
+    // Einklappbare Abschnitte in den Einstellungen (Verbindungen, Backup, Statistik), Muster wie toggleActivityGroup
+    window.toggleSettingsSection = function(header) {
+      const body = header.nextElementSibling;
+      const arrow = header.querySelector('.settings-section-arrow');
+      const open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      if (arrow) arrow.textContent = open ? '▼' : '▶';
+      // Backup: Status beim Aufklappen laden (bisher beim Öffnen des Unterbereichs Backup)
+      if (open && body.querySelector('#export-subtab')) loadDriveStatus();
+    };
     
     // ═══════════════════════════════════════════════════════════════════════════
     // TRAINING FUNCTIONS

@@ -434,6 +434,19 @@
     .fo-food-row .fo-tag { vertical-align: 1px; margin-left: 2px; }
     .fo-empty { padding: 40px 16px; text-align: center; color: var(--fo-text-3); }
     .fo-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px var(--fo-s3); border-top: 1px solid var(--fo-line); background: var(--fo-surface); }
+    /* Lauf 2A: Essen hinzufügen */
+    .fo-pickform { padding: var(--fo-s3); margin-bottom: 8px; }
+    .fo-pickform__calc { font-size: var(--fo-fs-small); line-height: var(--fo-lh-small); color: var(--fo-text-2); font-variant-numeric: tabular-nums; }
+    .fo-picklist:empty { display: none; }
+    .fo-pick-row + .fo-pick-row, .fo-listhead + .fo-pick-row { border-top: 1px solid var(--fo-line); }
+    .fo-pick-row { padding-right: 0; }
+    .fo-pick-row .fo-row__title { display: block; }
+    .fo-listhead { display: flex; align-items: center; gap: 6px; padding: 8px var(--fo-s3) 4px; background: var(--fo-surface-2); }
+    .fo-listhead + .fo-listhead { border-top: 1px solid var(--fo-line); }
+    .fo-pick-row + .fo-listhead { border-top: 1px solid var(--fo-line); }
+    .fo-empty--sm { padding: 16px; font-size: var(--fo-fs-small); }
+    /* Suchfeld mit Lupe ohne zusätzlichen Container (Eingabefeld bleibt direktes Kind seines Bereichs) */
+    .fo-input--search { padding-left: 40px; background: var(--fo-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626C7B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M20.5 20.5 16 16'/%3E%3C/svg%3E") no-repeat 12px center / 20px 20px; }
     /* Essen hinzufügen: Uhrzeit und Mahlzeit gleich hoch auf einer Linie */
     .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
     .fo-timerow > div { flex: 1; min-width: 0; }
@@ -892,19 +905,15 @@
     /* ── Modal "Kategorien zuweisen" ──────────────────────────────────────── */
     /* Die globale Regel select { width:100% } machte das Dropdown in der Flex-Zeile
        zeilenbreit, der Namensblock (flex-basis 0) bekam 0 px → Name unsichtbar. */
-    .bk-inner { max-width: 700px; margin: 0 auto; padding: 0 16px max(80px, env(safe-area-inset-bottom, 80px)); box-sizing: border-box; }
-    .bk-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 12px 0 10px; border-bottom: 1px solid var(--border); }
-    .bk-titlebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-    .bk-titlebar > div:first-child { min-width: 0; }
-    .bk-titlebar h3 { margin: 0 0 2px; }
-    .bk-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-    #bulk-kategorie-modal .bk-save { width: auto !important; min-height: 44px; padding: 10px 16px; }
-    .bk-close { background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; min-width: 44px; min-height: 44px; }
-    .bk-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--border); min-height: 56px; }
+    /* Kategorien-Modal (Lauf 2A): Kopf wie .fo-modalbar, Zeilen wie .fo-row, Auswahl wie .fo-select--compact (Zeilen erzeugt openBulkKategorie unverändert) */
+    .bk-inner { max-width: 700px; margin: 0 auto; padding: 0 0 max(80px, env(safe-area-inset-bottom, 80px)); box-sizing: border-box; background: var(--fo-surface); min-height: 100%; }
+    .bk-head .fo-sheet__title { font-size: var(--fo-fs-title); line-height: var(--fo-lh-title); }
+    #bulk-kategorie-modal .bk-save { flex: none; }
+    .bk-row { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px var(--fo-s3); border-bottom: 1px solid var(--fo-line); background: var(--fo-surface); }
     .bk-text { flex: 1 1 auto; min-width: 0; }
-    .bk-name { font-weight: 500; font-size: 14px; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .bk-macros { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    #bulk-kategorie-modal select.bk-sel { flex: 0 0 140px; width: 140px; min-width: 0; min-height: 44px; padding: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; }
+    .bk-name { font-weight: 500; font-size: 14px; line-height: 1.3; color: var(--fo-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .bk-macros { font-size: var(--fo-fs-caption); line-height: var(--fo-lh-caption); color: var(--fo-text-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+    #bulk-kategorie-modal select.bk-sel { flex: 0 0 136px; width: 136px; min-width: 0; height: var(--fo-tap); min-height: var(--fo-tap); padding: 0 30px 0 10px; background: var(--fo-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626C7B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center / 16px 16px; border: 1px solid var(--fo-line-strong); border-radius: var(--fo-r-md); color: var(--fo-text); font: 400 var(--fo-fs-small) var(--fo-font); appearance: none; -webkit-appearance: none; text-overflow: ellipsis; }
   </style>
 </head>
 <body class="fo-app">
@@ -1897,41 +1906,39 @@
 
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 4px;"><svg class="fo-i" aria-hidden="true"><use href="#i-copy"/></svg> Eintrag kopieren</h3>
-      <div id="copy-entry-name" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
-      <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:16px;">
-        <div style="min-width:0;">
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Datum</label>
-          <input type="date" id="copy-entry-date" style="width:100%;min-width:0;min-height:44px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
+    <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
+      <div class="fo-sheet__head">
+        <h3 class="fo-sheet__title"><svg class="fo-i" aria-hidden="true"><use href="#i-copy"/></svg> Eintrag kopieren</h3>
+      </div>
+      <div class="fo-sheet__body">
+        <div id="copy-entry-name" class="fo-help" style="font-size:var(--fo-fs-small);"></div>
+        <div class="fo-field">
+          <label class="fo-label" for="copy-entry-date">Datum</label>
+          <input type="date" id="copy-entry-date" class="fo-input" style="min-width:0;">
         </div>
-        <div style="min-width:0;">
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Uhrzeit</label>
-          <div style="display:flex;gap:6px;">
-            <input type="time" id="copy-entry-time" style="flex:1;min-width:0;min-height:44px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">
-            <button onclick="setCopyTimeToNow()" title="Datum und Uhrzeit auf jetzt setzen" style="flex-shrink:0;min-width:44px;min-height:44px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;">Jetzt</button>
+        <div class="fo-field">
+          <label class="fo-label" for="copy-entry-time">Uhrzeit</label>
+          <div style="display:flex;gap:8px;">
+            <input type="time" id="copy-entry-time" class="fo-input" style="flex:1;min-width:0;">
+            <button class="fo-btn fo-btn--secondary" type="button" onclick="setCopyTimeToNow()" title="Datum und Uhrzeit auf jetzt setzen" style="flex:none;min-width:44px;">Jetzt</button>
           </div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button onclick="document.getElementById('copy-entry-modal').style.display='none'" style="flex:1;min-height:44px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="applyCopyEntry()" class="btn" style="flex:2;min-height:44px;padding:12px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-copy"/></svg> Kopieren</button>
+      <div class="fo-sheet__foot" style="padding-bottom:max(80px, env(safe-area-inset-bottom, 80px));">
+        <button class="fo-btn fo-btn--secondary" type="button" onclick="document.getElementById('copy-entry-modal').style.display='none'">Abbrechen</button>
+        <button class="fo-btn fo-btn--primary" type="button" onclick="applyCopyEntry()" style="flex:2;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-copy"/></svg> Kopieren</button>
       </div>
     </div>
   </div>
   <div id="bulk-kategorie-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:9999;overflow-y:auto;">
     <div class="bk-inner">
-      <div class="bk-head">
-        <div class="bk-titlebar">
-          <div>
-            <h3>🏷️ Kategorien zuweisen</h3>
-            <div id="bulk-kat-status" style="font-size:12px;color:var(--muted);"></div>
-          </div>
-          <div class="bk-actions">
-            <button class="btn bk-save" onclick="saveBulkKategorie()"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Speichern</button>
-            <button class="bk-close" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
-          </div>
+      <div class="fo-modalbar bk-head">
+        <button class="fo-iconbtn" type="button" onclick="document.getElementById('bulk-kategorie-modal').style.display='none'" aria-label="Schließen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
+        <div style="flex:1;min-width:0;">
+          <h3 class="fo-sheet__title">🏷️ Kategorien zuweisen</h3>
+          <div id="bulk-kat-status" class="fo-help"></div>
         </div>
+        <button class="fo-btn fo-btn--primary fo-btn--sm bk-save" type="button" onclick="saveBulkKategorie()"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg> Speichern</button>
       </div>
       <div id="bulk-kat-list"></div>
     </div>
@@ -2004,30 +2011,30 @@
   <!-- Add Food Modal -->
   <div id="add-food-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;overflow-y:auto;">
     <div style="max-width:600px;margin:0 auto;background:var(--surface);border-radius:0 0 16px 16px;border:1px solid var(--border);min-height:100vh;">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-        <h3 id="add-food-title" style="font-size:16px;">Essen hinzufügen</h3>
-        <button onclick="closeAddFood()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+      <div class="fo-modalbar" style="padding-left:16px;padding-right:4px;">
+        <h3 id="add-food-title" class="fo-sheet__title">Essen hinzufügen</h3>
+        <button class="fo-iconbtn" type="button" onclick="closeAddFood()" aria-label="Schließen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
       </div>
 
       <div style="padding:12px 16px max(80px, env(safe-area-inset-bottom, 80px));box-sizing:border-box;">
         <!-- Mode Toggle: Lebensmittel | Rezepte -->
-        <div id="add-food-mode-tabs" style="display:flex;gap:0;margin-bottom:12px;background:var(--bg);border-radius:8px;padding:4px;">
-          <button id="mode-tab-food" onclick="setAddFoodMode('food')" style="flex:1;padding:8px;background:var(--primary);border:none;border-radius:6px;color:var(--fo-on-primary);font-size:14px;font-weight:500;cursor:pointer;">Lebensmittel</button>
-          <button id="mode-tab-recipe" onclick="setAddFoodMode('recipe')" style="flex:1;padding:8px;background:none;border:none;border-radius:6px;color:var(--muted);font-size:14px;cursor:pointer;">Rezepte</button>
+        <div id="add-food-mode-tabs" class="fo-seg" role="tablist" aria-label="Quelle" style="margin-bottom:12px;">
+          <button id="mode-tab-food" class="fo-seg__btn is-active" type="button" role="tab" aria-selected="true" onclick="setAddFoodMode('food')">Lebensmittel</button>
+          <button id="mode-tab-recipe" class="fo-seg__btn" type="button" role="tab" aria-selected="false" onclick="setAddFoodMode('recipe')">Rezepte</button>
         </div>
 
         <!-- Uhrzeit (immer sichtbar) -->
         <div class="fo-timerow">
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Uhrzeit</label>
+            <label class="fo-label" for="food-time" style="display:block;margin-bottom:4px;">Uhrzeit</label>
             <div style="display:flex;gap:6px;">
-              <input type="time" id="food-time" class="fo-timerow__ctl" style="flex:1;min-width:0;padding:0 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="updateMealFromTime()">
-              <button type="button" onclick="const n=new Date();document.getElementById('food-time').value=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');updateMealFromTime();" class="fo-timerow__ctl" style="min-width:44px;padding:0 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;">Jetzt</button>
+              <input type="time" id="food-time" class="fo-input fo-timerow__ctl" style="flex:1;min-width:0;padding:0 8px;" oninput="updateMealFromTime()">
+              <button type="button" onclick="const n=new Date();document.getElementById('food-time').value=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');updateMealFromTime();" class="fo-btn fo-btn--secondary fo-btn--sm fo-timerow__ctl" style="min-width:44px;padding:0 10px;white-space:nowrap;">Jetzt</button>
             </div>
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Mahlzeit (auto)</label>
-            <div id="food-meal-display" class="fo-timerow__ctl" style="display:flex;align-items:center;padding:0 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;">–</div>
+            <label class="fo-label" style="display:block;margin-bottom:4px;">Mahlzeit (auto)</label>
+            <div id="food-meal-display" class="fo-input fo-timerow__ctl" style="display:flex;align-items:center;padding:0 10px;color:var(--fo-text-2);font-size:var(--fo-fs-small);">–</div>
           </div>
           <input type="hidden" id="food-meal">
         </div>
@@ -2036,42 +2043,41 @@
         <div id="mode-food">
           <!-- Suchzeile + Buttons -->
           <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <input type="text" id="food-search" placeholder="Lebensmittel suchen..." 
-              style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" 
+            <div class="fo-inputicon"><svg class="fo-i" aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="food-search" class="fo-input" placeholder="Lebensmittel suchen..." 
               oninput="searchFood()" onfocus="showFoodSuggestions()"
-              onkeydown="handleFoodSearchKey(event)">
-            <button onclick="searchOpenFoodFacts()" title="Open Food Facts" aria-label="Open Food Facts" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-globe"/></svg></button>
-            <button onclick="startBarcodeScanner()" title="Barcode" aria-label="Barcode" style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-barcode"/></svg></button>
+              onkeydown="handleFoodSearchKey(event)"></div>
+            <button class="fo-iconbtn fo-iconbtn--boxed" type="button" onclick="searchOpenFoodFacts()" title="Open Food Facts" aria-label="Open Food Facts"><svg class="fo-i" aria-hidden="true"><use href="#i-globe"/></svg></button>
+            <button class="fo-iconbtn fo-iconbtn--boxed" type="button" onclick="startBarcodeScanner()" title="Barcode" aria-label="Barcode"><svg class="fo-i" aria-hidden="true"><use href="#i-barcode"/></svg></button>
           </div>
 
           <!-- Ausgewähltes Lebensmittel (jetzt ÜBER den Suchergebnissen) -->
           <div id="food-form" style="display:none;">
-            <div style="background:var(--bg);padding:15px;border-radius:8px;margin-bottom:8px;">
-              <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">
-                <div style="font-weight:600;" id="selected-food-name"></div>
-                <span id="selected-food-source" style="font-size:10px;background:var(--surface2);padding:2px 7px;border-radius:4px;color:var(--muted);"></span>
+            <div class="fo-card fo-pickform">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;">
+                <div style="font-weight:650;" id="selected-food-name"></div>
+                <span id="selected-food-source" class="fo-tag fo-tag--neutral"></span>
               </div>
-              <div style="margin-bottom:10px;">
-                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Menge (g)</label>
-                <input type="number" id="food-amount" value="100" min="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateNutrition()" onfocus="this.select()" onkeydown="if(event.key==='Enter'||event.key==='Go'||event.keyCode===13){saveFood();event.preventDefault();}" inputmode="decimal" enterkeyhint="done">
+              <div class="fo-field" style="margin-bottom:10px;">
+                <label class="fo-label" for="food-amount">Menge (g)</label>
+                <input type="number" id="food-amount" class="fo-input" value="100" min="1" oninput="updateNutrition()" onfocus="this.select()" onkeydown="if(event.key==='Enter'||event.key==='Go'||event.keyCode===13){saveFood();event.preventDefault();}" inputmode="decimal" enterkeyhint="done">
               </div>
-              <div style="font-size:13px;color:var(--muted);">
+              <div class="fo-pickform__calc">
                 <span id="calc-kcal">0</span> kcal · P <span id="calc-protein">0</span>g · K <span id="calc-carbs">0</span>g · F <span id="calc-fat">0</span>g
               </div>
             </div>
-            <button class="btn" onclick="saveFood()" style="width:100%;margin-bottom:8px;">Speichern</button>
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveFood()" style="margin-bottom:8px;">Speichern</button>
           </div>
 
           <!-- Lokale Suchergebnisse -->
-          <div id="food-search-results" style="max-height:280px;overflow-y:auto;margin-bottom:8px;"></div>
+          <div id="food-search-results" class="fo-card fo-picklist" style="max-height:280px;overflow-y:auto;margin-bottom:8px;"></div>
 
           <!-- Open Food Facts Ergebnisse -->
           <div id="off-results-container" style="display:none;margin-bottom:10px;">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <div class="fo-overline" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <span><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-globe"/></svg> Open Food Facts Ergebnisse</span>
-              <span id="off-status" style="color:var(--primary);"></span>
+              <span id="off-status" style="color:var(--fo-primary);text-transform:none;letter-spacing:0;"></span>
             </div>
-            <div id="off-search-results" style="max-height:calc(100vh - 360px);overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+            <div id="off-search-results" class="fo-card" style="max-height:calc(100vh - 360px);overflow-y:auto;"></div>
           </div>
 
           <!-- Barcode Scanner Vollbild -->
@@ -2080,30 +2086,30 @@
 
         <!-- REZEPTE MODE -->
         <div id="mode-recipe" style="display:none;">
-          <input type="text" id="recipe-search-modal" placeholder="Rezept suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:15px;" oninput="searchRecipeModal()">
-          <div id="recipe-search-results" style="max-height:220px;overflow-y:auto;margin-bottom:15px;"></div>
+          <input type="text" id="recipe-search-modal" class="fo-input fo-input--search" placeholder="Rezept suchen..." style="margin-bottom:8px;" oninput="searchRecipeModal()">
+          <div id="recipe-search-results" class="fo-card fo-picklist" style="max-height:220px;overflow-y:auto;margin-bottom:8px;"></div>
           <div id="recipe-form" style="display:none;">
-            <div style="background:var(--bg);padding:15px;border-radius:8px;margin-bottom:15px;">
-              <div style="font-weight:600;margin-bottom:4px;" id="selected-recipe-name"></div>
-              <div style="font-size:12px;color:var(--muted);margin-bottom:10px;" id="selected-recipe-info"></div>
+            <div class="fo-card fo-pickform">
+              <div style="font-weight:650;margin-bottom:4px;" id="selected-recipe-name"></div>
+              <div class="fo-help" style="margin-bottom:10px;" id="selected-recipe-info"></div>
               <!-- Toggle Portionen / Gramm -->
-              <div style="display:flex;gap:0;margin-bottom:10px;background:var(--surface);border-radius:6px;padding:3px;">
-                <button id="recipe-mode-portions-btn" onclick="setRecipeInputMode('portions')" style="flex:1;padding:6px;background:var(--primary);border:none;border-radius:4px;color:var(--fo-on-primary);font-size:13px;cursor:pointer;">Portionen</button>
-                <button id="recipe-mode-grams-btn" onclick="setRecipeInputMode('grams')" style="flex:1;padding:6px;background:none;border:none;border-radius:4px;color:var(--muted);font-size:13px;cursor:pointer;">Gramm</button>
+              <div class="fo-seg" role="tablist" aria-label="Menge" style="margin-bottom:10px;">
+                <button id="recipe-mode-portions-btn" class="fo-seg__btn is-active" type="button" role="tab" aria-selected="true" onclick="setRecipeInputMode('portions')">Portionen</button>
+                <button id="recipe-mode-grams-btn" class="fo-seg__btn" type="button" role="tab" aria-selected="false" onclick="setRecipeInputMode('grams')">Gramm</button>
               </div>
-              <div id="recipe-input-portions">
-                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Portionen</label>
-                <input type="number" id="recipe-portions" value="1" min="0.5" step="0.5" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateRecipeNutrition()">
+              <div id="recipe-input-portions" class="fo-field">
+                <label class="fo-label" for="recipe-portions">Portionen</label>
+                <input type="number" id="recipe-portions" class="fo-input" value="1" min="0.5" step="0.5" oninput="updateRecipeNutrition()">
               </div>
-              <div id="recipe-input-grams" style="display:none;">
-                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px;">Gramm</label>
-                <input type="number" id="recipe-grams" value="100" min="1" step="1" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);" oninput="updateRecipeNutrition()" onfocus="this.select()">
+              <div id="recipe-input-grams" class="fo-field" style="display:none;">
+                <label class="fo-label" for="recipe-grams">Gramm</label>
+                <input type="number" id="recipe-grams" class="fo-input" value="100" min="1" step="1" oninput="updateRecipeNutrition()" onfocus="this.select()">
               </div>
-              <div style="font-size:13px;color:var(--muted);margin-top:10px;">
+              <div class="fo-pickform__calc" style="margin-top:10px;">
                 <span id="recipe-calc-kcal">0</span> kcal · P <span id="recipe-calc-protein">0</span>g · K <span id="recipe-calc-carbs">0</span>g · F <span id="recipe-calc-fat">0</span>g
               </div>
             </div>
-            <button class="btn" onclick="saveRecipeEntry()" style="width:100%;">Speichern</button>
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveRecipeEntry()">Speichern</button>
           </div>
         </div>
       </div>
@@ -4973,10 +4979,12 @@
 
       document.getElementById('mode-food').style.display = mode === 'food' ? 'block' : 'none';
       document.getElementById('mode-recipe').style.display = mode === 'recipe' ? 'block' : 'none';
-      document.getElementById('mode-tab-food').style.background = mode === 'food' ? 'var(--primary)' : 'none';
-      document.getElementById('mode-tab-food').style.color = mode === 'food' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('mode-tab-recipe').style.background = mode === 'recipe' ? 'var(--primary)' : 'none';
-      document.getElementById('mode-tab-recipe').style.color = mode === 'recipe' ? 'var(--fo-on-primary)' : 'var(--muted)';
+      // Segment-Umschalter: aktiver Eintrag per Klasse is-active + aria-selected
+      [['mode-tab-food', 'food'], ['mode-tab-recipe', 'recipe']].forEach(([id, m]) => {
+        const btn = document.getElementById(id);
+        btn.classList.toggle('is-active', mode === m);
+        btn.setAttribute('aria-selected', String(mode === m));
+      });
       // Suchbegriff in beiden Tabs setzen und im aktiven Tab suchen
       if (foodSearchEl) foodSearchEl.value = term;
       if (recipeSearchEl) recipeSearchEl.value = term;
@@ -4992,14 +5000,14 @@
       if (query.length < 2) { results.innerHTML = ''; return; }
       const matches = recipes.filter(r => r.name.toLowerCase().includes(query)).slice(0, 20);
       if (matches.length === 0) {
-        results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Rezepte gefunden</div>';
+        results.innerHTML = '<div class="fo-empty fo-empty--sm">Keine Rezepte gefunden</div>';
         return;
       }
       results.innerHTML = matches.map(r => `
-        <div onclick="selectRecipe('${r.id}')" style="padding:12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-weight:500;">${r.name}</div>
-            <div style="font-size:11px;color:var(--muted);">${r.portions || 1} Portion(en) · ${(r.ingredients || []).length} Zutaten</div>
+        <div class="fo-row fo-pick-row" onclick="selectRecipe('${r.id}')" style="cursor:pointer;">
+          <div class="fo-row__main">
+            <div class="fo-row__title">${r.name}</div>
+            <div class="fo-row__sub">${r.portions || 1} Portion(en) · ${(r.ingredients || []).length} Zutaten</div>
           </div>
         </div>
       `).join('');
@@ -5011,10 +5019,11 @@
       recipeInputMode = mode;
       document.getElementById('recipe-input-portions').style.display = mode === 'portions' ? 'block' : 'none';
       document.getElementById('recipe-input-grams').style.display = mode === 'grams' ? 'block' : 'none';
-      document.getElementById('recipe-mode-portions-btn').style.background = mode === 'portions' ? 'var(--primary)' : 'none';
-      document.getElementById('recipe-mode-portions-btn').style.color = mode === 'portions' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('recipe-mode-grams-btn').style.background = mode === 'grams' ? 'var(--primary)' : 'none';
-      document.getElementById('recipe-mode-grams-btn').style.color = mode === 'grams' ? 'var(--fo-on-primary)' : 'var(--muted)';
+      [['recipe-mode-portions-btn', 'portions'], ['recipe-mode-grams-btn', 'grams']].forEach(([id, m]) => {
+        const btn = document.getElementById(id);
+        btn.classList.toggle('is-active', mode === m);
+        btn.setAttribute('aria-selected', String(mode === m));
+      });
       updateRecipeNutrition();
     };
 
@@ -5474,25 +5483,18 @@
     function renderFoodItem(f, isRecipe = false, usageCount = 0) {
       const key = isRecipe ? 'recipe_' + f.id : 'food_' + f.id;
       const isFav = favorites.has(key);
-      const starColor = isFav ? 'var(--fo-primary)' : 'var(--muted)';
-      const countBadge = usageCount > 0 ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">×${usageCount}</span>` : '';
-      const typeLabel = isRecipe
-        ? `<span style="font-size:10px;color:var(--fo-primary);background:var(--fo-primary-tint);padding:1px 5px;border-radius:4px;margin-right:4px;">Rezept</span>`
-        : '';
+      const countBadge = usageCount > 0 ? ` <span class="fo-count">×${usageCount}</span>` : '';
+      const typeLabel = isRecipe ? `<span class="fo-tag">Rezept</span> ` : '';
       const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       const macroLine = `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
 
       return `
-        <div class="food-suggestion-item" data-id="${f.id}" data-isrecipe="${isRecipe}"
-          style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div style="flex:1;min-width:0;pointer-events:none;">
-            <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${typeLabel}${safeName}${countBadge}
-            </div>
-            <div style="font-size:11px;color:var(--muted);">${macroLine}${isRecipe ? '' : ' / 100g'}</div>
+        <div class="food-suggestion-item fo-row fo-pick-row" data-id="${f.id}" data-isrecipe="${isRecipe}" style="cursor:pointer;">
+          <div class="fo-row__main" style="pointer-events:none;">
+            <div class="fo-row__title">${typeLabel}${safeName}${countBadge}</div>
+            <div class="fo-row__sub">${macroLine}${isRecipe ? '' : ' / 100g'}</div>
           </div>
-          <button class="fav-btn" data-favkey="${key}"
-            style="background:none;border:none;cursor:pointer;font-size:18px;color:${starColor};padding:4px;flex-shrink:0;" aria-label="Favorit">${foIcon('star', '', isFav)}</button>
+          <button class="fav-btn fo-iconbtn fo-food__star${isFav ? ' is-on' : ''}" type="button" data-favkey="${key}" aria-label="Favorit" aria-pressed="${isFav}">${foIcon('star', '', isFav)}</button>
         </div>`;
     }
 
@@ -5502,7 +5504,7 @@
       const query = document.getElementById('food-search')?.value?.trim();
       if (query && query.length >= 2) { searchFood(); return; }
       if (!foodDB || foodDB.length === 0) {
-        results.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Lade…</div>';
+        results.innerHTML = '<div class="fo-empty fo-empty--sm">Lade…</div>';
         return;
       }
       const currentMode = document.getElementById('mode-food')?.style.display === 'none' ? 'recipe' : 'food';
@@ -5514,14 +5516,14 @@
         const freqRecipes = recipes.filter(r => !favorites.has('recipe_' + r.id) && counts['recipe_' + r.id])
           .sort((a, b) => (counts['recipe_' + b.id] || 0) - (counts['recipe_' + a.id] || 0)).slice(0, 8);
         if (favRecipes.length > 0) {
-          html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
+          html += `<div class="fo-overline fo-listhead">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
           favRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
         }
         if (freqRecipes.length > 0) {
-          html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
+          html += `<div class="fo-overline fo-listhead">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
           freqRecipes.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
         }
-        results.innerHTML = html || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Rezept suchen…</div>';
+        results.innerHTML = html || '<div class="fo-empty fo-empty--sm">Rezept suchen…</div>';
         return;
       }
 
@@ -5530,14 +5532,14 @@
       const freqFoods = foodDB.filter(f => !favorites.has('food_' + f.id) && counts['food_' + f.id])
         .sort((a, b) => (counts['food_' + b.id] || 0) - (counts['food_' + a.id] || 0)).slice(0, 8);
       if (favFoods.length > 0) {
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-primary);font-weight:600;background:var(--bg);">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
+        html += `<div class="fo-overline fo-listhead">${foIcon('star', 'fo-i--sm', true)} Favoriten</div>`;
         favFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       if (freqFoods.length > 0) {
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
+        html += `<div class="fo-overline fo-listhead">${foIcon('clock', 'fo-i--sm')} Häufig genutzt</div>`;
         freqFoods.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
-      results.innerHTML = html || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Lebensmittel suchen…</div>';
+      results.innerHTML = html || '<div class="fo-empty fo-empty--sm">Lebensmittel suchen…</div>';
     };
 
     // Event-Delegation für Vorschläge/Suchergebnisse
@@ -5599,18 +5601,18 @@
       if (currentMode === 'recipe') {
         const recipeMatches = recipes.filter(r => r.name.toLowerCase().includes(query)).slice(0, 15);
         if (recipeMatches.length === 0) {
-          results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Rezepte gefunden</div>';
+          results.innerHTML = '<div class="fo-empty fo-empty--sm">Keine Rezepte gefunden</div>';
           return;
         }
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--fo-text-3);font-weight:600;background:var(--bg);">${foIcon('recipe', 'fo-i--sm')} Rezepte</div>`;
+        html += `<div class="fo-overline fo-listhead">${foIcon('recipe', 'fo-i--sm')} Rezepte</div>`;
         recipeMatches.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
       } else {
         const foodMatches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 20);
         if (foodMatches.length === 0) {
-          results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
+          results.innerHTML = '<div class="fo-empty fo-empty--sm">Keine Ergebnisse</div>';
           return;
         }
-        html += `<div style="padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);">${foIcon('food', 'fo-i--sm')} Lebensmittel</div>`;
+        html += `<div class="fo-overline fo-listhead">${foIcon('food', 'fo-i--sm')} Lebensmittel</div>`;
         foodMatches.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
       }
       results.innerHTML = html;

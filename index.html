@@ -407,6 +407,10 @@
     .fo-input:focus, .fo-select select:focus, .fo-input.is-focus { outline: 2px solid var(--fo-primary); outline-offset: -1px; box-shadow: var(--fo-focus-ring); }
     button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible,
     .fo-btn:focus-visible, .fo-iconbtn:focus-visible, .fo-seg__btn:focus-visible, .fo-chip:focus-visible, .fo-nav__item:focus-visible { outline: 2px solid var(--fo-primary); outline-offset: 2px; }
+    /* Lauf 2A: Übersicht */
+    .fo-row__sub--wrap { white-space: normal; overflow: visible; }
+    .activity-group-arrow { display: inline-grid; place-items: center; flex: none; width: 20px; }
+    .fo-card__title .fo-i { vertical-align: -0.2em; }
     /* Essen hinzufügen: Uhrzeit und Mahlzeit gleich hoch auf einer Linie */
     .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
     .fo-timerow > div { flex: 1; min-width: 0; }
@@ -1110,51 +1114,51 @@
     
     <!-- Übersicht: Kacheln, Schritte & Aktivitäten, Oura-Karte (bisher im Ernährung-Tab) -->
     <div id="uebersicht-tab" class="tab-content">
-      <!-- Daily Summary – Kachel: Ist-Wert, Differenz zum Ziel (Farbe nach KPI_RULES), Balken, Ziel -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));grid-auto-rows:1fr;gap:12px;margin-bottom:20px;">
-        <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;" id="daily-kcal">0</div>
-          <div data-kpi-diff="kcal" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
-          <div class="fo-bar fo-bar--thick" style="position:relative;">
+      <!-- Daily Summary – Kachel (.fo-kpi): Ist-Wert, Differenz zum Ziel (.fo-delta, Farbe nach KPI_RULES), Balken, Ziel -->
+      <div class="fo-kpis" style="margin-bottom:12px;">
+        <div class="fo-kpi">
+          <div class="fo-kpi__value" id="daily-kcal">0</div>
+          <div class="fo-delta" data-kpi-diff="kcal">&nbsp;</div>
+          <div class="fo-bar">
             <span id="bar-kcal" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-kcal-label" style="display:none;">0%</span>
           </div>
-          <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-kcal-goal">kcal</div>
+          <div class="fo-kpi__goal" id="daily-kcal-goal">kcal</div>
         </div>
-        <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-protein">0g</div>
-          <div data-kpi-diff="protein" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
-          <div class="fo-bar fo-bar--thick" style="position:relative;">
+        <div class="fo-kpi">
+          <div class="fo-kpi__value" id="daily-protein">0g</div>
+          <div class="fo-delta" data-kpi-diff="protein">&nbsp;</div>
+          <div class="fo-bar">
             <span id="bar-protein" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-protein-label" style="display:none;">0%</span>
           </div>
-          <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-protein-goal">Protein</div>
+          <div class="fo-kpi__goal" id="daily-protein-goal">Protein</div>
         </div>
-        <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-carbs">0g</div>
-          <div data-kpi-diff="kh" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
-          <div class="fo-bar fo-bar--thick" style="position:relative;">
+        <div class="fo-kpi">
+          <div class="fo-kpi__value" id="daily-carbs">0g</div>
+          <div class="fo-delta" data-kpi-diff="kh">&nbsp;</div>
+          <div class="fo-bar">
             <span id="bar-carbs" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-carbs-label" style="display:none;">0%</span>
           </div>
-          <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-carbs-goal">Kohlenhydrate</div>
+          <div class="fo-kpi__goal" id="daily-carbs-goal">Kohlenhydrate</div>
         </div>
-        <div style="background:var(--surface);padding:12px 10px;border-radius:12px;border:1px solid var(--border);min-width:0;">
-          <div style="font-size:26px;font-weight:600;line-height:1.15;color:var(--fo-text);" id="daily-fat">0g</div>
-          <div data-kpi-diff="fett" style="font-size:13px;font-weight:600;line-height:1.3;margin-bottom:6px;">&nbsp;</div>
-          <div class="fo-bar fo-bar--thick" style="position:relative;">
+        <div class="fo-kpi">
+          <div class="fo-kpi__value" id="daily-fat">0g</div>
+          <div class="fo-delta" data-kpi-diff="fett">&nbsp;</div>
+          <div class="fo-bar">
             <span id="bar-fat" style="width:0%;transition:width 0.4s;"></span>
             <span id="bar-fat-label" style="display:none;">0%</span>
           </div>
-          <div style="font-size:11px;line-height:1.3;color:var(--muted);margin-top:4px;" id="daily-fat-goal">Fett</div>
+          <div class="fo-kpi__goal" id="daily-fat-goal">Fett</div>
         </div>
       </div>
 
       <!-- Schritte & Aktivitäten -->
-      <div id="daily-activity-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:4px 16px;margin-bottom:16px;"></div>
+      <div id="daily-activity-summary" class="fo-card" style="margin-bottom:12px;"></div>
 
       <!-- Oura Ring: Schlaf / Readiness / Aktivität (immer sichtbar wenn Oura verbunden ist, auch ohne Daten für den Tag) -->
-      <div id="oura-daily-card" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:16px;"></div>
+      <div id="oura-daily-card" class="fo-card" style="display:none;margin-bottom:12px;"></div>
     </div>
 
     <div id="ernaehrung-tab" class="tab-content">
@@ -4629,7 +4633,8 @@
         if (label) label.textContent = pct + '%';
         const diffEl = document.querySelector(`[data-kpi-diff="${kennzahl}"]`);
         if (diffEl) {
-          diffEl.textContent = cls ? `${diffText} ${unit}` : 'kein Ziel';
+          // Status-Symbol (okCircle/alertCircle) vor der Differenz, Text unverändert
+          setIconText(diffEl, cls === 'is-ok' ? 'okCircle' : cls === 'is-bad' ? 'alertCircle' : null, cls ? `${diffText} ${unit}` : 'kein Ziel');
           diffEl.classList.toggle('is-ok', cls === 'is-ok');
           diffEl.classList.toggle('is-bad', cls === 'is-bad');
         }
@@ -4671,26 +4676,29 @@
           e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
         ).sort((a, b) => (a.garminTime || '').localeCompare(b.garminTime || ''));
 
-        let html = '<div style="padding:0 0 8px;">';
+        let html = '<ul class="fo-list">';
 
         // Schritte
         if (steps > 0) {
           const sourceText = 'Garmin';
-          html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:20px;">${foIcon('steps')}</span>
-            <div>
-              <span style="font-weight:500;">${fmt(steps)} Schritte</span>
-              ${sourceText ? `<div style="font-size:11px;color:var(--muted);">${sourceText}</div>` : ''}
+          html += `<li><div class="fo-row">
+            <span class="fo-row__icon">${foIcon('steps')}</span>
+            <div class="fo-row__main">
+              <div class="fo-row__title">${fmt(steps)} Schritte</div>
+              ${sourceText ? `<div class="fo-row__sub">${sourceText}</div>` : ''}
             </div>
-          </div>`;
+          </div></li>`;
         }
 
         // Angezeigte Kalorien einer Aktivitätszeile: nur wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal),
         // Wert wie bisher der gespeicherte act_kcal_calc bzw. kalorien
         const activityRowKcal = a => activityKcalForGoal(a) > 0 ? (a.act_kcal_calc || a.kalorien || 0) : 0;
 
-        // Eine Aktivitätszeile (Einzeldarstellung, unverändert)
-        const activityRowHtml = a => {
+        // Kalorienspalte einer Zeile (.fo-row__end, Flammen-Symbol als Aktivitäts-Akzent)
+        const kcalEndHtml = kcal => `<div class="fo-row__end"><span class="fo-kcal">${foIcon('flame')}${fmt(kcal)}</span><small>kcal</small></div>`;
+
+        // Eine Aktivitätszeile (Einzeldarstellung; child = Einzelzeile in einer aufgeklappten Gruppe, ohne Symbol)
+        const activityRowHtml = (a, child = false) => {
           const typName = TYP_LABELS[a.typ] || customTypeLabel(a.typ, a) || 'Aktivität';
           const emoji = typIcon(a.typ);
           // Variante anhängen wenn vorhanden (pullups/pushups)
@@ -4703,17 +4711,15 @@
           const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
           const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:16px;">${emoji}</span>
-              <div>
-                <div style="font-weight:500;font-size:14px;">${displayName}</div>
-                ${meta ? `<div style="font-size:12px;color:var(--muted);">${meta}</div>` : ''}
-                ${details ? `<div style="font-size:12px;color:var(--muted);">${details}</div>` : ''}
-              </div>
+          return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
+            ${!child && emoji ? `<span class="fo-row__icon">${emoji}</span>` : ''}
+            <div class="fo-row__main">
+              <div class="fo-row__title">${displayName}</div>
+              ${meta ? `<div class="fo-row__sub fo-row__sub--wrap">${meta}</div>` : ''}
+              ${details ? `<div class="fo-row__sub fo-row__sub--wrap">${details}</div>` : ''}
             </div>
-            ${kcal > 0 ? `<span style="font-size:13px;color:var(--fo-text);font-weight:600;">${fmt(kcal)} kcal</span>` : ''}
-          </div>`;
+            ${kcal > 0 ? kcalEndHtml(kcal) : ''}
+          </div></li>`;
         };
 
         // Aktivitäten: Typen mit nur einem Eintrag wie bisher, gleiche Typen (≥ 2) als zugeklappte Gruppe
@@ -4737,29 +4743,27 @@
           const groupKey = currentDate + '|' + g.typ;
           const isOpen = expandedActivityGroups.has(groupKey);
           const safeKey = groupKey.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-          html += `<div class="activity-group">
-            <div class="activity-group-header" data-group-key="${safeKey}" onclick="toggleActivityGroup(this)" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                <span class="activity-group-arrow" style="font-size:11px;color:var(--muted);width:16px;flex-shrink:0;">${foIcon('chevD', 'fo-i--sm fo-toggle-chev' + (isOpen ? ' is-open' : ''))}</span>
-                <span style="font-size:16px;">${emoji}</span>
-                <div style="min-width:0;">
-                  <div style="font-weight:500;font-size:14px;">${typName} <span style="color:var(--muted);font-weight:400;">${g.items.length}×</span></div>
-                  ${sumMeta ? `<div style="font-size:12px;color:var(--muted);">${sumMeta}</div>` : ''}
-                </div>
+          html += `<li class="activity-group">
+            <button type="button" class="fo-row activity-group-header" data-group-key="${safeKey}" onclick="toggleActivityGroup(this)" aria-expanded="${isOpen}">
+              ${emoji ? `<span class="fo-row__icon">${emoji}</span>` : ''}
+              <div class="fo-row__main">
+                <div class="fo-row__title">${typName} <span class="fo-count">${g.items.length}×</span></div>
+                ${sumMeta ? `<div class="fo-row__sub">${sumMeta}</div>` : ''}
               </div>
-              ${kcalSum > 0 ? `<span style="font-size:13px;color:var(--fo-text);font-weight:600;flex-shrink:0;">${fmt(kcalSum)} kcal</span>` : ''}
-            </div>
-            <div class="activity-group-items" style="display:${isOpen ? 'block' : 'none'};">
-              ${g.items.map(activityRowHtml).join('')}
-            </div>
-          </div>`;
+              ${kcalSum > 0 ? kcalEndHtml(kcalSum) : ''}
+              <span class="activity-group-arrow">${foIcon('chevD', 'fo-toggle-chev' + (isOpen ? ' is-open' : ''))}</span>
+            </button>
+            <ul class="fo-list activity-group-items" style="display:${isOpen ? 'block' : 'none'};border-top:1px solid var(--fo-line);">
+              ${g.items.map(a => activityRowHtml(a, true)).join('')}
+            </ul>
+          </li>`;
         });
 
         if (steps === 0 && dayActivities.length === 0) {
-          html += `<div style="padding:10px 0;color:var(--muted);font-size:13px;">Keine Aktivitäten heute</div>`;
+          html += `<li><div class="fo-row"><div class="fo-row__main fo-row__sub">Keine Aktivitäten heute</div></div></li>`;
         }
 
-        html += '</div>';
+        html += '</ul>';
         activityContainer.innerHTML = html;
       }
 
@@ -4914,6 +4918,7 @@
         arrow.querySelector('.fo-toggle-chev').classList.remove('is-open');
         expandedActivityGroups.delete(key);
       }
+      header.setAttribute('aria-expanded', String(items.style.display !== 'none'));
     };
 
     // Add/Edit/Delete Entry
@@ -7297,6 +7302,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       const HRV_TREND_THRESHOLD = 0.05;
       const HRV_TREND_MIN_VALUES = 3;
       let hrvText = '–';
+      let hrvTrend = '';
       if (d?.hrvAvg != null) {
         hrvText = `${Math.round(d.hrvAvg)} ms`;
         const prev = [];
@@ -7310,21 +7316,25 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
           const avg = prev.reduce((a, b) => a + b, 0) / prev.length;
           const arrow = d.hrvAvg > avg * (1 + HRV_TREND_THRESHOLD) ? foIcon('trendUp', 'fo-i--sm')
             : d.hrvAvg < avg * (1 - HRV_TREND_THRESHOLD) ? foIcon('trendDown', 'fo-i--sm') : '→';
-          hrvText += ` ${arrow} <span style="font-size:11px;color:var(--muted);">Ø 7 Tage: ${Math.round(avg)} ms</span>`;
+          hrvTrend = `<div class="fo-rec__trend">${arrow} Ø 7 Tage: ${Math.round(avg)} ms</div>`;
         }
       }
 
-      const row = (icon, label, value, last) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;${last ? '' : 'border-bottom:1px solid var(--border);'}">
-        <span style="font-size:18px;color:var(--fo-primary);">${foIcon(icon)}</span>
-        <div style="flex:1;font-weight:500;font-size:14px;">${label}</div>
-        <div style="font-size:14px;text-align:right;">${value}</div>
+      // Zelle im 2×2-Raster (.fo-rec); Einheit klein hinter dem Wert
+      const cell = (icon, label, value, extra = '') => `<div class="fo-rec__cell">
+        ${foIcon(icon, 'fo-rec__icon')}
+        <div style="min-width:0;">
+          <div class="fo-rec__label">${label}</div>
+          <div class="fo-rec__value">${value.replace(/ (bpm|ms|h)$/, ' <small>$1</small>')}</div>
+          ${extra}
+        </div>
       </div>`;
 
       const rows = [
-        row('heart', 'Ruhepuls (letzte Nacht)', restingText),
-        row('hrv', 'HRV (letzte Nacht)', hrvText),
-        row('deepsleep', 'Tiefschlaf', deepText),
-        row('sleep', 'Gesamtschlaf', sleepText, true),
+        cell('heart', 'Ruhepuls (letzte Nacht)', restingText),
+        cell('hrv', 'HRV (letzte Nacht)', hrvText, hrvTrend),
+        cell('deepsleep', 'Tiefschlaf', deepText),
+        cell('sleep', 'Gesamtschlaf', sleepText),
       ];
 
       // Schlaf- und Readiness-Score nur als dezente Zeile, nicht als Hauptwerte
@@ -7332,7 +7342,7 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (d && (d.sleepScore != null || d.readinessScore != null)) {
         const sleepScoreText = d.sleepScore != null ? String(d.sleepScore) : '–';
         const readinessScoreText = d.readinessScore != null ? String(d.readinessScore) : '–';
-        scoreHtml = `<div style="font-size:11px;color:var(--muted);margin-top:4px;">Schlaf-Score ${sleepScoreText} · Readiness ${readinessScoreText}</div>`;
+        scoreHtml = `<div>Schlaf-Score ${sleepScoreText} · Readiness ${readinessScoreText}</div>`;
       }
 
       // Dezente Statuszeile(n) unter den Werten
@@ -7348,12 +7358,14 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       if (loadedDays > 0) syncLine += ' · Geladene Tage: ' + loadedDays;
       statusLines.push(syncLine);
 
-      let statusHtml = statusLines.map(line => `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${line}</div>`).join('');
+      let statusHtml = statusLines.map(line => `<div>${line}</div>`).join('');
       if (ouraStatus.lastSyncError) {
-        statusHtml += `<div style="font-size:11px;color:var(--fo-bad);margin-top:4px;">${foIcon('alertCircle', 'fo-i--sm')} ${ouraStatus.lastSyncError}</div>`;
+        statusHtml += `<div class="fo-status-bad">${foIcon('alertCircle', 'fo-i--sm')} ${ouraStatus.lastSyncError}</div>`;
       }
 
-      card.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${foIcon('readiness', 'fo-i--sm')} Oura Ring</div>` + rows.join('') + scoreHtml + statusHtml;
+      card.innerHTML = `<div class="fo-card__head"><h2 class="fo-card__title">${foIcon('readiness', 'fo-i--sm fo-rec__icon')} Oura Ring</h2></div>`
+        + `<div class="fo-rec" style="border-top:1px solid var(--fo-line);">${rows.join('')}</div>`
+        + `<div class="fo-card__foot">${scoreHtml}${statusHtml}</div>`;
       card.style.display = 'block';
     }
 

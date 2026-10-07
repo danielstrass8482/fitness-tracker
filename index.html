@@ -421,6 +421,19 @@
     .fo-diary-row .fo-row__title { white-space: normal; overflow: visible; display: block; }
     .fo-row__note { font-size: var(--fo-fs-caption); color: var(--fo-text-3); margin-left: 4px; font-weight: 400; }
     .fo-sum__top .fo-delta { margin-left: auto; }
+    /* Lauf 2A: Lebensmittel und Rezepte */
+    .fo-listtools { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+    .fo-listmeta { margin-bottom: 8px; font-size: var(--fo-fs-small); line-height: var(--fo-lh-small); color: var(--fo-text-2); }
+    .fo-listmeta__sep { margin: 0 8px; }
+    .fo-checklabel { display: inline-flex; align-items: center; gap: 8px; min-height: var(--fo-tap); vertical-align: middle; cursor: pointer; }
+    .fo-checklabel input[type=checkbox] { width: 20px; height: 20px; flex: none; accent-color: var(--fo-primary); }
+    .fo-food-row { flex-wrap: wrap; row-gap: 0; }
+    .fo-food-row .fo-row__main { flex: 1 1 180px; }
+    .fo-food-row .fo-row__title { display: block; white-space: normal; overflow: visible; }
+    .fo-food-row .fo-row__actions { margin-left: auto; align-items: center; gap: 4px; margin-right: 0; }
+    .fo-food-row .fo-tag { vertical-align: 1px; margin-left: 2px; }
+    .fo-empty { padding: 40px 16px; text-align: center; color: var(--fo-text-3); }
+    .fo-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px var(--fo-s3); border-top: 1px solid var(--fo-line); background: var(--fo-surface); }
     /* Essen hinzufügen: Uhrzeit und Mahlzeit gleich hoch auf einer Linie */
     .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
     .fo-timerow > div { flex: 1; min-width: 0; }
@@ -1195,9 +1208,9 @@
 
       <!-- Lebensmittel-DB -->
       <div id="lebensmittel-subtab" class="subtab-content">
-        <div style="margin-bottom:12px;">
-          <input type="text" id="fooddb-search" placeholder="Lebensmittel suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchFoodDB()">
-          <select id="fooddb-kategorie-filter" onchange="searchFoodDB()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;font-size:13px;">
+        <div class="fo-listtools">
+          <div class="fo-inputicon"><svg class="fo-i" aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="fooddb-search" class="fo-input" placeholder="Lebensmittel suchen..." oninput="searchFoodDB()"></div>
+          <div class="fo-select"><select id="fooddb-kategorie-filter" onchange="searchFoodDB()">
             <option value="">— Alle Kategorien —</option>
             <option value="__none__">⚪ Ohne Kategorie</option>
             <option value="fleisch_fisch">🥩 Fleisch & Fisch</option>
@@ -1209,40 +1222,40 @@
             <option value="getraenke">🥤 Getränke</option>
             <option value="supplements">🏋️ Supplements &amp; Protein</option>
             <option value="sonstiges">📦 Sonstiges</option>
-          </select>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button class="btn" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
-            <button onclick="exportFoodDBCsv()" style="flex:1;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-download"/></svg> CSV Export</button>
+          </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+          <div style="display:flex;gap:8px;">
+            <button class="fo-btn fo-btn--primary" type="button" onclick="openAddFoodDB()" style="flex:1;">+ Neu</button>
+            <button class="fo-btn fo-btn--secondary" type="button" onclick="exportFoodDBCsv()" style="flex:1;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-download"/></svg> CSV Export</button>
           </div>
-          <button onclick="openConsolidateTool()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔀 Duplikate zusammenführen</button>
-          <button onclick="openBulkKategorie()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🏷️ Kategorien zuweisen</button>
-          <button onclick="repairFoodIds()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">🔧 Tagebuch-IDs reparieren</button>
+          <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openConsolidateTool()">🔀 Duplikate zusammenführen</button>
+          <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openBulkKategorie()">🏷️ Kategorien zuweisen</button>
+          <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="repairFoodIds()">🔧 Tagebuch-IDs reparieren</button>
         </div>
         
-        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
+        <div class="fo-listmeta">
           <span id="fooddb-count">0</span> Lebensmittel
-          <span style="margin:0 10px;">·</span>
-          <label style="cursor:pointer;">
+          <span class="fo-listmeta__sep">·</span>
+          <label class="fo-checklabel">
             <input type="checkbox" id="fooddb-local-only" onchange="searchFoodDB()"> 
             Nur lokal (0 anzeigen)
           </label>
         </div>
         
-        <div id="fooddb-list" style="max-height:600px;overflow-y:auto;"></div>
+        <div id="fooddb-list" class="fo-card" style="max-height:600px;overflow-y:auto;"></div>
       </div>
       
       <!-- Rezepte -->
       <div id="rezepte-subtab" class="subtab-content">
-        <div style="margin-bottom:12px;">
-          <input type="text" id="recipe-search" placeholder="Rezept suchen..." style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;" oninput="searchRecipes()">
-          <button class="btn" onclick="openAddRecipe()" style="width:100%;">+ Neu</button>
+        <div class="fo-listtools">
+          <div class="fo-inputicon"><svg class="fo-i" aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="recipe-search" class="fo-input" placeholder="Rezept suchen..." oninput="searchRecipes()"></div>
+          <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="openAddRecipe()">+ Neu</button>
         </div>
         
-        <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">
+        <div class="fo-listmeta">
           <span id="recipe-count">0</span> Rezepte
         </div>
         
-        <div id="recipe-list" style="max-height:600px;overflow-y:auto;"></div>
+        <div id="recipe-list" class="fo-card" style="max-height:600px;overflow-y:auto;"></div>
       </div>
       
     </div>
@@ -3524,7 +3537,7 @@
       if (!list) return;
       
       if (filtered.length === 0) {
-        list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Keine Lebensmittel gefunden</div>';
+        list.innerHTML = '<div class="fo-empty">Keine Lebensmittel gefunden</div>';
         return;
       }
       
@@ -3546,36 +3559,32 @@
       const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
       const paginated = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
-      list.innerHTML = paginated.map(f => {
+      list.innerHTML = '<ul class="fo-list">' + paginated.map(f => {
         const key = 'food_' + f.id;
         const isFav = favorites.has(key);
-        const katLabel = f.kategorie ? `<span style="font-size:10px;background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--muted);margin-left:6px;">${KATEGORIE_LABELS[f.kategorie] || f.kategorie}</span>` : '';
+        const katLabel = f.kategorie ? ` <span class="fo-tag fo-tag--neutral">${KATEGORIE_LABELS[f.kategorie] || f.kategorie}</span>` : '';
         return `
-        <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-          <div style="flex:1;">
-            <div style="font-weight:500;margin-bottom:4px;">${f.name}${katLabel}</div>
-            <div style="font-size:12px;color:var(--muted);">
-              ${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g
-            </div>
+        <li><div class="fo-row fo-food-row">
+          <div class="fo-row__main">
+            <div class="fo-row__title">${f.name}${katLabel}</div>
+            <div class="fo-row__sub fo-row__sub--wrap">${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <button onclick="toggleFavorite('${key}', event)" style="background:none;border:none;cursor:pointer;font-size:20px;color:${isFav ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;" aria-label="Favorit">${foIcon('star', '', isFav)}</button>
-            <button onclick="editFoodDB('${f.id}')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;">Bearbeiten</button>
-            <button onclick="deleteFoodDB('${f.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+          <div class="fo-row__actions">
+            <button class="fo-iconbtn fo-food__star${isFav ? ' is-on' : ''}" type="button" onclick="toggleFavorite('${key}', event)" aria-label="Favorit" aria-pressed="${isFav}">${foIcon('star', '', isFav)}</button>
+            <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editFoodDB('${f.id}')">Bearbeiten</button>
+            <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteFoodDB('${f.id}')">Löschen</button>
           </div>
-        </div>`;
-      }).join('');
+        </div></li>`;
+      }).join('') + '</ul>';
       
       if (filtered.length > 100) {
         list.innerHTML += `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);">
-            <button onclick="window._foodDBPage=Math.max(0,(window._foodDBPage||0)-1);renderFoodDB();"
-              style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
-              ${currentPage === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>${foIcon('chevL', 'fo-i--sm')} Zurück</button>
-            <span style="font-size:13px;color:var(--muted);">Seite ${currentPage+1} / ${totalPages} · ${filtered.length} Einträge</span>
-            <button onclick="window._foodDBPage=Math.min(${totalPages-1},(window._foodDBPage||0)+1);renderFoodDB();"
-              style="padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;"
-              ${currentPage >= totalPages-1 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>Weiter ${foIcon('chevR', 'fo-i--sm')}</button>
+          <div class="fo-pager">
+            <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="window._foodDBPage=Math.max(0,(window._foodDBPage||0)-1);renderFoodDB();"
+              ${currentPage === 0 ? 'disabled' : ''}>${foIcon('chevL', 'fo-i--sm')} Zurück</button>
+            <span class="fo-help">Seite ${currentPage+1} / ${totalPages} · ${filtered.length} Einträge</span>
+            <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="window._foodDBPage=Math.min(${totalPages-1},(window._foodDBPage||0)+1);renderFoodDB();"
+              ${currentPage >= totalPages-1 ? 'disabled' : ''}>Weiter ${foIcon('chevR', 'fo-i--sm')}</button>
           </div>`;
       }
     }
@@ -4052,11 +4061,11 @@
       if (!list) return;
       
       if (filtered.length === 0) {
-        list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Keine Rezepte gefunden</div>';
+        list.innerHTML = '<div class="fo-empty">Keine Rezepte gefunden</div>';
         return;
       }
       
-      list.innerHTML = filtered.map(r => {
+      list.innerHTML = '<ul class="fo-list">' + filtered.map(r => {
         const kcal = r.kcal || 0;
         const protein = r.protein || 0;
         const carbs = r.carbs || 0;
@@ -4076,26 +4085,26 @@
           fat: Math.round(fat / totalWeight * 100 * 10) / 10
         } : null;
         
+        const isFav = favorites.has('recipe_' + r.id);
         return `
-          <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="openRecipeModal('${r.id}')">
-            <div style="flex:1;">
-              <div style="font-weight:500;margin-bottom:4px;">${r.name}</div>
-              <div style="font-size:12px;color:var(--muted);margin-bottom:3px;">
+          <li><div class="fo-row fo-food-row" style="cursor:pointer;" onclick="openRecipeModal('${r.id}')">
+            <div class="fo-row__main">
+              <div class="fo-row__title">${r.name}</div>
+              <div class="fo-row__sub fo-row__sub--wrap">
                 ${portions} Portion(en) · ${(r.ingredients || []).length} Zutaten${totalWeight > 0 ? ' · ' + fmt(totalWeight) + 'g gesamt' : ''}
               </div>
-              <div style="font-size:12px;color:var(--muted);">
+              <div class="fo-row__sub fo-row__sub--wrap">
                 Gesamt: ${fmt(kcal)} kcal · P ${fmt(protein,1)}g · K ${fmt(carbs,1)}g · F ${fmt(fat,1)}g
                 ${per100 ? ` | 100g: ${fmt(per100.kcal)} kcal` : ''}
               </div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:12px;">
-              <button onclick="event.stopPropagation();toggleFavorite('recipe_${r.id}', event)"
-                style="background:none;border:none;cursor:pointer;font-size:20px;color:${favorites.has('recipe_' + r.id) ? 'var(--fo-primary)' : 'var(--muted)'};padding:4px;" aria-label="Favorit">${foIcon('star', '', favorites.has('recipe_' + r.id))}</button>
-              <button onclick="event.stopPropagation();deleteRecipe('${r.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+            <div class="fo-row__actions">
+              <button class="fo-iconbtn fo-food__star${isFav ? ' is-on' : ''}" type="button" onclick="event.stopPropagation();toggleFavorite('recipe_${r.id}', event)" aria-label="Favorit" aria-pressed="${isFav}">${foIcon('star', '', isFav)}</button>
+              <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="event.stopPropagation();deleteRecipe('${r.id}')">Löschen</button>
             </div>
-          </div>
+          </div></li>
         `;
-      }).join('');
+      }).join('') + '</ul>';
     }
     
     window.openAddRecipe = function() {

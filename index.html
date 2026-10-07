@@ -943,6 +943,7 @@
     <div class="login-box">
       <h1><svg class="fo-i" aria-hidden="true"><use href="#i-training"/></svg> Training & Ernährung</h1>
       <p>Deine Daten werden sicher in Firebase gespeichert</p>
+      <p id="login-guest-hint" class="fo-help" style="display:none;margin:-18px 0 16px;color:var(--fo-text-2);">Für Fuelofit ist die Anmeldung mit Google nötig.</p>
       <button id="login-btn" class="btn" onclick="if(window.handleLogin){window.handleLogin();}else{setTimeout(function(){if(window.handleLogin)window.handleLogin();},300);}">Mit Google anmelden</button>
     </div>
   </div>
@@ -2297,8 +2298,14 @@
     }
 
     // Auth Listener
+    // Gast-Konten (anonym) gelten nicht als angemeldet: Die Dart-App lief bis Juni unter derselben
+    // Origin mit demselben Firebase-Schlüssel und hat Gäste anonym angemeldet; diese Sitzung würde
+    // Fuelofit sonst übernehmen (leere Oberfläche). Kein signOut, damit die Dart-Sitzung erhalten bleibt.
+    // Custom-Token (APK) und Google-Anmeldung sind nie anonym.
     onAuthStateChanged(auth, async (user) => {
-      if (user) {
+      const guestHint = document.getElementById('login-guest-hint');
+      if (guestHint) guestHint.style.display = user?.isAnonymous ? 'block' : 'none';
+      if (user && !user.isAnonymous) {
         userId = user.uid;
         document.getElementById('user-email').textContent = user.email;
         document.getElementById('login-screen').style.display = 'none';

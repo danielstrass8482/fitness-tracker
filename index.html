@@ -27,7 +27,7 @@
     :root{
       color-scheme: light;
       /* Flächen */
-      --fo-bg:#FFFFFF;              /* Seitenhintergrund */
+      --fo-bg:#EEF2F7;              /* Seitenhintergrund (weiches kühles Grau, Text 3 darauf 4.7:1) */
       --fo-surface:#FFFFFF;         /* Karten, Sheets, Leisten */
       --fo-surface-2:#F4F6F9;       /* eingelassen: Segment-Track, Kindzeilen, Info-Boxen */
       --fo-surface-3:#E9EDF2;       /* Balken-Track, gedrückter Zustand */
@@ -401,6 +401,16 @@
     #bottom-nav.fo-nav { margin-bottom: 16px; }
     .fo-nav__label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     .fo-seg__btn.active { background: var(--fo-surface); color: var(--fo-primary); box-shadow: var(--fo-sh-1), 0 0 0 1px var(--fo-line); }
+    /* Fokus: Ring aus dem Primär-Token statt Browser-Standard (WebView zeichnete ihn orange/gelblich).
+       2 px Primär (5.3:1 auf Grau, 5.9:1 auf Weiß) plus Halo --fo-focus-ring; outline, weil viele Felder Rahmen inline setzen */
+    input:focus, select:focus, textarea:focus,
+    .fo-input:focus, .fo-select select:focus, .fo-input.is-focus { outline: 2px solid var(--fo-primary); outline-offset: -1px; box-shadow: var(--fo-focus-ring); }
+    button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible,
+    .fo-btn:focus-visible, .fo-iconbtn:focus-visible, .fo-seg__btn:focus-visible, .fo-chip:focus-visible, .fo-nav__item:focus-visible { outline: 2px solid var(--fo-primary); outline-offset: 2px; }
+    /* Essen hinzufügen: Uhrzeit und Mahlzeit gleich hoch auf einer Linie */
+    .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .fo-timerow > div { flex: 1; min-width: 0; }
+    .fo-timerow__ctl { height: var(--fo-tap); min-height: var(--fo-tap); }
     @media (max-width: 768px) {
       .app-container > .fo-appbar { margin: -12px -12px 12px; }
       #bottom-nav.fo-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; margin: 0; height: auto; min-height: var(--fo-nav-h); padding: 0 4px env(safe-area-inset-bottom, 0px); }
@@ -408,8 +418,10 @@
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
+    /* Altes --bg stand im alten Markup für Felder und eingelassene Flächen auf Karten und in Modals,
+       nicht für die Seite. Hell bleibt es weiß (--fo-surface), die Seite selbst nutzt --fo-bg direkt. */
     :root {
-      --bg: var(--fo-bg);
+      --bg: var(--fo-surface);
       --surface: var(--fo-surface);
       --surface2: var(--fo-surface-2);
       --border: var(--fo-line);
@@ -420,6 +432,7 @@
       --danger: var(--fo-bad);
       --warning: var(--fo-text-2);
     }
+    :root[data-theme="dark"] { --bg: var(--fo-bg); }
     
     *, *::before, *::after {
       box-sizing: border-box;
@@ -430,7 +443,7 @@
     }
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
+      background: var(--fo-bg);
       color: var(--text);
       line-height: 1.5;
       overflow-x: hidden;
@@ -1976,17 +1989,17 @@
         </div>
 
         <!-- Uhrzeit (immer sichtbar) -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-          <div style="flex:1;">
+        <div class="fo-timerow">
+          <div>
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Uhrzeit</label>
             <div style="display:flex;gap:6px;">
-              <input type="time" id="food-time" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="updateMealFromTime()">
-              <button type="button" onclick="const n=new Date();document.getElementById('food-time').value=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');updateMealFromTime();" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;">Jetzt</button>
+              <input type="time" id="food-time" class="fo-timerow__ctl" style="flex:1;min-width:0;padding:0 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);" oninput="updateMealFromTime()">
+              <button type="button" onclick="const n=new Date();document.getElementById('food-time').value=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');updateMealFromTime();" class="fo-timerow__ctl" style="min-width:44px;padding:0 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;">Jetzt</button>
             </div>
           </div>
-          <div style="flex:1;">
+          <div>
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Mahlzeit (auto)</label>
-            <div id="food-meal-display" style="padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;">–</div>
+            <div id="food-meal-display" class="fo-timerow__ctl" style="display:flex;align-items:center;padding:0 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;">–</div>
           </div>
           <input type="hidden" id="food-meal">
         </div>

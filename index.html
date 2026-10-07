@@ -411,6 +411,16 @@
     .fo-row__sub--wrap { white-space: normal; overflow: visible; }
     .activity-group-arrow { display: inline-grid; place-items: center; flex: none; width: 20px; }
     .fo-card__title .fo-i { vertical-align: -0.2em; }
+    /* Lauf 2A: Ernährung-Tagebuch (Mahlzeitenkopf behält .meal-header/.meal-title für toggleMeal) */
+    .fo-meal > .meal-header { padding: 6px 4px 6px 8px; justify-content: flex-start; cursor: pointer; }
+    .fo-meal > .meal-header:hover { background: transparent; }
+    .fo-meal .fo-meal__toggle { min-height: 44px; }
+    .fo-meal .meal-title { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fo-fs-body); }
+    .fo-meal__mac > span + span, .fo-diary-row .fo-row__sub > span + span { margin-left: 2px; }
+    .fo-diary-row .fo-row__main { min-height: var(--fo-tap); display: flex; flex-direction: column; justify-content: center; }
+    .fo-diary-row .fo-row__title { white-space: normal; overflow: visible; display: block; }
+    .fo-row__note { font-size: var(--fo-fs-caption); color: var(--fo-text-3); margin-left: 4px; font-weight: 400; }
+    .fo-sum__top .fo-delta { margin-left: auto; }
     /* Essen hinzufügen: Uhrzeit und Mahlzeit gleich hoch auf einer Linie */
     .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
     .fo-timerow > div { flex: 1; min-width: 0; }
@@ -1171,16 +1181,16 @@
 
       <div id="tagebuch-subtab" class="subtab-content active">
       <!-- Kompakte Kalorienzeile (gefüllt in renderFoodLog mit denselben Werten und Farben wie die Kacheln in der Übersicht) -->
-      <div id="diary-summary" style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:10px 14px;margin-bottom:12px;">
-        <div id="diary-kcal-line" style="font-size:15px;font-weight:600;"></div>
-        <div id="diary-macro-line" style="font-size:12px;color:var(--muted);margin-top:2px;"></div>
+      <div id="diary-summary" class="fo-card fo-sum" style="margin-bottom:8px;">
+        <div id="diary-kcal-line" class="fo-sum__top"></div>
+        <div id="diary-macro-line" class="fo-macros"></div>
       </div>
 
       <!-- Add Food Button -->
-      <button class="btn" onclick="openAddFood()" style="width:100%;margin-bottom:12px;">+ Essen hinzufügen</button>
+      <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="openAddFood()" style="margin-bottom:8px;">+ Essen hinzufügen</button>
 
       <!-- Meals Container -->
-      <div id="meals-container"></div>
+      <div id="meals-container" style="display:flex;flex-direction:column;gap:8px;"></div>
       </div><!-- /tagebuch-subtab -->
 
       <!-- Lebensmittel-DB -->
@@ -4654,16 +4664,16 @@
       if (kcalLine) {
         const k = kpiDisplay('kcal', totalKcal, todayGoal);
         kcalLine.innerHTML = k.cls
-          ? `${fmt(k.istR)} / ${fmt(k.zielR)} kcal · <span class="fo-kpistat ${k.cls}">${k.diffText}</span>`
-          : `${fmt(k.istR)} kcal · <span style="color:var(--muted);">kein Ziel</span>`;
+          ? `<span class="fo-sum__kcal">${fmt(k.istR)}</span> <span class="fo-sum__goal">/ ${fmt(k.zielR)} kcal</span> <span class="fo-delta fo-kpistat ${k.cls}">${foIcon(k.cls === 'is-ok' ? 'okCircle' : 'alertCircle', 'fo-i--sm')}${k.diffText}</span>`
+          : `<span class="fo-sum__kcal">${fmt(k.istR)}</span> <span class="fo-sum__goal">kcal</span> <span class="fo-delta" style="color:var(--fo-text-3);">kein Ziel</span>`;
       }
       const macroLine = document.getElementById('diary-macro-line');
       if (macroLine) {
         macroLine.innerHTML = [['protein', 'Protein', totalProtein, proteinGoal], ['kh', 'Kohlenhydrate', totalCarbs, carbsGoal], ['fett', 'Fett', totalFat, fatGoal]]
           .map(([kennzahl, label, ist, ziel]) => {
             const m = kpiDisplay(kennzahl, ist, ziel);
-            return `${label} <span class="fo-kpistat ${m.cls || ''}">${fmt(m.istR)}</span>${m.cls ? ' / ' + fmt(m.zielR) : ''} g`;
-          }).join(' · ');
+            return `<div><div class="fo-macro__label">${label}</div> <div class="fo-macro__value ${m.cls || ''}"><b>${fmt(m.istR)}</b>${m.cls ? ' / ' + fmt(m.zielR) : ''} g</div></div>`;
+          }).join(' ');
       }
 
       // ── Schritte + Aktivitäten unter den Kacheln ─────────────────────────
@@ -4841,42 +4851,42 @@
         const mealPct = totalKcal > 0 ? Math.round((mealKcal / totalKcal) * 100) : 0;
         
         const mealDiv = document.createElement('div');
-        mealDiv.className = 'meal-category';
+        mealDiv.className = 'fo-meal';
         const isExpanded = expandedMeals.has(mealName);
+        // Kopf: Toggle-Fläche (Name links, kcal + Makros rechts) und Uhr-Button; .meal-title enthält Chevron + Mahlzeitname (Schlüssel für toggleMeal)
         mealDiv.innerHTML = `
-          <div class="meal-header" onclick="toggleMeal(this)">
-            <div class="meal-title">${foIcon('chevD', 'fo-i--sm fo-toggle-chev' + (isExpanded ? ' is-open' : ''))} ${mealName}</div>
-            <div style="display:flex;gap:8px;align-items:center;font-size:12px;">
-              <span style="color:var(--fo-text-3);">P ${Math.round(mealProtein)}g</span>
-              <span style="color:var(--fo-text-3);">K ${Math.round(mealCarbs)}g</span>
-              <span style="color:var(--fo-text-3);">F ${Math.round(mealFat)}g</span>
-              <span>${fmt(mealKcal)} kcal${mealKcal > 0 ? ` (${mealPct}%)` : ''}</span>
-              <button onclick="event.stopPropagation();openBulkTimeEdit('${key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:12px;" title="Zeit für alle ändern" aria-label="Zeit für alle ändern">${foIcon('clock', 'fo-i--sm')}</button>
+          <div class="fo-meal__head meal-header" onclick="toggleMeal(this)" role="button" tabindex="0" aria-expanded="${isExpanded}">
+            <div class="fo-meal__toggle">
+              <span class="meal-title fo-meal__name">${foIcon('chevD', 'fo-toggle-chev' + (isExpanded ? ' is-open' : ''))} ${mealName}</span>
+              <span class="fo-meal__nums">
+                <span class="fo-meal__kcal">${fmt(mealKcal)} kcal${mealKcal > 0 ? ` <small>(${mealPct}%)</small>` : ''}</span><br>
+                <span class="fo-meal__mac"><span>P ${Math.round(mealProtein)}g</span> <span>K ${Math.round(mealCarbs)}g</span> <span>F ${Math.round(mealFat)}g</span></span>
+              </span>
             </div>
+            <button class="fo-iconbtn" type="button" onclick="event.stopPropagation();openBulkTimeEdit('${key}')" title="Zeit für alle ändern" aria-label="Zeit für alle ändern">${foIcon('clock')}</button>
           </div>
-          <div class="meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
+          <ul class="fo-list fo-meal__body meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
             ${mealEntries.length > 0 ? mealEntries.map(e => {
               const isRecipeBlock = settings.recipeDisplay !== 'expanded' && recipes.some(r => String(r.id) === String(e.foodId));
-              const fromRecipeNote = e._fromRecipe ? `<span style="font-size:10px;color:var(--muted);margin-left:4px;">(aus: ${e._fromRecipe})</span>` : '';
+              const fromRecipeNote = e._fromRecipe ? `<span class="fo-row__note">(aus: ${e._fromRecipe})</span>` : '';
               return `
-              <div class="meal-entry" style="${e._isExpanded ? 'border-left:2px solid var(--border);padding-left:8px;' : ''}">
-                <div onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="flex:1;min-width:0;cursor:pointer;">
-                  <span style="color:var(--muted);font-size:11px;margin-right:8px;">${e.time}</span>
-                  ${isRecipeBlock ? foIcon('recipe', 'fo-i--sm') + ' ' : ''}${e.name}${fromRecipeNote}
-                  ${(() => {
+              <li><div class="fo-row fo-diary-row"${e._isExpanded ? ' style="border-left:2px solid var(--fo-line);"' : ''}>
+                <div class="fo-row__main" onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="cursor:pointer;">
+                  <div class="fo-row__title">${isRecipeBlock ? foIcon('recipe', 'fo-i--sm') + ' ' : ''}${e.name}${fromRecipeNote}</div>
+                  <div class="fo-row__sub"><span>${e.time}</span>${(() => {
                     if (!e.amount) return '';
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
-                    return alreadyInName ? '' : `<span style="font-size:11px;color:var(--muted);margin-left:6px;">${e.amount}g</span>`;
-                  })()}
+                    return alreadyInName ? '' : ` <span>${e.amount}g</span>`;
+                  })()}</div>
                 </div>
-                <div style="display:flex;gap:4px;align-items:center;">
-                  <span style="font-size:13px;">${fmt(e.kcal)} kcal</span>
-                  <button onclick="event.stopPropagation();copyEntry('${e.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:14px;" title="Kopieren" aria-label="Kopieren">${foIcon('copy')}</button>
-                  <button onclick="event.stopPropagation();deleteEntry('${e.id}')" aria-label="Löschen" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:16px;">${foIcon('trash')}</button>
+                <div class="fo-row__end">${fmt(e.kcal)} <small>kcal</small></div>
+                <div class="fo-row__actions">
+                  <button class="fo-iconbtn" type="button" onclick="event.stopPropagation();copyEntry('${e.id}')" title="Kopieren" aria-label="Kopieren">${foIcon('copy')}</button>
+                  <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="event.stopPropagation();deleteEntry('${e.id}')" aria-label="Löschen">${foIcon('trash')}</button>
                 </div>
-              </div>`;
-            }).join('') : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge</div>'}
-          </div>
+              </div></li>`;
+            }).join('') : '<li><div class="fo-row"><div class="fo-row__main fo-row__sub" style="text-align:center;">Keine Einträge</div></div></li>'}
+          </ul>
         `;
         
         container.appendChild(mealDiv);
@@ -4900,6 +4910,7 @@
         chev?.classList.remove('is-open');
         expandedMeals.delete(mealName);
       }
+      header.setAttribute('aria-expanded', String(entries.style.display !== 'none'));
     };
 
     // Aufgeklappte Aktivitätsgruppen im Ernährungs-Tab, Schlüssel "datum|typ" (übersteht Neuzeichnen)

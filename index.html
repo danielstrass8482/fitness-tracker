@@ -612,6 +612,11 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* Slide-Wischgeste Tageswechsel: native senkrechte Scrollgeste bleibt erlaubt, waagerechte
+       Gesten (Seiten-Zurück, horizontales Scrollen) übernimmt der Browser nicht mehr selbst –
+       das JS entscheidet per Intent-Erkennung (siehe initDateSwipe). Kein Einfluss auf das Aussehen. */
+    #uebersicht-tab, #tagebuch-subtab { touch-action: pan-y; overscroll-behavior-x: none; }
+
     /* Analyse Chat */
     .analyse-chip {
       background: var(--surface2);
@@ -1006,9 +1011,9 @@
     <div id="shared-date-nav" style="display:none;">
       <!-- Date Navigation -->
       <div class="fo-datenav" style="margin-bottom:12px;">
-        <button class="fo-iconbtn" type="button" onclick="changeDate(-1)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
+        <button class="fo-iconbtn" type="button" onclick="slideToDay(-1, 0)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
         <h2 id="current-date-display" class="fo-datenav__label" style="margin:0;"></h2>
-        <button id="date-nav-next" class="fo-iconbtn" type="button" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
+        <button id="date-nav-next" class="fo-iconbtn" type="button" onclick="slideToDay(1, 0)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
       </div>
     </div>
     
@@ -4356,7 +4361,9 @@
     // Current Date
     let currentDate = berlinTodayStr(); // Berliner Datum (toISOString wäre UTC → zwischen 0 und 2 Uhr Vortag)
     
-    window.changeDate = function(days) {
+    // Zieldatum und Zukunftsgrenze für einen Tagesschritt – einzige Datumsrechnung, von changeDate
+    // und von der Slide-Wischgeste/den Pfeilen (slideToDay) benutzt (siehe initDateSwipe weiter unten).
+    function computeDateStep(days) {
       const parts = currentDate.split('-').map(Number);
       const date = new Date(parts[0], parts[1] - 1, parts[2]);
       date.setDate(date.getDate() + days);
@@ -4365,11 +4372,15 @@
       const d = String(date.getDate()).padStart(2, '0');
       const newDate = `${y}-${m}-${d}`;
       // Keine Navigation in die Zukunft (Berliner Zeit, jedes Mal frisch bestimmt); rückwärts keine Grenze.
-      if (days > 0 && newDate > berlinTodayStr()) return;
-      const changed = newDate !== currentDate;
+      const blocked = days > 0 && newDate > berlinTodayStr();
+      return { newDate, blocked };
+    }
+
+    window.changeDate = function(days) {
+      const { newDate, blocked } = computeDateStep(days);
+      if (blocked) return;
       currentDate = newDate;
       renderFoodLog();
-      if (changed) animateDaySwitch(Math.sign(days)); // rein visuell, siehe animateDaySwitch
     };
     
 
@@ -6228,17 +6239,31 @@
       }
     })();
 
-    // ── Wischgeste: Tag wechseln (Übersicht + Ernährung › Tagebuch) ────────────
-    // Ruft exakt dieselbe Funktion wie die Pfeile der Datumsnavigation (changeDate) auf, mit
-    // derselben Richtung und denselben (keinen) Grenzen — keine eigene Datumsrechnung hier.
+    // ── Slide-Wischgeste: Tag wechseln, Inhalt folgt dem Finger (Übersicht + Ernährung › Tagebuch) ──
+    // Ersetzt die bisherige Loslass-erst-Geste und die kurze Einblend-Animation (animateDaySwitch,
+    // entfernt – einzige Aufrufstelle war changeDate). Pfeile und Wischgeste laufen über dieselbe
+    // Funktion (slideToDay/slideCommitChange), keine eigene Datumsrechnung (computeDateStep oben).
     // Einzige Stelle, an der diese Konstanten festgelegt werden.
-    const SWIPE_MIN_PX = 64;       // Mindestweg horizontal
-    const SWIPE_RATIO = 2;         // horizontaler Weg mindestens doppelt so groß wie der vertikale
-    const SWIPE_EDGE_PX = 24;      // Start in den äußeren 24px links/rechts wird ignoriert (System-Zurück-Geste bleibt frei)
-    const SWIPE_COOLDOWN_MS = 300; // Pause nach einem ausgelösten Tageswechsel
+    const SWIPE_INTENT_PX = 8;              // Ab dieser Bewegung wird einmalig entschieden: waagerecht oder senkrecht
+    const SWIPE_RATIO = 1.5;                // Nur für die Intent-Erkennung: |dx| >= SWIPE_RATIO * |dy|
+    const SWIPE_EDGE_PX = 24;               // Start in den äußeren 24px links/rechts wird ignoriert (System-Zurück-Geste bleibt frei)
+    const SWIPE_COMMIT_FRACTION = 0.25;     // Wechsel, wenn der Versatz mindestens 25% der Containerbreite erreicht
+    const SWIPE_COMMIT_MIN_PX = 48;         // ...und zusätzlich mindestens 48px, gegen ein Zucken
+    const SWIPE_FLICK_VELOCITY_PX_PER_MS = 0.5; // Flick: Wechsel, wenn die Loslass-Geschwindigkeit >= diesem Wert
+    const SWIPE_FLICK_MIN_PX = 24;              // ...und der Versatz mindestens so groß ist
+    const SWIPE_RUBBER_FACTOR = 0.3;        // Gummibandfaktor Richtung Zukunftsgrenze und beim Zurückfedern
+    const SLIDE_EXIT_MS = 140;              // Hinaus-Animation (ease-in)
+    const SLIDE_ENTER_MS = 200;             // Herein-Animation (ease-out)
+    const SLIDE_SNAPBACK_MS = 160;          // Rückfeder-Animation (ease-out)
 
-    let swipeStart = null; // { x, y, scrollY } des zuletzt akzeptierten touchstart, sonst null
-    let swipeLastChangeAt = 0;
+    let slideContainer = null;   // Container, an dem gerade gezogen/animiert wird (sonst null)
+    let slideOffset = 0;         // aktueller Versatz in px (Ziehen oder laufende Animation)
+    let slideActiveAnim = null;  // laufende Web-Animation (Hinaus/Herein/Rückfeder), oder null
+    let slideExitRunning = false; // true während der Hinaus-Phase – neue touchstarts werden ignoriert
+    let slideDrag = null;        // { x, y, width, baseOffset, samples:[{x,t}], lastDx } während des Ziehens, sonst null
+    let slideIntent = null;      // null = unentschieden, true = waagerecht übernommen, false = verworfen (Scrollen läuft normal)
+    let slideRafPending = false;
+    let slideSafetyTimer = null; // Rückfall-Timeout, falls Animationsereignisse ausbleiben (Sicherheit, siehe unten)
 
     // Dieselbe Sichtbarkeits-Bedingung wie updateSharedDateNav: Übersicht oder Ernährung › Tagebuch
     function isSwipeDateArea() {
@@ -6266,75 +6291,253 @@
     }
 
     // Startet die Geste in Eingaben, Diagrammen, Schiebereglern oder Elementen mit eigener
-    // Zieh-/Wischgeste (.fo-swipe) oder einer horizontal scrollenden Liste?
+    // Zieh-/Wischgeste (.fo-swipe) oder einer horizontal scrollenden Liste? Kacheln (.fo-kpi) und
+    // Zeilen (.fo-row) zählen NICHT als Ausschluss (per echtem Headless-Browser-Test geprüft, siehe
+    // Bericht Analyse 2 – waren auch vorher schon kein Ausschluss, keine Änderung hier nötig).
     function isSwipeExcludedStart(el, root) {
       if (!el || !el.closest) return false;
       if (el.closest('input, textarea, select, [contenteditable], canvas, [type="range"], .fo-swipe')) return true;
       return hasHorizontalScrollAncestor(el, root);
     }
 
+    // Übersicht oder Ernährung › Tagebuch – der aktuell für die Geste zuständige Container, oder null
+    function getSlideContainer() {
+      if (!isSwipeDateArea()) return null;
+      const tab = document.querySelector('.tab.active')?.dataset.tab;
+      return document.getElementById(tab === 'uebersicht' ? 'uebersicht-tab' : 'tagebuch-subtab');
+    }
+
+    function clearSlideStyles(container) {
+      container.style.transform = '';
+      container.style.opacity = '';
+      container.style.willChange = '';
+    }
+
+    function cancelSlideSafetyTimer() {
+      if (slideSafetyTimer) { clearTimeout(slideSafetyTimer); slideSafetyTimer = null; }
+    }
+
+    // Bricht eine laufende Animation sofort ab (kein onfinish/oncancel-Nachlauf zählt noch, siehe
+    // Wächter in runSlideAnimation) – von einer neuen Geste oder einem Pfeil-Tipp benutzt (E).
+    function cancelActiveSlideAnim() {
+      if (slideActiveAnim) { try { slideActiveAnim.cancel(); } catch(e) {} }
+      slideActiveAnim = null;
+      cancelSlideSafetyTimer();
+    }
+
+    // Liest den tatsächlich gerade sichtbaren Versatz (auch mitten in einer laufenden Animation) –
+    // für eine neue Geste, die eine Herein-/Rückfeder-Animation nahtlos übernimmt (E).
+    function readCurrentOffsetPx(container) {
+      const t = window.getComputedStyle(container).transform;
+      if (!t || t === 'none') return 0;
+      try { return new DOMMatrixReadOnly(t).m41; } catch(e) { return 0; }
+    }
+
+    function reducedMotionActive() {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    function canAnimate(container) {
+      return !reducedMotionActive() && container && typeof container.animate === 'function';
+    }
+
+    // Einzige Stelle, die eine Hinaus-, Herein- oder Rückfeder-Bewegung tatsächlich ausführt. Ohne
+    // Animationsmöglichkeit (H, reduzierte Bewegung oder kein element.animate) springt der Versatz
+    // sofort auf toPx, ohne Zwischenschritt. fill:'none' lässt nach dem Ende kein Transform/Opacity/
+    // will-change übrig; ein Sicherheits-Timeout (I) räumt auf, falls kein Ereignis feuert.
+    function runSlideAnimation(container, fromPx, toPx, durationMs, easing, onDone) {
+      cancelActiveSlideAnim();
+      if (!canAnimate(container)) {
+        clearSlideStyles(container);
+        slideOffset = toPx;
+        onDone();
+        return;
+      }
+      container.style.willChange = 'transform';
+      const anim = container.animate([
+        { transform: fromPx === 0 ? 'none' : `translateX(${fromPx}px)` },
+        { transform: toPx === 0 ? 'none' : `translateX(${toPx}px)` }
+      ], { duration: durationMs, easing, fill: 'none' });
+      slideOffset = toPx;
+      slideActiveAnim = anim;
+      slideSafetyTimer = setTimeout(() => { try { anim.cancel(); } catch(e) {} }, durationMs + 200);
+      const done = () => {
+        if (slideActiveAnim !== anim) return; // von einer neueren Animation/Geste bereits abgelöst
+        cancelSlideSafetyTimer();
+        slideActiveAnim = null;
+        clearSlideStyles(container);
+        onDone();
+      };
+      anim.onfinish = done;
+      anim.oncancel = done;
+    }
+
+    // Hinaus (SLIDE_EXIT_MS) → changeDate(richtung) → Herein (SLIDE_ENTER_MS). Startversatz 0 für
+    // die Pfeile (F), der aktuelle Zugversatz für die Wischgeste. Container bleibt dasselbe Element.
+    function slideCommitChange(container, richtung, fromOffset, width) {
+      slideExitRunning = true;
+      const exitTarget = richtung > 0 ? -width : width;
+      runSlideAnimation(container, fromOffset, exitTarget, SLIDE_EXIT_MS, 'ease-in', () => {
+        slideExitRunning = false;
+        window.changeDate(richtung); // Logik unverändert (Datum setzen, Zukunftsgrenze, Neuzeichnen) – kein Slide-Code darin
+        const enterContainer = getSlideContainer() || container;
+        const enterFrom = richtung > 0 ? width : -width;
+        slideContainer = enterContainer;
+        runSlideAnimation(enterContainer, enterFrom, 0, SLIDE_ENTER_MS, 'ease-out', () => { slideContainer = null; });
+      });
+    }
+
+    // Gemeinsame Funktion für Wisch und Pfeile (F). Prüft die Zukunftsgrenze VOR der Hinaus-Animation
+    // über dieselbe Funktion wie changeDate (computeDateStep) – keine zweite Datumsrechnung. Ein Tipp
+    // auf den (dann ohnehin deaktivierten) Pfeil am heutigen Tag bewirkt nichts.
+    window.slideToDay = function(richtung, startOffsetPx) {
+      if (slideExitRunning) return;
+      const container = getSlideContainer();
+      if (!container) { window.changeDate(richtung); return; } // außerhalb der Slide-Bereiche: harter Wechsel wie vorher
+      const { blocked } = computeDateStep(richtung);
+      if (blocked) return;
+      const hasRunningAnim = slideContainer === container && slideActiveAnim;
+      const fromOffset = hasRunningAnim ? readCurrentOffsetPx(container) : (startOffsetPx || 0);
+      slideDrag = null; slideIntent = null;
+      slideContainer = container;
+      slideCommitChange(container, richtung, fromOffset, container.getBoundingClientRect().width || 1);
+    };
+
+    function scheduleSlideFrame() {
+      if (slideRafPending) return;
+      slideRafPending = true;
+      requestAnimationFrame(() => {
+        slideRafPending = false;
+        if (!slideDrag || !slideContainer) return;
+        applyDragOffset(slideDrag.lastDx);
+      });
+    }
+
+    // Versatz 1:1 in Richtung des erlaubten Tages (auf Containerbreite begrenzt), in Richtung der
+    // Zukunftsgrenze mit SWIPE_RUBBER_FACTOR gedämpft (D).
+    function applyDragOffset(rawDx) {
+      const width = slideDrag.width || 1;
+      const total = slideDrag.baseOffset + rawDx;
+      const clamped = Math.max(-width, Math.min(width, total));
+      const towardNext = clamped < 0; // Finger nach links = Richtung "nächster Tag"
+      const blocked = towardNext && computeDateStep(1).blocked;
+      const px = blocked ? clamped * SWIPE_RUBBER_FACTOR : clamped;
+      slideOffset = px;
+      slideContainer.style.transform = px === 0 ? '' : `translateX(${px}px)`;
+    }
+
+    // Abbruch ohne jede Animation ("sofort auf den Ausgangszustand", B) – für touchcancel und für
+    // eine unterbrechende Zweit-Finger-Berührung während einer laufenden Geste.
+    function resetSlideInstantly() {
+      const container = slideContainer;
+      slideDrag = null;
+      slideIntent = null;
+      if (container) {
+        cancelActiveSlideAnim();
+        clearSlideStyles(container);
+      }
+      slideOffset = 0;
+      slideContainer = null;
+    }
+
     (function initDateSwipe() {
-      const container = document.getElementById('app-container');
-      if (!container) return;
-      container.addEventListener('touchstart', (e) => {
-        swipeStart = null;
-        if (e.touches.length !== 1) return; // nur Ein-Finger-Gesten
+      const appContainer = document.getElementById('app-container');
+      if (!appContainer) return;
+
+      appContainer.addEventListener('touchstart', (e) => {
+        if (slideExitRunning) return; // Hinaus-Phase läuft: neue Starts ignorieren (E)
+        if (e.touches.length !== 1) {
+          if (slideDrag) resetSlideInstantly(); // zweiter Finger während einer laufenden Geste
+          return;
+        }
         if (!isSwipeDateArea()) return;
         if (intervalTimer) return; // Zirkel-Timer läuft
         if (isAnyModalOpen()) return;
         const t = e.touches[0];
         if (t.clientX < SWIPE_EDGE_PX || t.clientX > window.innerWidth - SWIPE_EDGE_PX) return; // Randzone
-        if (isSwipeExcludedStart(e.target, container)) return;
-        swipeStart = { x: t.clientX, y: t.clientY, scrollY: window.scrollY };
+        const container = getSlideContainer();
+        if (!container) return;
+        if (isSwipeExcludedStart(e.target, appContainer)) return;
+
+        // Eine neue Geste darf eine laufende Herein-/Rückfeder-Animation übernehmen (E): aktuellen
+        // sichtbaren Versatz lesen, bevor die Animation abgebrochen wird.
+        const baseOffset = (slideContainer === container && slideActiveAnim) ? readCurrentOffsetPx(container) : 0;
+        cancelActiveSlideAnim();
+
+        slideContainer = container;
+        slideIntent = null;
+        slideDrag = { x: t.clientX, y: t.clientY, width: container.getBoundingClientRect().width || 1, baseOffset, samples: [{ x: t.clientX, t: e.timeStamp }], lastDx: 0 };
       }, { passive: true });
 
-      container.addEventListener('touchend', (e) => {
-        const start = swipeStart;
-        swipeStart = null;
-        if (!start) return;
-        if (Date.now() - swipeLastChangeAt < SWIPE_COOLDOWN_MS) return;
-        if (Math.abs(window.scrollY - start.scrollY) > 2) return; // Seite wurde vertikal gescrollt
-        if (!isSwipeDateArea()) return;
+      appContainer.addEventListener('touchmove', (e) => {
+        if (!slideDrag || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const dx = t.clientX - slideDrag.x;
+        const dy = t.clientY - slideDrag.y;
+        const now = e.timeStamp;
+        slideDrag.samples.push({ x: t.clientX, t: now });
+        while (slideDrag.samples.length > 1 && now - slideDrag.samples[0].t > 120) slideDrag.samples.shift();
+
+        if (slideIntent === null) {
+          if (Math.abs(dx) < SWIPE_INTENT_PX && Math.abs(dy) < SWIPE_INTENT_PX) return; // noch keine Entscheidung
+          slideIntent = Math.abs(dx) >= SWIPE_RATIO * Math.abs(dy);
+          if (!slideIntent) { slideDrag = null; return; } // senkrecht: Geste verworfen, Scrollen läuft unverändert weiter
+          slideContainer.style.willChange = 'transform'; // nur während der Geste
+        }
+        if (!slideIntent) return;
+        slideDrag.lastDx = dx;
+        scheduleSlideFrame();
+      }, { passive: true });
+
+      appContainer.addEventListener('touchend', (e) => {
+        const drag = slideDrag;
+        slideDrag = null;
+        if (!drag || !slideIntent) { slideIntent = null; return; }
+        slideIntent = null;
+        const container = slideContainer;
         const t = e.changedTouches[0];
-        if (!t) return;
-        const dx = t.clientX - start.x;
-        const dy = t.clientY - start.y;
-        const adx = Math.abs(dx), ady = Math.abs(dy);
-        if (adx < SWIPE_MIN_PX) return;
-        if (adx < ady * SWIPE_RATIO) return;
-        swipeLastChangeAt = Date.now();
-        window.changeDate(dx < 0 ? 1 : -1); // links = nächster Tag, rechts = voriger Tag — dieselbe Funktion wie die Pfeile
+        if (!t || !container) { if (container) runSlideAnimation(container, slideOffset, 0, SLIDE_SNAPBACK_MS, 'ease-out', () => { slideContainer = null; }); return; }
+
+        const dx = t.clientX - drag.x;
+        const width = drag.width || 1;
+        const towardNext = (drag.baseOffset + dx) < 0;
+        const richtung = towardNext ? 1 : -1;
+        const { blocked } = computeDateStep(richtung);
+
+        // Geschwindigkeit aus den letzten ca. 100ms (Zeitstempel der Touch-Ereignisse)
+        let velocity = 0;
+        const samples = drag.samples;
+        if (samples.length >= 2) {
+          const first = samples[0], last = samples[samples.length - 1];
+          const dt = last.t - first.t;
+          if (dt > 0) velocity = (last.x - first.x) / dt; // px/ms
+        }
+
+        const absOffset = Math.abs(slideOffset); // tatsächlicher (evtl. gedämpfter) Versatz
+        const pathCommits = !blocked && absOffset >= Math.max(SWIPE_COMMIT_MIN_PX, width * SWIPE_COMMIT_FRACTION);
+        const flickCommits = !blocked && Math.abs(velocity) >= SWIPE_FLICK_VELOCITY_PX_PER_MS && Math.abs(dx) >= SWIPE_FLICK_MIN_PX && Math.sign(velocity) === Math.sign(dx);
+
+        if (pathCommits || flickCommits) {
+          slideCommitChange(container, richtung, slideOffset, width);
+        } else {
+          runSlideAnimation(container, slideOffset, 0, SLIDE_SNAPBACK_MS, 'ease-out', () => { slideContainer = null; });
+        }
       }, { passive: true });
 
-      container.addEventListener('touchcancel', () => { swipeStart = null; }, { passive: true });
+      appContainer.addEventListener('touchcancel', () => {
+        if (slideDrag && slideIntent) resetSlideInstantly();
+        else { slideDrag = null; slideIntent = null; }
+      }, { passive: true });
     })();
 
-    // ── Tageswechsel-Animation (rein visuell, Übersicht + Ernährung › Tagebuch) ────
-    // DAYSWITCH_ANIM_MS: Dauer, DAYSWITCH_ANIM_OFFSET_PX: seitlicher Start-Versatz in px.
-    // Einzige Stelle, an der diese Werte festgelegt werden.
-    const DAYSWITCH_ANIM_MS = 180;
-    const DAYSWITCH_ANIM_OFFSET_PX = 32;
-    let daySwitchActiveAnim = null; // laufende Animation; ein neuer Wechsel bricht sie ab statt sich einzureihen
-
-    // Lässt den aktiven Bereich (Übersicht oder Ernährung › Tagebuch) seitlich einlaufen. Rein
-    // visuell – ändert weder Daten noch die Reihenfolge der Aufrufe in changeDate. richtung: 1 =
-    // nächster Tag (kommt von rechts), -1 = voriger Tag (kommt von links).
-    function animateDaySwitch(richtung) {
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      if (!isSwipeDateArea()) return; // nur wenn Übersicht oder Tagebuch gerade sichtbar/aktiv ist
-      const tab = document.querySelector('.tab.active')?.dataset.tab;
-      const container = document.getElementById(tab === 'uebersicht' ? 'uebersicht-tab' : 'tagebuch-subtab');
-      if (!container || typeof container.animate !== 'function') return;
-      if (daySwitchActiveAnim) { try { daySwitchActiveAnim.cancel(); } catch(e) {} }
-      const offset = richtung > 0 ? DAYSWITCH_ANIM_OFFSET_PX : -DAYSWITCH_ANIM_OFFSET_PX;
-      daySwitchActiveAnim = container.animate([
-        { transform: `translateX(${offset}px)`, opacity: 0 },
-        { transform: 'none', opacity: 1 }
-      ], { duration: DAYSWITCH_ANIM_MS, easing: 'ease-out', fill: 'none' });
-      const clearActiveAnim = () => { daySwitchActiveAnim = null; };
-      daySwitchActiveAnim.onfinish = clearActiveAnim;
-      daySwitchActiveAnim.oncancel = clearActiveAnim;
-    }
+    // Sicherheit (I): Wird die Seite/App in den Hintergrund gelegt, während gezogen oder animiert
+    // wird, sofort sauber zurücksetzen statt auf das (evtl. verzögerte) Animationsereignis zu warten.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && (slideDrag || slideActiveAnim || slideExitRunning)) {
+        slideExitRunning = false;
+        resetSlideInstantly();
+      }
+    });
 
     // Sub-Tab Switching
     document.addEventListener('click', (e) => {

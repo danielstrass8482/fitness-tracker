@@ -1442,6 +1442,16 @@
 
       <div id="analyse-messages" style="flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
 
+      <div id="analyse-window-row" style="margin-bottom:12px;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Zeitraum der Daten</div>
+        <div id="analyse-window-seg" class="fo-seg" role="tablist" aria-label="Zeitraum der Daten">
+          <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="30" style="min-height:44px;" onclick="setAnalysisWindow(30)">30 Tage</button>
+          <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="60" style="min-height:44px;" onclick="setAnalysisWindow(60)">60 Tage</button>
+          <button class="fo-seg__btn active" type="button" role="tab" aria-selected="true" data-window="90" style="min-height:44px;" onclick="setAnalysisWindow(90)">90 Tage</button>
+        </div>
+        <div id="analyse-context-size" style="font-size:12px;color:var(--muted);margin-top:6px;">Kontext: keine Daten</div>
+      </div>
+
       <div id="analyse-input-row">
         <textarea id="analyse-input" rows="1" placeholder="Frage stellen..." style="flex-grow:1;min-width:0;height:auto;max-height:120px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:none;overflow-y:auto;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
         <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;">Senden</button>
@@ -6356,6 +6366,7 @@
         });
       } else if (userId) {
         updateAnalyseKeyState();
+        updateAnalysisContextSizeEstimate();
         requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
       }
     }
@@ -7012,6 +7023,16 @@
     // ── KI-Analyse (Anthropic Claude API, direkt aus dem Browser) ───────────
     let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
 
+    // Zeitraum des Kontexts (betrifft Ernährungsbilanz, Tageslog und Oura-Zeilen – nicht die
+    // Trainingseinträge, die bewusst ihr eigenes 365-Tage-Fenster behalten, siehe Bericht, und
+    // nicht die 7-Tage-Erholungs-Basis). Einzige Stelle, an der diese Werte festgelegt werden.
+    const ANALYSIS_WINDOW_OPTIONS = [30, 60, 90];
+    const ANALYSIS_WINDOW_DEFAULT = 90;
+    const CHARS_PER_TOKEN_ESTIMATE = 3.5; // grobe Schätzung für deutschen Text, keine echte Tokenizer-Zählung
+    // Nur für die Sitzung gemerkt: saveSettings() überschreibt settings/main ohne merge (setDoc ohne
+    // {merge:true}), ein sicherer Einzel-Feld-Schreibpfad existiert nicht – siehe Bericht Punkt F.
+    let analysisWindowDays = ANALYSIS_WINDOW_DEFAULT;
+
     // Setzt die Höhe des Analyse-Tab-Flex-Layouts auf den tatsächlich verfügbaren
     // Platz (Viewport minus Header darüber und fixierte Bottom-Nav darunter).
     // Per JS statt fixem calc(100vh - Xpx), da die Header-Höhe umbrechen kann
@@ -7046,7 +7067,7 @@
     function buildAnalysisContextData() {
       const today = new Date();
       const cutoffTraining = new Date(today); cutoffTraining.setDate(today.getDate() - 365);
-      const cutoffNutrition = new Date(today); cutoffNutrition.setDate(today.getDate() - 90);
+      const cutoffNutrition = new Date(today); cutoffNutrition.setDate(today.getDate() - analysisWindowDays);
       const cutoffTrainingStr = cutoffTraining.toISOString().split('T')[0];
       const cutoffNutritionStr = cutoffNutrition.toISOString().split('T')[0];
 
@@ -7086,7 +7107,7 @@
           return [e.datum, e.typ, distanz || '-', zeit || '-', pace, Math.round(kcal), notiz].join('|');
         });
 
-      // Tägliche Ernährungsbilanz, letzte 90 Tage (aggregiert pro Tag, keine Einzel-Lebensmittel)
+      // Tägliche Ernährungsbilanz, letzte analysisWindowDays Tage (aggregiert pro Tag, keine Einzel-Lebensmittel)
       const dayMap = {};
       Object.keys(foodLog).forEach(d => {
         if (d < cutoffNutritionStr) return;
@@ -7103,7 +7124,7 @@
         return [d, n.kcal, n.protein, n.carbs, n.fat, n.count, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
       });
 
-      // Tageslog: Gewicht & Schritte, letzte 90 Tage
+      // Tageslog: Gewicht & Schritte, letzte analysisWindowDays Tage
       const dayLogRows = trainingEntries
         .filter(e => e.typ === 'tageslog' && e.datum >= cutoffNutritionStr)
         .sort((a, b) => a.datum.localeCompare(b.datum))
@@ -7176,15 +7197,15 @@ Ziele: ${p.ziel_protein_g ?? '?'}g Protein, ${p.ziel_carbs_g ?? '?'}g Kohlenhydr
 Format: Datum|Typ|Distanz(km)|Zeit|Pace(min/km)|Kcal|Notiz
 ${ctx.trainingRows.join('\n') || '(keine Einträge)'}
 
-=== Tägliche Ernährungsbilanz (letzte 90 Tage, aggregiert) ===
+=== Tägliche Ernährungsbilanz (letzte ${analysisWindowDays} Tage, aggregiert) ===
 Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|AnzahlMahlzeiten|KcalZiel|Differenz
 ${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
 
-=== Tageslog: Gewicht & Schritte (letzte 90 Tage) ===
+=== Tageslog: Gewicht & Schritte (letzte ${analysisWindowDays} Tage) ===
 Format: Datum|Gewicht(kg)|Schritte
 ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}
 
-=== Oura-Erholungsdaten (letzte 90 Tage, Fingerring) ===
+=== Oura-Erholungsdaten (letzte ${analysisWindowDays} Tage, Fingerring) ===
 ${!ctx.ouraConnected ? 'Keine Oura-Daten vorhanden (nicht verbunden).' :
 `Erholungs-Basis (Ø letzte 7 Tage): HRV ${ctx.ouraBaselineHrv.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineHrv.avg) + ' ms'} (${ctx.ouraBaselineHrv.count} Tage), Ruhepuls ${ctx.ouraBaselineRhr.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineRhr.avg) + ' bpm'} (${ctx.ouraBaselineRhr.count} Tage)
 Format: Datum|HRV (Mittel der Nacht, ms)|Ruhepuls (bpm)|Tiefschlaf (Min)|Gesamtschlaf (Std:Min)|Temperaturabweichung (°C)|Oura-Readiness-Score,Oura-Schlaf-Score
@@ -7193,6 +7214,35 @@ ${ctx.ouraRows.join('\n') || '(keine Tage mit Oura-Daten)'}`}
 === Hinweise zu Oura-Daten ===
 Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der Mittelwert der Nacht in Millisekunden, dazu Ruhepuls, Schlaf und Temperaturabweichung. Bewerte HRV und Ruhepuls immer relativ zur eigenen Erholungs-Basis des Nutzers (7-Tage-Mittel oben), nicht anhand allgemeiner Normwerte. Einzelne Nächte schwanken natürlich; ein einzelner Wert allein beweist nichts. Stelle keine medizinischen Diagnosen; nenne bei auffälligen Werten über mehrere Tage eine ärztliche Abklärung, wenn der Nutzer Beschwerden schildert. Benenne Unsicherheit und die Grenzen der Messung. Ein Zusammenhang zu Training oder Ernährung ist eine Möglichkeit, kein bewiesener Grund. Fehlen Daten für einen Tag oder ist Oura nicht verbunden, sage das klar – behaupte nie, du hättest keinen Zugriff, wenn Daten oben im Kontext stehen.`;
     }
+
+    // Umschalter "Zeitraum der Daten": setzt analysisWindowDays, aktualisiert den aktiven Zustand
+    // der Segmente und die Größenzeile. Gilt ab der nächsten Frage (Kontext wird je Nachricht neu
+    // gebaut, siehe sendAnalysisMessage) – ein laufender Chat-Verlauf bleibt unangetastet.
+    window.setAnalysisWindow = function(days) {
+      if (!ANALYSIS_WINDOW_OPTIONS.includes(days)) return;
+      analysisWindowDays = days;
+      document.querySelectorAll('#analyse-window-seg .fo-seg__btn').forEach(btn => {
+        const active = Number(btn.dataset.window) === days;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      updateAnalysisContextSizeEstimate();
+    };
+
+    // Grobe Größenschätzung des tatsächlich gebauten Kontexts (System-Prompt inkl. Kontext-Daten),
+    // ohne die API aufzurufen. Kein Preis/Eurobetrag – nur Zeichen- und geschätzte Tokenzahl.
+    function updateAnalysisContextSizeEstimate() {
+      const el = document.getElementById('analyse-context-size');
+      if (!el) return;
+      try {
+        const chars = buildAnalysisSystemPrompt().length;
+        const tokens = Math.round(chars / CHARS_PER_TOKEN_ESTIMATE);
+        el.textContent = `Kontext: ca. ${fmt(chars)} Zeichen, etwa ${fmt(tokens)} Tokens (grobe Schätzung) pro Frage, zuzüglich Gesprächsverlauf`;
+      } catch (e) {
+        el.textContent = 'Kontext: keine Daten';
+      }
+    }
+    window.updateAnalysisContextSizeEstimate = updateAnalysisContextSizeEstimate;
 
     let analyseMsgCounter = 0;
     function appendAnalysisMessage(role, text, isLoading) {

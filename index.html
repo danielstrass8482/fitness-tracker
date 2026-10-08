@@ -6204,6 +6204,87 @@
       }
     })();
 
+    // ── Wischgeste: Tag wechseln (Übersicht + Ernährung › Tagebuch) ────────────
+    // Ruft exakt dieselbe Funktion wie die Pfeile der Datumsnavigation (changeDate) auf, mit
+    // derselben Richtung und denselben (keinen) Grenzen — keine eigene Datumsrechnung hier.
+    // Einzige Stelle, an der diese Konstanten festgelegt werden.
+    const SWIPE_MIN_PX = 64;       // Mindestweg horizontal
+    const SWIPE_RATIO = 2;         // horizontaler Weg mindestens doppelt so groß wie der vertikale
+    const SWIPE_EDGE_PX = 24;      // Start in den äußeren 24px links/rechts wird ignoriert (System-Zurück-Geste bleibt frei)
+    const SWIPE_COOLDOWN_MS = 300; // Pause nach einem ausgelösten Tageswechsel
+
+    let swipeStart = null; // { x, y, scrollY } des zuletzt akzeptierten touchstart, sonst null
+    let swipeLastChangeAt = 0;
+
+    // Dieselbe Sichtbarkeits-Bedingung wie updateSharedDateNav: Übersicht oder Ernährung › Tagebuch
+    function isSwipeDateArea() {
+      const tab = document.querySelector('.tab.active')?.dataset.tab;
+      return tab === 'uebersicht' || (tab === 'ernaehrung' && document.getElementById('tagebuch-subtab')?.classList.contains('active'));
+    }
+
+    // Läuft ein Modal/Dialog/Sheet? (dieselbe Prüfung wie im popstate-Handler)
+    function isAnyModalOpen() {
+      return MODAL_IDS.some(id => {
+        const el = document.getElementById(id);
+        return el && el.style.display !== 'none';
+      });
+    }
+
+    // Ancestor-Suche (bis zum Container) nach einem Element, das selbst horizontal scrollt
+    function hasHorizontalScrollAncestor(el, root) {
+      let node = el;
+      while (node && node !== root && node.nodeType === 1) {
+        const cs = window.getComputedStyle(node);
+        if ((cs.overflowX === 'auto' || cs.overflowX === 'scroll') && node.scrollWidth > node.clientWidth + 1) return true;
+        node = node.parentElement;
+      }
+      return false;
+    }
+
+    // Startet die Geste in Eingaben, Diagrammen, Schiebereglern oder Elementen mit eigener
+    // Zieh-/Wischgeste (.fo-swipe) oder einer horizontal scrollenden Liste?
+    function isSwipeExcludedStart(el, root) {
+      if (!el || !el.closest) return false;
+      if (el.closest('input, textarea, select, [contenteditable], canvas, [type="range"], .fo-swipe')) return true;
+      return hasHorizontalScrollAncestor(el, root);
+    }
+
+    (function initDateSwipe() {
+      const container = document.getElementById('app-container');
+      if (!container) return;
+      container.addEventListener('touchstart', (e) => {
+        swipeStart = null;
+        if (e.touches.length !== 1) return; // nur Ein-Finger-Gesten
+        if (!isSwipeDateArea()) return;
+        if (intervalTimer) return; // Zirkel-Timer läuft
+        if (isAnyModalOpen()) return;
+        const t = e.touches[0];
+        if (t.clientX < SWIPE_EDGE_PX || t.clientX > window.innerWidth - SWIPE_EDGE_PX) return; // Randzone
+        if (isSwipeExcludedStart(e.target, container)) return;
+        swipeStart = { x: t.clientX, y: t.clientY, scrollY: window.scrollY };
+      }, { passive: true });
+
+      container.addEventListener('touchend', (e) => {
+        const start = swipeStart;
+        swipeStart = null;
+        if (!start) return;
+        if (Date.now() - swipeLastChangeAt < SWIPE_COOLDOWN_MS) return;
+        if (Math.abs(window.scrollY - start.scrollY) > 2) return; // Seite wurde vertikal gescrollt
+        if (!isSwipeDateArea()) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        const dx = t.clientX - start.x;
+        const dy = t.clientY - start.y;
+        const adx = Math.abs(dx), ady = Math.abs(dy);
+        if (adx < SWIPE_MIN_PX) return;
+        if (adx < ady * SWIPE_RATIO) return;
+        swipeLastChangeAt = Date.now();
+        window.changeDate(dx < 0 ? 1 : -1); // links = nächster Tag, rechts = voriger Tag — dieselbe Funktion wie die Pfeile
+      }, { passive: true });
+
+      container.addEventListener('touchcancel', () => { swipeStart = null; }, { passive: true });
+    })();
+
     // Sub-Tab Switching
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('sub-tab')) {

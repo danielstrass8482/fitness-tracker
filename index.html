@@ -4356,8 +4356,10 @@
       const newDate = `${y}-${m}-${d}`;
       // Keine Navigation in die Zukunft (Berliner Zeit, jedes Mal frisch bestimmt); rückwärts keine Grenze.
       if (days > 0 && newDate > berlinTodayStr()) return;
+      const changed = newDate !== currentDate;
       currentDate = newDate;
       renderFoodLog();
+      if (changed) animateDaySwitch(Math.sign(days)); // rein visuell, siehe animateDaySwitch
     };
     
 
@@ -6296,6 +6298,33 @@
 
       container.addEventListener('touchcancel', () => { swipeStart = null; }, { passive: true });
     })();
+
+    // ── Tageswechsel-Animation (rein visuell, Übersicht + Ernährung › Tagebuch) ────
+    // DAYSWITCH_ANIM_MS: Dauer, DAYSWITCH_ANIM_OFFSET_PX: seitlicher Start-Versatz in px.
+    // Einzige Stelle, an der diese Werte festgelegt werden.
+    const DAYSWITCH_ANIM_MS = 180;
+    const DAYSWITCH_ANIM_OFFSET_PX = 32;
+    let daySwitchActiveAnim = null; // laufende Animation; ein neuer Wechsel bricht sie ab statt sich einzureihen
+
+    // Lässt den aktiven Bereich (Übersicht oder Ernährung › Tagebuch) seitlich einlaufen. Rein
+    // visuell – ändert weder Daten noch die Reihenfolge der Aufrufe in changeDate. richtung: 1 =
+    // nächster Tag (kommt von rechts), -1 = voriger Tag (kommt von links).
+    function animateDaySwitch(richtung) {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (!isSwipeDateArea()) return; // nur wenn Übersicht oder Tagebuch gerade sichtbar/aktiv ist
+      const tab = document.querySelector('.tab.active')?.dataset.tab;
+      const container = document.getElementById(tab === 'uebersicht' ? 'uebersicht-tab' : 'tagebuch-subtab');
+      if (!container || typeof container.animate !== 'function') return;
+      if (daySwitchActiveAnim) { try { daySwitchActiveAnim.cancel(); } catch(e) {} }
+      const offset = richtung > 0 ? DAYSWITCH_ANIM_OFFSET_PX : -DAYSWITCH_ANIM_OFFSET_PX;
+      daySwitchActiveAnim = container.animate([
+        { transform: `translateX(${offset}px)`, opacity: 0 },
+        { transform: 'none', opacity: 1 }
+      ], { duration: DAYSWITCH_ANIM_MS, easing: 'ease-out', fill: 'none' });
+      const clearActiveAnim = () => { daySwitchActiveAnim = null; };
+      daySwitchActiveAnim.onfinish = clearActiveAnim;
+      daySwitchActiveAnim.oncancel = clearActiveAnim;
+    }
 
     // Sub-Tab Switching
     document.addEventListener('click', (e) => {

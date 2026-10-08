@@ -2349,9 +2349,10 @@
         if (hasCachedData) {
           renderAll();
           showToast('Synchronisiere...', 'wait');
-          loadAllData(true); // Hintergrund-Sync, kein await
+          loadAllData(true).then(() => autoSyncGoogleFit('start')); // Hintergrund-Sync, kein await
         } else {
           await loadAllData(false); // Erststart: blockierend laden
+          autoSyncGoogleFit('start');
         }
 
         handleOuraRedirectParams();
@@ -6144,21 +6145,11 @@
           // Silent background sync for last 2 days
           const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
           if (gfitSnap.exists()) {
-            try {
-              const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
-              const endMs = Date.now();
-              const startMs = endMs - (2 * 24 * 3600 * 1000);
-              syncFn({ startMs, endMs }).then(async () => {
-                // Reload only training entries (steps)
-                const snap = await getDocs(userTrainingCol());
-                trainingEntries = [];
-                snap.forEach(d => trainingEntries.push(d.data()));
-                dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
-                window.trainingEntries = trainingEntries;
-                window.dayLogs = dayLogs;
-                renderFoodLog(); // Refresh kcal goal
-              }).catch(() => {}); // Silent fail
-            } catch(e) {}
+            gfitSyncInProgress = true;
+            runGfitSync()
+              .then(() => { gfitLastSyncAt = Date.now(); })
+              .catch(() => {}) // Silent fail
+              .finally(() => { gfitSyncInProgress = false; });
           }
         }
         // Reload training entries when switching to training tab
@@ -6179,9 +6170,13 @@
           // Silent 2-day sync
           getDoc(doc(db, 'users', userId, 'integrations', 'googlefit')).then(gfitSnap => {
             if (gfitSnap.exists()) {
+              gfitSyncInProgress = true;
               const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
               const endMs = Date.now();
-              syncFn({ startMs: endMs - (2 * 24 * 3600 * 1000), endMs }).catch(() => {});
+              syncFn({ startMs: endMs - (2 * 24 * 3600 * 1000), endMs })
+                .then(() => { gfitLastSyncAt = Date.now(); })
+                .catch(() => {})
+                .finally(() => { gfitSyncInProgress = false; });
             }
           }).catch(() => {});
           getDocs(userTrainingCol()).then(snap => {
@@ -7166,6 +7161,59 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     const FUNCTIONS_BASE = 'https://us-central1-fitness-tracker-c6f97.cloudfunctions.net';
     const GOOGLE_CLIENT_ID = '187864668697-e4mulna75rvbcqsb2igd0r0ubbk1am46.apps.googleusercontent.com';
 
+    // ── Automatischer Google-Fit-Sync (Start + Rückkehr aus dem Hintergrund) ──
+    // GFIT_AUTOSYNC_MIN_INTERVAL_MS: Mindestabstand zwischen automatisch ausgelösten Syncs,
+    // unabhängig vom Auslöser (Start, visibilitychange, Tab-Tipp, Button) — nur im Speicher
+    // gemerkt (gfitLastSyncAt), nicht in Firestore persistiert. Einzige Stelle, an der der
+    // Intervall-Wert festgelegt wird.
+    const GFIT_AUTOSYNC_MIN_INTERVAL_MS = 15 * 60 * 1000;
+    let gfitSyncInProgress = false; // true während irgendein Google-Fit-Sync läuft (Tab-Tipp, Button oder Auto)
+    let gfitLastSyncAt = 0; // Zeitpunkt (Date.now()) des letzten gestarteten Syncs, gleich welcher Auslöser
+
+    // Gemeinsame Sync-Routine für Tab-Tipp (Ernährung/Übersicht) und Auto-Sync: ruft googleFitSync
+    // für die letzten 2 Tage auf und lädt danach nur die Trainings-Einträge neu (für die Schritte).
+    async function runGfitSync() {
+      const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
+      const endMs = Date.now();
+      const startMs = endMs - (2 * 24 * 3600 * 1000);
+      await syncFn({ startMs, endMs });
+      // Reload only training entries (steps)
+      const snap = await getDocs(userTrainingCol());
+      trainingEntries = [];
+      snap.forEach(d => trainingEntries.push(d.data()));
+      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+      window.trainingEntries = trainingEntries;
+      window.dayLogs = dayLogs;
+      renderFoodLog(); // Refresh kcal goal
+    }
+
+    // Automatischer Sync beim App-Start (nach dem ersten Laden) und bei Rückkehr aus dem Hintergrund.
+    // grund: 'start' oder 'visible', nur für die Konsolen-Meldung bei einem Fehler, kein Toast/Popup.
+    async function autoSyncGoogleFit(grund) {
+      if (!userId || auth.currentUser?.isAnonymous) return; // Gast/nicht angemeldet
+      if (!navigator.onLine) return;
+      if (gfitSyncInProgress) return; // Tab-Tipp, Button oder ein anderer Auto-Sync läuft bereits
+      if (Date.now() - gfitLastSyncAt < GFIT_AUTOSYNC_MIN_INTERVAL_MS) return;
+
+      gfitSyncInProgress = true; // synchron VOR dem ersten await setzen, damit ein gleichzeitiger
+                                  // zweiter Auslöser (z.B. Start + visibilitychange im selben Moment)
+                                  // sofort an der obigen Prüfung abbricht
+      try {
+        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
+        if (!gfitSnap.exists()) return; // Google Fit nicht verbunden
+        gfitLastSyncAt = Date.now();
+        await runGfitSync();
+      } catch(e) {
+        console.warn('Auto-Sync (' + grund + ') fehlgeschlagen:', e); // kein Toast, App läuft normal weiter
+      } finally {
+        gfitSyncInProgress = false;
+      }
+    }
+    // Rückkehr aus dem Hintergrund: Handler wird nur hier, einmalig, registriert
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') autoSyncGoogleFit('visible');
+    });
+
     async function loadGoogleFitStatus() {
       try {
         const gfitDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
@@ -7212,6 +7260,8 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
     };
 
     window.syncGoogleFit = async function(fullSync = false) {
+      gfitSyncInProgress = true; // gemeinsamer Schutz mit Tab-Tipp-Sync und Auto-Sync
+      try {
       const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
 
       if (!fullSync) {
@@ -7260,6 +7310,10 @@ ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
       renderTrainingHistory();
       renderDashboard();
       await loadGoogleFitStatus();
+      gfitLastSyncAt = Date.now();
+      } finally {
+        gfitSyncInProgress = false;
+      }
     };
 
     window.disconnectGoogleFit = async function() {

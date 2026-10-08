@@ -7080,7 +7080,52 @@
         .sort((a, b) => a.datum.localeCompare(b.datum))
         .map(e => [e.datum, e.weight ?? '-', e.steps ?? '-'].join('|'));
 
-      return { profile, trainingRows, nutritionRows, dayLogRows };
+      // Oura-Erholungsdaten, gleicher Zeitraum wie die übrige Tages-Aggregation (90 Tage). Tage ganz
+      // ohne Oura-Dokument fehlen in der Liste (wie dayLogRows ohne Tageslog-Eintrag), einzelne fehlende
+      // Felder innerhalb eines vorhandenen Tages werden als '-' ausgegeben (wie e.steps ?? '-' oben) –
+      // nie als 0. Nur wenn Oura für den Nutzer verbunden ist, werden Zeilen/Basis überhaupt gebildet.
+      const ouraConnected = !!ouraStatus?.connected;
+      const ouraRows = ouraConnected ? Object.keys(ouraDaily)
+        .filter(d => d >= cutoffNutritionStr)
+        .sort()
+        .filter(d => {
+          const o = ouraDaily[d];
+          return o && (o.hrvAvg != null || o.restingHr != null || o.deepSleepSec || o.sleepDurationSec || o.tempDeviation != null || o.sleepScore != null || o.readinessScore != null);
+        })
+        .map(d => {
+          const o = ouraDaily[d];
+          const hrv = o.hrvAvg != null ? Math.round(o.hrvAvg) : '-';
+          const rhr = o.restingHr != null ? Math.round(o.restingHr) : '-';
+          const deep = o.deepSleepSec ? Math.round(o.deepSleepSec / 60) : '-';
+          const sleep = o.sleepDurationSec
+            ? `${Math.floor(o.sleepDurationSec / 3600)}:${String(Math.round((o.sleepDurationSec % 3600) / 60)).padStart(2, '0')}`
+            : '-';
+          const temp = o.tempDeviation != null ? `${o.tempDeviation >= 0 ? '+' : ''}${o.tempDeviation.toFixed(1)}` : '-';
+          // Scores kompakt als Readiness,Schlaf (Beschriftung einmal im Format-Header, wie bei den übrigen Tabellen)
+          const scores = (o.readinessScore != null ? o.readinessScore : '-') + ',' + (o.sleepScore != null ? o.sleepScore : '-');
+          return [d, hrv, rhr, deep, sleep, temp, scores].join('|');
+        }) : [];
+
+      // Erholungs-Basis: 7-Tage-Mittel aus den vorhandenen Werten der letzten 7 Tage bis heute
+      // (Berliner Zeit) – gleiche Berechnung (Mittel der vorhandenen Werte, mindestens 3 Tage nötig)
+      // wie der HRV-Trend der Oura-Karte, dort als HRV_TREND_MIN_VALUES = 3.
+      const OURA_BASELINE_MIN_DAYS = 3;
+      const ouraBaselineAvg = (field) => {
+        const vals = [];
+        const end = new Date(berlinTodayStr() + 'T12:00:00');
+        for (let i = 0; i < 7; i++) {
+          const dt = new Date(end); dt.setDate(end.getDate() - i);
+          const key = dt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+          const v = ouraDaily[key]?.[field];
+          if (v != null) vals.push(v);
+        }
+        const count = vals.length;
+        return { avg: count > 0 ? vals.reduce((a, b) => a + b, 0) / count : null, count };
+      };
+      const ouraBaselineHrv = ouraConnected ? ouraBaselineAvg('hrvAvg') : { avg: null, count: 0 };
+      const ouraBaselineRhr = ouraConnected ? ouraBaselineAvg('restingHr') : { avg: null, count: 0 };
+
+      return { profile, trainingRows, nutritionRows, dayLogRows, ouraConnected, ouraRows, ouraBaselineHrv, ouraBaselineRhr, OURA_BASELINE_MIN_DAYS };
     }
 
     function buildAnalysisSystemPrompt() {
@@ -7108,7 +7153,16 @@ ${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
 
 === Tageslog: Gewicht & Schritte (letzte 90 Tage) ===
 Format: Datum|Gewicht(kg)|Schritte
-${ctx.dayLogRows.join('\n') || '(keine Einträge)'}`;
+${ctx.dayLogRows.join('\n') || '(keine Einträge)'}
+
+=== Oura-Erholungsdaten (letzte 90 Tage, Fingerring) ===
+${!ctx.ouraConnected ? 'Keine Oura-Daten vorhanden (nicht verbunden).' :
+`Erholungs-Basis (Ø letzte 7 Tage): HRV ${ctx.ouraBaselineHrv.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineHrv.avg) + ' ms'} (${ctx.ouraBaselineHrv.count} Tage), Ruhepuls ${ctx.ouraBaselineRhr.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineRhr.avg) + ' bpm'} (${ctx.ouraBaselineRhr.count} Tage)
+Format: Datum|HRV (Mittel der Nacht, ms)|Ruhepuls (bpm)|Tiefschlaf (Min)|Gesamtschlaf (Std:Min)|Temperaturabweichung (°C)|Oura-Readiness-Score,Oura-Schlaf-Score
+${ctx.ouraRows.join('\n') || '(keine Tage mit Oura-Daten)'}`}
+
+=== Hinweise zu Oura-Daten ===
+Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der Mittelwert der Nacht in Millisekunden, dazu Ruhepuls, Schlaf und Temperaturabweichung. Bewerte HRV und Ruhepuls immer relativ zur eigenen Erholungs-Basis des Nutzers (7-Tage-Mittel oben), nicht anhand allgemeiner Normwerte. Einzelne Nächte schwanken natürlich; ein einzelner Wert allein beweist nichts. Stelle keine medizinischen Diagnosen; nenne bei auffälligen Werten über mehrere Tage eine ärztliche Abklärung, wenn der Nutzer Beschwerden schildert. Benenne Unsicherheit und die Grenzen der Messung. Ein Zusammenhang zu Training oder Ernährung ist eine Möglichkeit, kein bewiesener Grund. Fehlen Daten für einen Tag oder ist Oura nicht verbunden, sage das klar – behaupte nie, du hättest keinen Zugriff, wenn Daten oben im Kontext stehen.`;
     }
 
     let analyseMsgCounter = 0;

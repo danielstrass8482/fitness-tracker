@@ -617,47 +617,84 @@
        das JS entscheidet per Intent-Erkennung (siehe initDateSwipe). Kein Einfluss auf das Aussehen. */
     #uebersicht-tab, #tagebuch-subtab { touch-action: pan-y; overscroll-behavior-x: none; }
 
-    /* Analyse Chat */
-    .analyse-chip {
-      background: var(--surface2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 8px 14px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .analyse-chip:hover { border-color: var(--primary); color: var(--primary); }
-    .analyse-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* KI-Analyse: Chat-Ansicht. Leseansicht (#analyse-messages) steht im normalen Seitenfluss
+       (kein eigener Flex-/Scroll-Rahmen mehr, die Seite scrollt als Ganzes); der Eingabebereich
+       (#analyse-composer) klebt sticky am unteren Rand, oberhalb der unteren Navigation. */
+    #analyse-tab { max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
-    /* Analyse-Tab: eigener Flex-Layout-Rahmen (statt normalem Seiten-Scroll),
-       damit der Chat-Verlauf den verfügbaren Platz füllt (flex:1, scrollt
-       intern) und der Composer darunter fest stehen bleibt (flex-shrink:0),
-       ohne von wachsendem Inhalt verdrängt zu werden. Die Höhe wird per JS
-       (sizeAnalyseTab) gesetzt, da die Header-Höhe variieren kann. */
-    #analyse-tab.active {
-      display: flex;
-      flex-direction: column;
-      max-width: 800px;
-      margin: 0 auto;
+    #analyse-messages { min-height: 40dvh; margin-bottom: 16px; }
+    #analyse-empty-hint { color: var(--fo-text-3); font-size: 14px; text-align: center; margin: 32px 0; }
+
+    .analyse-msg { margin-bottom: 20px; scroll-margin-top: 12px; }
+    .analyse-msg--user {
+      max-width: 85%;
+      margin-left: auto;
+      background: var(--fo-surface-2);
+      color: var(--fo-text);
+      padding: 10px 14px;
+      border-radius: var(--fo-r-lg);
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .analyse-msg--assistant {
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--fo-text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    /* Eingabebereich: sticky statt fixed, damit er sich automatisch innerhalb von .app-container
+       (vor der unteren Navigation) "aufbraucht" und nie über sie hinaus klebt. Der bottom-Versatz
+       wird nur auf schmalen Bildschirmen per JS gesetzt (syncAnalyseComposerOffset), weil #bottom-nav
+       dort allein position:fixed ist. Auf breiten Bildschirmen (>768px, #bottom-nav im normalen
+       Fluss, siehe @media max-width:768px weiter oben) wird sticky bewusst abgeschaltet: Bei kurzen
+       Seiten (wenig Chat-Inhalt) würde ein sticky Element sonst bis zum Viewport-Rand "fallen" und
+       die darunterliegende, nicht-fixierte Navigation überlappen (per echtem Headless-Browser-Test
+       gefunden) – im normalen Fluss (position:static) kann das nicht passieren. */
+    #analyse-composer {
+      position: sticky;
+      bottom: 0;
+      background: var(--fo-bg);
+      border-top: 1px solid var(--fo-line);
+      box-sizing: border-box;
+      padding: 10px 12px env(safe-area-inset-bottom, 10px);
+      margin: 0 -12px;
+    }
+    @media (min-width: 769px) {
+      #analyse-composer { position: static; }
+    }
+    #analyse-window-row { margin-bottom: 6px; }
+    #analyse-window-top { display: flex; align-items: center; gap: 8px; }
+    #analyse-window-top > span { font-size: 13px; line-height: 1.3; color: var(--fo-text-3); white-space: nowrap; flex-shrink: 0; }
+    #analyse-window-seg { flex: 1; min-width: 0; }
+    #analyse-context-size { font-size: 12px; line-height: 1.3; color: var(--fo-text-3); margin-top: 4px; }
+
+    #analyse-input {
+      display: block;
       width: 100%;
+      min-height: 88px;
+      max-height: 40dvh;
+      padding: 10px;
+      font-size: 16px;
+      line-height: 1.5;
+      background: var(--fo-bg);
+      border: 1px solid var(--fo-line-strong);
+      border-radius: var(--fo-r-md);
+      color: var(--fo-text);
+      resize: none;
+      overflow-y: auto;
       box-sizing: border-box;
-      overflow: hidden;
+      margin-bottom: 8px;
     }
-    #analyse-tab .analyse-fixed-top { flex-shrink: 0; }
-
-    #analyse-input-row {
-      flex-shrink: 0;
-      display: flex;
-      align-items: flex-end;
-      gap: 8px;
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-      box-sizing: border-box;
-      padding: 10px 12px;
-      padding-bottom: 80px;
-    }
+    /* !important nötig: eine bestehende globale Regel (@media max-width:768px) setzt
+       button{min-height:44px!important} für alle Buttons als Mindest-Tippfläche – hier absichtlich
+       auf 48px angehoben (D), ohne die globale Regel selbst anzufassen. */
+    #analyse-send-btn { min-height: 48px !important; }
 
     /* Loading */
     .loading {
@@ -1428,38 +1465,30 @@
     </div>
 
     <div id="analyse-tab" class="subtab-content">
-      <div class="analyse-fixed-top">
-        <h2 style="margin-bottom:10px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg> Analyse</h2>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Stelle Fragen an Claude zu deinen Trainings- und Ernährungsdaten. Dein API Key liegt in deinen Einstellungen in Firestore und wird direkt vom Gerät an Anthropic gesendet.</p>
-
-        <div id="analyse-no-key" style="display:none;background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <p style="margin-bottom:12px;">Kein Anthropic API Key hinterlegt.</p>
-          <button class="btn" onclick="document.querySelector('[data-tab=einstellungen]').click()">Zu den Einstellungen</button>
-        </div>
-
-        <div id="analyse-chip-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-          <button class="analyse-chip" onclick="sendAnalysisMessage('Analysiere meine Intervall-Läufe der letzten 6 Monate (Pace-Entwicklung)')">Intervall-Läufe: Pace-Entwicklung</button>
-          <button class="analyse-chip" onclick="sendAnalysisMessage('Wie war meine Kalorienbalance letzte Woche?')">Kalorienbalance letzte Woche</button>
-          <button class="analyse-chip" onclick="sendAnalysisMessage('An welchen Tagen esse ich am meisten? Gibt es ein Muster?')">Esse ich nach Muster?</button>
-          <button class="analyse-chip" onclick="sendAnalysisMessage('Vergleiche meine Laufleistung diesen Monat vs letzten Monat')">Laufleistung: Monatsvergleich</button>
-        </div>
+      <div id="analyse-no-key" style="display:none;background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+        <p style="margin-bottom:12px;">Kein Anthropic API Key hinterlegt.</p>
+        <button class="btn" onclick="document.querySelector('[data-tab=einstellungen]').click()">Zu den Einstellungen</button>
       </div>
 
-      <div id="analyse-messages" style="flex:1;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;"></div>
-
-      <div id="analyse-window-row" style="margin-bottom:12px;">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Zeitraum der Daten</div>
-        <div id="analyse-window-seg" class="fo-seg" role="tablist" aria-label="Zeitraum der Daten">
-          <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="30" style="min-height:44px;" onclick="setAnalysisWindow(30)">30 Tage</button>
-          <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="60" style="min-height:44px;" onclick="setAnalysisWindow(60)">60 Tage</button>
-          <button class="fo-seg__btn active" type="button" role="tab" aria-selected="true" data-window="90" style="min-height:44px;" onclick="setAnalysisWindow(90)">90 Tage</button>
-        </div>
-        <div id="analyse-context-size" style="font-size:12px;color:var(--muted);margin-top:6px;">Kontext: keine Daten</div>
+      <div id="analyse-messages" aria-live="polite">
+        <p id="analyse-empty-hint">Stelle eine Frage zu deinen Trainings-, Ernährungs- und Erholungsdaten.</p>
       </div>
 
-      <div id="analyse-input-row">
-        <textarea id="analyse-input" rows="1" placeholder="Frage stellen..." style="flex-grow:1;min-width:0;height:auto;max-height:120px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:none;overflow-y:auto;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAnalysisMessage();}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
-        <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()" style="width:auto;padding:10px 20px;">Senden</button>
+      <div id="analyse-composer">
+        <div id="analyse-window-row">
+          <div id="analyse-window-top">
+            <span>Zeitraum der Daten</span>
+            <div id="analyse-window-seg" class="fo-seg" role="tablist" aria-label="Zeitraum der Daten">
+              <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="30" style="min-height:44px;" onclick="setAnalysisWindow(30)">30 Tage</button>
+              <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="60" style="min-height:44px;" onclick="setAnalysisWindow(60)">60 Tage</button>
+              <button class="fo-seg__btn active" type="button" role="tab" aria-selected="true" data-window="90" style="min-height:44px;" onclick="setAnalysisWindow(90)">90 Tage</button>
+            </div>
+          </div>
+          <div id="analyse-context-size">Kontext: keine Daten</div>
+        </div>
+
+        <textarea id="analyse-input" rows="3" placeholder="Frage stellen..." aria-label="Frage an die KI-Analyse" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendAnalysisMessage();}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';updateAnalyseSendButtonState();"></textarea>
+        <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()">Senden</button>
       </div>
     </div>
     </div><!-- /analyse-bereich-tab -->
@@ -6570,7 +6599,7 @@
       } else if (userId) {
         updateAnalyseKeyState();
         updateAnalysisContextSizeEstimate();
-        requestAnimationFrame(() => window.sizeAnalyseTab && window.sizeAnalyseTab());
+        requestAnimationFrame(() => { syncAnalyseComposerOffset(); installAnalyseViewportHandler(); });
       }
     }
 
@@ -7225,6 +7254,7 @@
 
     // ── KI-Analyse (Anthropic Claude API, direkt aus dem Browser) ───────────
     let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
+    let analyseRequestInFlight = false; // steuert zusammen mit API-Key und leerem Feld den Senden-Button (D)
 
     // Zeitraum des Kontexts (betrifft Ernährungsbilanz, Tageslog und Oura-Zeilen – nicht die
     // Trainingseinträge, die bewusst ihr eigenes 365-Tage-Fenster behalten, siehe Bericht, und
@@ -7236,35 +7266,67 @@
     // {merge:true}), ein sicherer Einzel-Feld-Schreibpfad existiert nicht – siehe Bericht Punkt F.
     let analysisWindowDays = ANALYSIS_WINDOW_DEFAULT;
 
-    // Setzt die Höhe des Analyse-Tab-Flex-Layouts auf den tatsächlich verfügbaren
-    // Platz (Viewport minus Header darüber und fixierte Bottom-Nav darunter).
-    // Per JS statt fixem calc(100vh - Xpx), da die Header-Höhe umbrechen kann
-    // (langer E-Mail-Text neben dem Logout-Button).
-    function sizeAnalyseTab() {
-      const tab = document.getElementById('analyse-tab');
-      if (!tab || !tab.classList.contains('active')) return;
-      const top = tab.getBoundingClientRect().top;
+    // Hält den stickyen Eingabebereich über der unteren Navigation frei: #bottom-nav ist nur auf
+    // schmalen Bildschirmen (≤768px) position:fixed (siehe CSS) – dort braucht #analyse-composer
+    // einen bottom-Versatz in Höhe der Navigation, sonst (Navigation im normalen Fluss) bleibt er 0,
+    // weil sticky sich ohnehin automatisch innerhalb von .app-container "aufbraucht".
+    function syncAnalyseComposerOffset() {
+      const composer = document.getElementById('analyse-composer');
+      if (!composer) return;
       const nav = document.getElementById('bottom-nav');
-      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
-      const available = window.innerHeight - top - navHeight;
-      tab.style.height = Math.max(300, available) + 'px';
+      const navIsFixed = nav && window.getComputedStyle(nav).position === 'fixed';
+      composer.style.bottom = navIsFixed ? nav.getBoundingClientRect().height + 'px' : '0px';
     }
-    window.sizeAnalyseTab = sizeAnalyseTab;
-    window.addEventListener('resize', sizeAnalyseTab);
-    window.addEventListener('orientationchange', () => setTimeout(sizeAnalyseTab, 200));
+    window.addEventListener('resize', syncAnalyseComposerOffset);
+    window.addEventListener('orientationchange', () => setTimeout(syncAnalyseComposerOffset, 200));
+
+    // Hält den Eingabebereich über der eingeblendeten Bildschirmtastatur (visualViewport verkleinert
+    // sich dabei, das Layout-Viewport in der Regel nicht). Versatz nur per transform, nur solange
+    // #analyse-input fokussiert ist, danach restlos zurückgesetzt. Ereignisse nur einmal registriert.
+    // Kein Eingriff am viewport-Meta-Tag oder an globalen Stilen.
+    let analyseViewportHandlerInstalled = false;
+    function installAnalyseViewportHandler() {
+      if (analyseViewportHandlerInstalled) return;
+      analyseViewportHandlerInstalled = true;
+      const input = document.getElementById('analyse-input');
+      const vv = window.visualViewport;
+      if (!input || !vv) return; // ohne visualViewport: Eingabebereich bleibt im normalen Fluss (sticky), siehe Bericht
+      const update = () => {
+        const composer = document.getElementById('analyse-composer');
+        if (!composer) return;
+        const active = document.activeElement === input && document.getElementById('analyse-tab')?.classList.contains('active');
+        if (!active) { composer.style.transform = ''; return; }
+        const overlap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+        composer.style.transform = overlap > 0 ? `translateY(-${overlap}px)` : '';
+      };
+      vv.addEventListener('resize', update);
+      vv.addEventListener('scroll', update);
+      input.addEventListener('focus', update);
+      input.addEventListener('blur', () => {
+        const composer = document.getElementById('analyse-composer');
+        if (composer) composer.style.transform = '';
+      });
+    }
 
     function updateAnalyseKeyState() {
       const noKeyEl = document.getElementById('analyse-no-key');
-      const chipRow = document.getElementById('analyse-chip-row');
       const input = document.getElementById('analyse-input');
-      const sendBtn = document.getElementById('analyse-send-btn');
       const hasKey = !!settings.anthropicApiKey;
       if (noKeyEl) noKeyEl.style.display = hasKey ? 'none' : 'block';
-      if (chipRow) chipRow.style.display = hasKey ? 'flex' : 'none';
       if (input) input.disabled = !hasKey;
-      if (sendBtn) sendBtn.disabled = !hasKey;
+      updateAnalyseSendButtonState();
     }
     window.updateAnalyseKeyState = updateAnalyseKeyState;
+
+    // Senden-Button: deaktiviert bei fehlendem API-Key, leerem Feld oder laufender Anfrage (D)
+    function updateAnalyseSendButtonState() {
+      const sendBtn = document.getElementById('analyse-send-btn');
+      const input = document.getElementById('analyse-input');
+      if (!sendBtn || !input) return;
+      const hasKey = !!settings.anthropicApiKey;
+      sendBtn.disabled = !hasKey || analyseRequestInFlight || !input.value.trim();
+    }
+    window.updateAnalyseSendButtonState = updateAnalyseSendButtonState;
 
     // Baut komprimierte Datenzusammenfassung (keine rohen Firestore-Dokumente, keine Einzel-Lebensmittel)
     function buildAnalysisContextData() {
@@ -7448,29 +7510,39 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.updateAnalysisContextSizeEstimate = updateAnalysisContextSizeEstimate;
 
     let analyseMsgCounter = 0;
+    // Leseansicht im normalen Seitenfluss (kein eigener Scroll-Container mehr): Nachrichten werden
+    // per CSS-Klasse gestaltet (.analyse-msg--user/--assistant), nicht mehr per Inline-Flex-Stil.
+    // Text bleibt reiner textContent (kein Markdown, keine innerHTML-Interpretation, siehe Bericht).
     function appendAnalysisMessage(role, text, isLoading) {
       const container = document.getElementById('analyse-messages');
+      const hint = document.getElementById('analyse-empty-hint');
+      if (hint) hint.style.display = 'none';
       const id = 'analyse-msg-' + (++analyseMsgCounter);
       const isUser = role === 'user';
       const bubble = document.createElement('div');
       bubble.id = id;
-      bubble.style.cssText = `align-self:${isUser ? 'flex-end' : 'flex-start'};max-width:85%;background:${isUser ? 'var(--primary)' : 'var(--surface2)'};color:${isUser ? 'var(--fo-on-primary)' : 'var(--text)'};padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;`;
+      bubble.className = 'analyse-msg ' + (isUser ? 'analyse-msg--user' : 'analyse-msg--assistant');
       bubble.textContent = isLoading ? '…' : text;
       container.appendChild(bubble);
-      container.scrollTop = container.scrollHeight;
+      // Eigene Frage: nach dem Absenden sichtbar. Springt an den Anfang (nicht ans Ende), kein
+      // automatisches Weiterscrollen beim bloßen Tippen (es wird nur hier, beim Anhängen, gescrollt).
+      if (isUser) bubble.scrollIntoView({ block: 'start', behavior: 'smooth' });
       return id;
     }
 
     function updateAnalysisMessage(id, text, icon) {
       const el = document.getElementById(id);
-      if (el) { if (icon) setIconText(el, icon, text); else el.textContent = text; }
-      const container = document.getElementById('analyse-messages');
-      if (container) container.scrollTop = container.scrollHeight;
+      if (!el) return;
+      if (icon) setIconText(el, icon, text); else el.textContent = text;
+      // Beim Eintreffen der Antwort (oder einer Fehlermeldung) an deren Anfang springen, damit lange
+      // Antworten von oben gelesen werden – kein Springen ans Ende der Leseansicht.
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
 
-    window.sendAnalysisMessage = async function(presetText) {
+    // presetText (Chips) entfällt mit den Chips (A) – sendAnalysisMessage liest nur noch das Feld.
+    window.sendAnalysisMessage = async function() {
       const input = document.getElementById('analyse-input');
-      const text = (typeof presetText === 'string' ? presetText : input?.value || '').trim();
+      const text = (input?.value || '').trim();
       if (!text) return;
 
       const apiKey = settings.anthropicApiKey;
@@ -7479,14 +7551,20 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         return;
       }
 
-      if (typeof presetText !== 'string' && input) { input.value = ''; input.style.height = 'auto'; }
+      input.value = '';
+      input.style.height = 'auto';
       appendAnalysisMessage('user', text);
       analysisMessages.push({ role: 'user', content: text });
 
       const loadingId = appendAnalysisMessage('assistant', '', true);
-      const sendBtn = document.getElementById('analyse-send-btn');
-      document.querySelectorAll('.analyse-chip').forEach(b => b.disabled = true);
-      if (sendBtn) sendBtn.disabled = true;
+      analyseRequestInFlight = true;
+      updateAnalyseSendButtonState();
+      // Eingabetext bei Fehlschlag wiederherstellen (D), damit er nicht verloren geht
+      const restoreInputOnFailure = () => {
+        input.value = text;
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+      };
 
       try {
         const systemPrompt = buildAnalysisSystemPrompt();
@@ -7511,6 +7589,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           const msg = data?.error?.message || ('HTTP ' + resp.status);
           updateAnalysisMessage(loadingId, 'Fehler: ' + msg, 'alertCircle');
           analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
+          restoreInputOnFailure();
           return;
         }
 
@@ -7522,9 +7601,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         console.error('Analyse API error:', err);
         updateAnalysisMessage(loadingId, 'Verbindungsfehler: ' + err.message, 'alertCircle');
         analysisMessages.pop();
+        restoreInputOnFailure();
       } finally {
-        document.querySelectorAll('.analyse-chip').forEach(b => b.disabled = false);
-        if (sendBtn) sendBtn.disabled = false;
+        analyseRequestInFlight = false;
+        updateAnalyseSendButtonState();
       }
     };
 

@@ -1008,7 +1008,7 @@
       <div class="fo-datenav" style="margin-bottom:12px;">
         <button class="fo-iconbtn" type="button" onclick="changeDate(-1)" aria-label="Vorheriger Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
         <h2 id="current-date-display" class="fo-datenav__label" style="margin:0;"></h2>
-        <button class="fo-iconbtn" type="button" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
+        <button id="date-nav-next" class="fo-iconbtn" type="button" onclick="changeDate(1)" aria-label="Nächster Tag"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
       </div>
     </div>
     
@@ -4353,7 +4353,10 @@
       const y = date.getFullYear();
       const m = String(date.getMonth() + 1).padStart(2, '0');
       const d = String(date.getDate()).padStart(2, '0');
-      currentDate = `${y}-${m}-${d}`;
+      const newDate = `${y}-${m}-${d}`;
+      // Keine Navigation in die Zukunft (Berliner Zeit, jedes Mal frisch bestimmt); rückwärts keine Grenze.
+      if (days > 0 && newDate > berlinTodayStr()) return;
+      currentDate = newDate;
       renderFoodLog();
     };
     
@@ -4558,7 +4561,16 @@
         month: 'short' 
       });
       document.getElementById('current-date-display').textContent = dateStr;
-      
+
+      // "Nächster Tag"-Pfeil am heutigen Tag (und darüber hinaus) deaktivieren — dieselbe Grenze wie changeDate
+      const dateNavNextBtn = document.getElementById('date-nav-next');
+      if (dateNavNextBtn) {
+        const atOrPastToday = currentDate >= berlinTodayStr();
+        dateNavNextBtn.disabled = atOrPastToday;
+        if (atOrPastToday) dateNavNextBtn.setAttribute('aria-disabled', 'true');
+        else dateNavNextBtn.removeAttribute('aria-disabled');
+      }
+
       const entries = foodLog[currentDate] || [];
       
       // Calculate totals

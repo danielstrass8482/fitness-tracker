@@ -761,14 +761,6 @@
     }
     
     /* Meal Categories */
-    .meal-category {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      margin-bottom: 15px;
-      overflow: hidden;
-    }
-    
     .meal-header {
       padding: 15px 20px;
       cursor: pointer;
@@ -1517,252 +1509,242 @@
 
     <div id="einstellungen-tab" class="tab-content">
       <div style="max-width:800px;margin:0 auto;">
-        <h2 style="margin-bottom:30px;">Einstellungen</h2>
-        
-        <!-- Körperdaten & TDEE-Rechner -->
-        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <h3 style="margin-bottom:20px;">Körperdaten & Grundumsatz</h3>
+        <h2 style="margin:4px 2px 20px;font:650 var(--fo-fs-title)/var(--fo-lh-title) var(--fo-font);">Einstellungen</h2>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Geschlecht</label>
-              <select id="settings-gender" onchange="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+        <!-- Körperdaten & TDEE-Rechner -->
+        <section class="fo-card" style="margin-bottom:20px;">
+          <div class="fo-card__head"><h3 class="fo-card__title">Körperdaten & Grundumsatz</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+
+          <div class="fo-grid2">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-gender">Geschlecht</label>
+              <div class="fo-select"><select id="settings-gender" onchange="calcTDEE()">
                 <option value="male">Männlich</option>
                 <option value="female">Weiblich</option>
-              </select>
+              </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
             </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Alter (Jahre)</label>
-              <input type="number" id="settings-age" placeholder="30" min="10" max="100" oninput="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-age">Alter (Jahre)</label>
+              <input class="fo-input" type="number" id="settings-age" placeholder="30" min="10" max="100" oninput="calcTDEE()">
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Größe (cm)</label>
-              <input type="number" id="settings-height" placeholder="179" min="100" max="250" oninput="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div class="fo-grid2">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-height">Größe (cm)</label>
+              <input class="fo-input" type="number" id="settings-height" placeholder="179" min="100" max="250" oninput="calcTDEE()">
             </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
-              <input type="number" id="settings-weight" placeholder="75" step="0.1" oninput="calcTDEE()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-              <div style="font-size:11px;color:var(--muted);margin-top:3px;" id="settings-weight-hint"></div>
+            <div class="fo-field">
+              <label class="fo-label" for="settings-weight">Gewicht (kg)</label>
+              <input class="fo-input" type="number" id="settings-weight" placeholder="75" step="0.1" oninput="calcTDEE()">
+              <div class="fo-help" id="settings-weight-hint"></div>
             </div>
           </div>
 
           <!-- TDEE Ergebnis -->
-          <div id="tdee-result" style="display:none;background:var(--bg);border-radius:8px;padding:15px;margin-bottom:20px;border:1px solid var(--border);">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Grundumsatz (BMR)</div>
-                <div style="font-size:20px;font-weight:600;" id="bmr-display">–</div>
-              </div>
-              <div style="font-size:24px;color:var(--muted);">×</div>
-              <div>
-                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Aktivitätsfaktor</div>
-                <div style="font-size:20px;font-weight:600;" id="factor-display">–</div>
-              </div>
-              <div style="font-size:24px;color:var(--muted);">=</div>
-              <div>
-                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">TDEE</div>
-                <div style="font-size:20px;font-weight:600;color:var(--primary);" id="tdee-calc-display">–</div>
-              </div>
-            </div>
+          <div id="tdee-result" class="fo-num" style="display:none;grid-template-columns:auto auto auto auto minmax(0,1fr);align-items:end;gap:6px;padding:10px 12px;background:var(--fo-surface-2);border-radius:var(--fo-r-md);">
+            <div><div class="fo-macro__label">Grundumsatz (BMR)</div><div style="font:700 18px/24px var(--fo-font);" id="bmr-display">–</div></div>
+            <span style="color:var(--fo-text-3);font-weight:600;padding-bottom:2px;">×</span>
+            <div><div class="fo-macro__label">Aktivitätsfaktor</div><div style="font:700 18px/24px var(--fo-font);" id="factor-display">–</div></div>
+            <span style="color:var(--fo-text-3);font-weight:600;padding-bottom:2px;">=</span>
+            <div style="text-align:right;"><div class="fo-macro__label">TDEE</div><div style="font:700 18px/24px var(--fo-font);color:var(--fo-primary);" id="tdee-calc-display">–</div></div>
           </div>
-        </div>
+          </div>
+        </section>
 
         <!-- Ziele -->
-        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <h3 style="margin-bottom:20px;">Tagesziele</h3>
+        <section class="fo-card" style="margin-bottom:20px;">
+          <div class="fo-card__head"><h3 class="fo-card__title">Tagesziele</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
 
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Täglicher Kalorienbedarf (TDEE)</label>
-            <input type="number" id="settings-tdee" placeholder="2700" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Wird automatisch aus dem Rechner befüllt, kann aber manuell überschrieben werden</div>
+          <div class="fo-field">
+            <label class="fo-label" for="settings-tdee">Täglicher Kalorienbedarf (TDEE)</label>
+            <input class="fo-input" type="number" id="settings-tdee" placeholder="2700">
+            <p class="fo-help" style="margin:0;">Wird automatisch aus dem Rechner befüllt, kann aber manuell überschrieben werden</p>
           </div>
 
           <!-- Makro-Vorschlag -->
-          <div style="background:var(--bg);border-radius:8px;padding:15px;margin-bottom:15px;border:1px solid var(--border);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-              <div style="font-size:13px;font-weight:500;">Makro-Vorschlag berechnen</div>
-            </div>
+          <div style="background:var(--fo-surface-2);border-radius:var(--fo-r-md);padding:12px;display:flex;flex-direction:column;gap:12px;">
+            <span class="fo-label">Makro-Vorschlag berechnen</span>
             <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
-              <div>
-                <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted);">Ziel</label>
-                <select id="macro-goal" style="width:100%;padding:9px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+              <div class="fo-field">
+                <label class="fo-label" for="macro-goal">Ziel</label>
+                <div class="fo-select"><select id="macro-goal">
                   <option value="lose">Abnehmen (−300 kcal Defizit)</option>
                   <option value="maintain" selected>Gewicht halten</option>
                   <option value="gain">Aufbauen (+200 kcal Überschuss)</option>
-                </select>
+                </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
               </div>
-              <button onclick="calcMacroSuggestion()" class="btn" style="width:auto;padding:9px 16px;white-space:nowrap;">Vorschlag berechnen</button>
+              <button class="fo-btn fo-btn--secondary" type="button" onclick="calcMacroSuggestion()" style="white-space:nowrap;">Vorschlag berechnen</button>
             </div>
-            <div id="macro-suggestion" style="display:none;margin-top:12px;font-size:12px;color:var(--muted);line-height:1.8;"></div>
+            <div id="macro-suggestion" class="fo-help" style="display:none;line-height:1.8;"></div>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:20px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Protein-Ziel (g)</label>
-              <input type="number" id="settings-protein" placeholder="150" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div class="fo-grid3">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-protein">Protein-Ziel (g)</label>
+              <input class="fo-input" type="number" id="settings-protein" placeholder="150">
             </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Kohlenhydrate (g)</label>
-              <input type="number" id="settings-carbs" placeholder="325" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-carbs">Kohlenhydrate (g)</label>
+              <input class="fo-input" type="number" id="settings-carbs" placeholder="325">
             </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Fett (g)</label>
-              <input type="number" id="settings-fat" placeholder="95" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-fat">Fett (g)</label>
+              <input class="fo-input" type="number" id="settings-fat" placeholder="95">
             </div>
           </div>
 
-          <div style="margin-bottom:20px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Detaildaten laden (Tage)</label>
-            <select id="settings-detail-days" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div class="fo-field">
+            <label class="fo-label" for="settings-detail-days">Detaildaten laden (Tage)</label>
+            <div class="fo-select"><select id="settings-detail-days">
               <option value="31">Letzte 31 Tage</option>
               <option value="60">Letzte 60 Tage</option>
               <option value="90">Letzte 90 Tage</option>
-            </select>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Bestimmt wie viele Tage beim Start geladen werden. Mehr = mehr Firebase Reads.</div>
+            </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+            <p class="fo-help" style="margin:0;">Bestimmt wie viele Tage beim Start geladen werden. Mehr = mehr Firebase Reads.</p>
           </div>
 
-          <div style="margin-bottom:20px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Rezeptanzeige im Tagebuch</label>
-            <select id="settings-recipe-display" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          <div class="fo-field">
+            <label class="fo-label" for="settings-recipe-display">Rezeptanzeige im Tagebuch</label>
+            <div class="fo-select"><select id="settings-recipe-display">
               <option value="block">Als Block (ein Eintrag pro Rezept)</option>
               <option value="expanded">Aufgeklappt (Zutaten einzeln anzeigen)</option>
-            </select>
+            </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
           </div>
 
-          <button class="btn" onclick="saveSettings()" style="width:100%;">Einstellungen speichern</button>
-        </div>
+          <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveSettings()">Einstellungen speichern</button>
+          </div>
+        </section>
 
-        <div style="background:var(--surface);padding:30px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-          <h3 style="margin-bottom:15px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg> KI-Analyse (Anthropic)</h3>
-          <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anthropic API Key</label>
-          <input type="password" id="settings-anthropic-key" placeholder="sk-ant-..." style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Dein API Key wird mit deinen Einstellungen in deinem Firebase-Konto gespeichert (Firestore, users/…/settings/main) und bei Anfragen direkt vom Gerät an Anthropic gesendet. Erforderlich für den "Analyse"-Tab.</div>
-        </div>
+        <section class="fo-card" style="margin-bottom:20px;">
+          <div class="fo-card__head"><h3 class="fo-card__title" style="display:flex;align-items:center;gap:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg>KI-Analyse (Anthropic)</h3></div>
+          <div class="fo-card__body" style="border-top:1px solid var(--fo-line);">
+            <div class="fo-field">
+              <label class="fo-label" for="settings-anthropic-key">Anthropic API Key</label>
+              <input class="fo-input" type="password" id="settings-anthropic-key" placeholder="sk-ant-...">
+              <p class="fo-help" style="margin-top:6px;">Dein API Key wird mit deinen Einstellungen in deinem Firebase-Konto gespeichert (Firestore, users/…/settings/main) und bei Anfragen direkt vom Gerät an Anthropic gesendet. Erforderlich für den "Analyse"-Tab.</p>
+            </div>
+          </div>
+        </section>
 
         <!-- Verbindungen: Google Fit und Oura (bisher Daten › Import, interne id import-subtab) -->
-        <div class="meal-category">
-          <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Verbindungen</div>
-          </div>
-          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
+        <section class="fo-card" style="margin-bottom:20px;">
+          <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
+            <h3 class="fo-card__title">Verbindungen</h3>
+            <svg class="fo-i fo-chev" aria-hidden="true" style="margin-right:4px;"><use href="#i-chevD"/></svg>
+          </button>
+          <div class="settings-section-body" style="display:none;border-top:1px solid var(--fo-line);">
             <div id="import-subtab">
               <!-- Google Fit Integration -->
-              <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-steps"/></svg></div>
-                  <h3 style="margin:0;">Google Fit</h3>
+              <div style="padding:12px;display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span class="fo-row__icon fo-row__icon--rec"><svg class="fo-i" aria-hidden="true"><use href="#i-steps"/></svg></span>
+                  <div style="flex:1;min-width:0;"><div style="font-weight:650;">Google Fit</div></div>
                 </div>
                 <div id="gfit-disconnected">
-                  <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
-                  <button class="btn" onclick="connectGoogleFit()" style="background:var(--fo-primary);border-color:var(--fo-primary);width:100%;">Mit Google Fit verbinden</button>
+                  <p class="fo-help" style="margin-bottom:12px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
+                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="connectGoogleFit()">Mit Google Fit verbinden</button>
                 </div>
                 <div id="gfit-connected" style="display:none;">
-                  <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-                    <div style="font-size:13px;color:var(--success);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-okCircle"/></svg> Verbunden</div>
-                    <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="gfit-last-sync"></div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                    <span class="fo-tag fo-tag--ok"><svg class="fo-i fo-i--sm" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-okCircle"/></svg>Verbunden</span>
+                    <span class="fo-row__sub" id="gfit-last-sync" style="white-space:normal;"></span>
                   </div>
-                  <div style="display:flex;gap:10px;">
-                    <button class="btn" onclick="syncGoogleFit(false)" style="flex:1;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Neue Daten sync</button>
-                    <button class="btn" onclick="syncGoogleFit(true)" style="flex:1;background:var(--surface2);border-color:var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-download"/></svg> Alles neu laden</button>
+                  <div class="fo-btnrow">
+                    <button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="syncGoogleFit(false)"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Neue Daten sync</button>
+                    <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="syncGoogleFit(true)"><svg class="fo-i" aria-hidden="true"><use href="#i-download"/></svg>Alles neu laden</button>
                   </div>
-                  <button onclick="disconnectGoogleFit()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Fit trennen</button>
+                  <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectGoogleFit()" style="border-color:transparent;margin-top:8px;">Google Fit trennen</button>
                 </div>
-            </div>
+              </div>
 
               <!-- Oura Ring Integration -->
-              <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:15px;">
-                  <div style="background:var(--fo-primary-tint);color:var(--fo-primary);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-readiness"/></svg></div>
-                  <h3 style="margin:0;">Oura Ring</h3>
+              <div style="padding:12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--fo-line);">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span class="fo-row__icon fo-row__icon--rec"><svg class="fo-i" aria-hidden="true"><use href="#i-readiness"/></svg></span>
+                  <div style="flex:1;min-width:0;"><div style="font-weight:650;">Oura Ring</div></div>
                 </div>
                 <div id="oura-disconnected">
-                  <p style="color:var(--muted);margin-bottom:15px;font-size:14px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
-                  <button class="btn" onclick="connectOura()" style="background:var(--fo-primary);border-color:var(--fo-primary);width:100%;">Mit Oura verbinden</button>
+                  <p class="fo-help" style="margin-bottom:12px;">Verbinde deinen Oura Ring um Schlaf, Readiness und Aktivität anzuzeigen. Fließt nicht in dein Kalorienziel ein.</p>
+                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="connectOura()">Mit Oura verbinden</button>
                 </div>
                 <div id="oura-connected" style="display:none;">
-                  <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:15px;border:1px solid var(--border);">
-                    <div style="font-size:13px;color:var(--success);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-okCircle"/></svg> Verbunden</div>
-                    <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="oura-last-sync"></div>
-                    <div style="font-size:12px;color:var(--fo-bad);margin-top:4px;display:none;" id="oura-error"></div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                    <span class="fo-tag fo-tag--ok"><svg class="fo-i fo-i--sm" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-okCircle"/></svg>Verbunden</span>
+                    <span class="fo-row__sub" id="oura-last-sync" style="white-space:normal;"></span>
                   </div>
-                  <button class="btn" onclick="syncOuraNow()" style="width:100%;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Jetzt synchronisieren</button>
-                  <button onclick="disconnectOura()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Oura Ring trennen</button>
+                  <div class="fo-row__sub" id="oura-error" style="display:none;color:var(--fo-bad);"></div>
+                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="syncOuraNow()"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Jetzt synchronisieren</button>
+                  <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectOura()" style="border-color:transparent;margin-top:8px;">Oura Ring trennen</button>
                 </div>
-            </div>
+              </div>
             </div><!-- /import-subtab -->
           </div>
-        </div>
+        </section>
 
         <!-- Backup: Google Drive (bisher Daten › Backup, interne id export-subtab) -->
-        <div class="meal-category">
-          <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Backup</div>
-          </div>
-          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
-            <div id="export-subtab">
-              <div style="display:flex;flex-direction:column;gap:16px;">
-
-                <!-- Google Drive Auto-Backup -->
-                <div style="background:var(--bg);padding:20px;border-radius:12px;border:1px solid var(--border);">
-                  <h3 style="margin-bottom:8px;font-size:15px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg> Google Drive Backup</h3>
-                  <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
-                  <!-- Disconnected State -->
-                  <div id="gdrive-disconnected">
-                    <button class="btn" onclick="connectGoogleDrive()" style="width:100%;background:var(--fo-primary);border-color:var(--fo-primary);">Mit Google Drive verbinden</button>
-                  </div>
-                  <!-- Connected State -->
-                  <div id="gdrive-connected" style="display:none;">
-                    <div id="gdrive-backup-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;">Status wird geladen...</div>
-                    <button class="btn" onclick="backupToGoogleDrive()" style="width:100%;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg> Jetzt in Google Drive sichern</button>
-                    <div style="margin-top:10px;font-size:12px;color:var(--muted);">Letzte Sicherung: <span id="last-backup-time">—</span></div>
-                    <button onclick="disconnectGoogleDrive()" style="width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;">Google Drive trennen</button>
-                  </div>
+        <section class="fo-card" style="margin-bottom:20px;">
+          <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
+            <h3 class="fo-card__title">Backup</h3>
+            <svg class="fo-i fo-chev" aria-hidden="true" style="margin-right:4px;"><use href="#i-chevD"/></svg>
+          </button>
+          <div class="settings-section-body" style="display:none;border-top:1px solid var(--fo-line);">
+            <div id="export-subtab" style="padding:12px;">
+              <!-- Google Drive Auto-Backup -->
+              <div>
+                <h3 style="margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:6px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg>Google Drive Backup</h3>
+                <p class="fo-help" style="margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
+                <!-- Disconnected State -->
+                <div id="gdrive-disconnected">
+                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="connectGoogleDrive()">Mit Google Drive verbinden</button>
                 </div>
-
+                <!-- Connected State -->
+                <div id="gdrive-connected" style="display:none;">
+                  <p class="fo-help" id="gdrive-backup-status" style="margin-bottom:12px;">Status wird geladen...</p>
+                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="backupToGoogleDrive()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Jetzt in Google Drive sichern</button>
+                  <p class="fo-help" style="margin-top:10px;">Letzte Sicherung: <span id="last-backup-time">—</span></p>
+                  <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectGoogleDrive()" style="border-color:transparent;margin-top:10px;">Google Drive trennen</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         <!-- Statistik (bisher Daten › Statistik, interne id statistik-subtab) -->
-        <div class="meal-category">
-          <div class="meal-header" onclick="toggleSettingsSection(this)">
-            <div class="meal-title"><span class="settings-section-arrow"><svg class="fo-i fo-i--sm fo-toggle-chev" aria-hidden="true"><use href="#i-chevD"/></svg></span> Statistik</div>
-          </div>
-          <div class="settings-section-body" style="display:none;padding:16px;border-top:1px solid var(--border);">
-            <div id="statistik-subtab">
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
-                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Lebensmittel-DB</div>
-                  <div style="font-size:32px;font-weight:600;" id="stat-fooddb">0</div>
+        <section class="fo-card" style="margin-bottom:20px;">
+          <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
+            <h3 class="fo-card__title">Statistik</h3>
+            <svg class="fo-i fo-chev" aria-hidden="true" style="margin-right:4px;"><use href="#i-chevD"/></svg>
+          </button>
+          <div class="settings-section-body" style="display:none;border-top:1px solid var(--fo-line);">
+            <div id="statistik-subtab" style="padding:12px;">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+                <div class="fo-card" style="padding:16px;">
+                  <div class="fo-label" style="margin-bottom:5px;">Lebensmittel-DB</div>
+                  <div style="font-size:28px;font-weight:600;" id="stat-fooddb">0</div>
                 </div>
-          
-                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Rezepte</div>
-                  <div style="font-size:32px;font-weight:600;" id="stat-recipes">0</div>
+                <div class="fo-card" style="padding:16px;">
+                  <div class="fo-label" style="margin-bottom:5px;">Rezepte</div>
+                  <div style="font-size:28px;font-weight:600;" id="stat-recipes">0</div>
                 </div>
-          
-                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Einträge</div>
-                  <div style="font-size:32px;font-weight:600;" id="stat-diary">0</div>
+                <div class="fo-card" style="padding:16px;">
+                  <div class="fo-label" style="margin-bottom:5px;">Tagebuch Einträge</div>
+                  <div style="font-size:28px;font-weight:600;" id="stat-diary">0</div>
                 </div>
-          
-                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Tagebuch Tage</div>
-                  <div style="font-size:32px;font-weight:600;" id="stat-days">0</div>
+                <div class="fo-card" style="padding:16px;">
+                  <div class="fo-label" style="margin-bottom:5px;">Tagebuch Tage</div>
+                  <div style="font-size:28px;font-weight:600;" id="stat-days">0</div>
                 </div>
-          
-                <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-                  <div style="font-size:14px;color:var(--muted);margin-bottom:5px;">Training Einträge</div>
-                  <div style="font-size:32px;font-weight:600;" id="stat-training">0</div>
+                <div class="fo-card" style="padding:16px;">
+                  <div class="fo-label" style="margin-bottom:5px;">Training Einträge</div>
+                  <div style="font-size:28px;font-weight:600;" id="stat-training">0</div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -6643,10 +6625,9 @@
     // Einklappbare Abschnitte in den Einstellungen (Verbindungen, Backup, Statistik), Muster wie toggleActivityGroup
     window.toggleSettingsSection = function(header) {
       const body = header.nextElementSibling;
-      const arrow = header.querySelector('.settings-section-arrow');
       const open = body.style.display === 'none';
       body.style.display = open ? 'block' : 'none';
-      arrow?.querySelector('.fo-toggle-chev')?.classList.toggle('is-open', open);
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
       // Backup: Status beim Aufklappen laden (bisher beim Öffnen des Unterbereichs Backup)
       if (open && body.querySelector('#export-subtab')) loadDriveStatus();
     };
@@ -7244,7 +7225,7 @@
       bmr = Math.round(bmr);
       const tdee = Math.round(bmr * activity);
 
-      document.getElementById('tdee-result').style.display = 'block';
+      document.getElementById('tdee-result').style.display = 'grid';
       document.getElementById('bmr-display').textContent = fmt(bmr) + ' kcal';
       document.getElementById('factor-display').textContent = activity.toFixed(3).replace('.', ',');
       document.getElementById('tdee-calc-display').textContent = fmt(tdee) + ' kcal';

@@ -392,6 +392,12 @@
     /* Auf-/Zuklappen: ein chevD, der zugeklappt nach rechts zeigt */
     .fo-toggle-chev { transform: rotate(-90deg); transition: transform .15s; color: var(--fo-text-3); }
     .fo-toggle-chev.is-open { transform: none; }
+    /* Intervall-Zirkel: Rundenpause zeigt Rundenzeit, Gesamtzeit und Pause-Countdown gleichzeitig */
+    .iv-roundpause-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; width: 100%; font-variant-numeric: tabular-nums; }
+    .iv-roundpause-col { flex: 1; min-width: 0; text-align: center; }
+    .iv-roundpause-label { font-size: var(--fo-fs-caption); line-height: var(--fo-lh-caption); color: var(--fo-text-3); margin-bottom: 2px; white-space: nowrap; }
+    .iv-roundpause-val { font-weight: 700; color: var(--fo-text); white-space: nowrap; font-size: clamp(20px, 7vw, 30px); }
+    .iv-roundpause-val--pause { color: var(--fo-primary); font-size: clamp(32px, 14vw, 64px); }
     /* Toast mit Status-Icon */
     .toast { display: flex; align-items: center; gap: 8px; }
     .toast .fo-i.is-ok, .fo-status-ok { color: var(--fo-ok); }
@@ -9346,12 +9352,24 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     // Vorlage (users/{uid}/intervalTemplates/{id}, + IndexedDB-Cache 'intervalTemplates'):
     //   { id, name, prepSec, rounds, roundPauseSec, steps: [{ typ, typLabel, holdSec, pauseSec }], updatedAt }
     // Ablauf = feste Segmentliste: Vorbereitung → Halten → Pause → Halten … (Rundenpause ersetzt die Pause nach
-    // dem letzten Schritt einer Runde, wenn > 0). Zeit wird nur über Zeitstempel gemessen (segStartMs + Dauer = Ende);
-    // der Tick holt nach einer Hintergrundphase alle inzwischen abgelaufenen Segmente nach. Töne werden im Voraus
-    // auf der AudioContext-Zeitachse geplant, damit sie auch bei gedrosselten JS-Timern pünktlich kommen.
+    // dem letzten Schritt einer Runde, wenn > 0). Zeit wird nur über Zeitstempel gemessen (segStartMs + Dauer = Ende).
+    // Takt: ein selbstkorrigierender setTimeout, der exakt auf die nächste volle Restsekunde zielt (nicht ein
+    // 250-ms-Poll-Tick) und bei jedem Aufwachen Zahl und Ton aus DERSELBEN Restzeit-Berechnung ableitet – so sind
+    // Anzeige und Zählton durch Konstruktion synchron (siehe Bericht, Analyse 2: vorher liefen eine audiotaktbasierte
+    // Ton-Vorausplanung und ein 250-ms-Anzeige-Poll als zwei unabhängige Uhren, die bis zu ~250ms auseinanderlaufen
+    // konnten). Nach einer Hintergrundphase (gedrosselte Timer) holt intervalSync übersprungene Segmentwechsel aus
+    // den Zeitstempeln nach, OHNE die dabei verpassten Zähltöne nachzuholen; der Start-Ton der neuen Aktivität wird
+    // beim Nachholen trotzdem gespielt.
     // Logging: je Übung ein Eintrag im Format der manuellen Haltezeit-Eingabe (holdSec, source 'manual', ohne Kalorien).
     // Unabhängig vom Kraft-Zirkel (zirkelTimerState), der unverändert bleibt.
     const INTERVAL_DEFAULTS = { prepSec: 10, rounds: 1, roundPauseSec: 0, holdSec: 30, pauseSec: 5 };
+    // Countdown-Pieptöne vor jedem Aktivitätsstart: COUNTDOWN_BEEP_SECONDS Zähltöne (gleiche Tonhöhe/Dauer),
+    // danach der höhere, längere Start-Ton. Leicht nachstellbar: COUNTDOWN_BEEP_SECONDS z.B. auf 3 oder 4 setzen.
+    const COUNTDOWN_BEEP_SECONDS = 5;
+    const BEEP_COUNT_HZ = 880;   // Zählton 5-4-3-2-1 (unverändert aus dem bisherigen "tick")
+    const BEEP_COUNT_MS = 120;   // Dauer eines Zähltons in ms (unverändert aus dem bisherigen "tick")
+    const BEEP_GO_HZ = Math.round(BEEP_COUNT_HZ * 1.5);  // Start-Ton: deutlich höher
+    const BEEP_GO_MS = BEEP_COUNT_MS * 2;                 // Start-Ton: etwas länger
     const INTERVAL_PHASES = {
       prep:       { label: 'Vorbereitung', color: 'var(--fo-text-2)' },
       hold:       { label: 'Halten',       color: 'var(--fo-activity)', text: 'var(--fo-activity-strong)' },
@@ -9613,7 +9631,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         cfg, segs: buildIntervalSegments(cfg),
         segIdx: -1, segStartMs: 0, pausedAtMs: null, startedAt: null,
         done: [], finished: false, savedTyps: new Set(), saving: false, saveError: false,
-        intervalId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, scheduled: []
+        wakeTimeoutId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, activeTones: [],
+        roundStartMs: null, lastRoundDurationMs: null, lastTickKey: null
       };
       renderIntervalIntro();
       pushModalState();
@@ -9655,20 +9674,23 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       }
     }
 
-    // Töne: [Frequenz Hz, Versatz s, Dauer s, Wellenform, Lautstärke]
+    // Töne: [Frequenz Hz, Versatz s, Dauer s, Wellenform, Lautstärke]. "tick" und "start" nutzen die
+    // COUNTDOWN_BEEP_SECONDS/BEEP_*-Konstanten oben, damit beide an einer Stelle einstellbar bleiben.
     const INTERVAL_TONES = {
-      tick:   [[880, 0, 0.12, 'sine', 0.35]],                                                  // 3-2-1
-      start:  [[660, 0, 0.12, 'square', 0.15], [1320, 0.12, 0.38, 'square', 0.15]],           // Beginn Halten: hoch, aufsteigend
-      end:    [[784, 0, 0.2, 'triangle', 0.45], [392, 0.2, 0.45, 'triangle', 0.45]],           // Ende Halten: absteigend
+      tick:   [[BEEP_COUNT_HZ, 0, BEEP_COUNT_MS / 1000, 'sine', 0.35]],                         // 5-4-3-2-1, immer gleiche Tonhöhe
+      start:  [[BEEP_GO_HZ, 0, BEEP_GO_MS / 1000, 'square', 0.2]],                               // "Jetzt geht's los": höher, länger, ein Ton
+      end:    [[784, 0, 0.2, 'triangle', 0.45], [392, 0.2, 0.45, 'triangle', 0.45]],             // Ende Halten: unverändert, absteigend
       finish: [[523, 0, 0.18, 'sine', 0.35], [659, 0.18, 0.18, 'sine', 0.35], [784, 0.36, 0.18, 'sine', 0.35], [1047, 0.54, 0.7, 'sine', 0.35]]
     };
 
-    function intervalScheduleTone(kind, atCtxTime) {
+    // Spielt einen Ton SOFORT (synchron im selben Aufruf wie die zugehörige Zahlen-Anzeige), statt ihn für
+    // einen künftigen Zeitpunkt vorzuplanen – das ist der Kern der Synchronisations-Korrektur (Analyse 2).
+    function intervalPlayTone(kind) {
       const t = intervalTimer, ctx = t?.audioCtx;
       if (!ctx) return;
       INTERVAL_TONES[kind].forEach(([freq, offset, dur, type, vol]) => {
         try {
-          const start = Math.max(ctx.currentTime, atCtxTime + offset);
+          const start = ctx.currentTime + offset;
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = type;
@@ -9681,49 +9703,21 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           gain.connect(ctx.destination);
           osc.start(start);
           osc.stop(start + dur + 0.02);
-          t.scheduled.push({ osc, gain });
+          t.activeTones.push({ osc, gain });
+          osc.addEventListener?.('ended', () => { t.activeTones = t.activeTones.filter(x => x.osc !== osc); });
         } catch (e) { /* Ton optional – Ablauf läuft unabhängig davon weiter */ }
       });
     }
 
+    // Noch klingende Töne hart abschneiden: Abbruch/Pause/Überspringen/Phasenende dürfen keine Nachzügler lassen
     function intervalCancelTones() {
       const t = intervalTimer;
       if (!t) return;
-      t.scheduled.forEach(({ osc, gain }) => {
+      t.activeTones.forEach(({ osc, gain }) => {
         try { gain.disconnect(); } catch (e) { /* schon getrennt */ }
         try { osc.stop(0); } catch (e) { /* schon gestoppt */ }
       });
-      t.scheduled = [];
-    }
-
-    // Alle Töne ab dem aktuellen Segment neu planen (nach Start, Fortsetzen, Überspringen, Rückkehr in den Vordergrund)
-    function intervalScheduleAllTones() {
-      const t = intervalTimer;
-      intervalCancelTones();
-      if (!t?.audioCtx || t.pausedAtMs || t.finished || t.segIdx < 0) return;
-      const ctx = t.audioCtx;
-      const nowMs = Date.now();
-      const toCtx = ms => ctx.currentTime + (ms - nowMs) / 1000;
-      const future = ms => ms >= nowMs - 50;
-      let segStart = t.segStartMs;
-      for (let i = t.segIdx; i < t.segs.length; i++) {
-        const seg = t.segs[i], segEnd = segStart + seg.dur * 1000;
-        const prev = t.segs[i - 1];
-        if (seg.phase === 'hold' && future(segStart)) {
-          // Folgt Halten direkt auf Halten (Pause 0), kommt der Startton kurz nach dem Endton
-          intervalScheduleTone('start', toCtx(segStart) + (prev?.phase === 'hold' ? 0.7 : 0));
-        }
-        if (seg.phase === 'prep' || seg.phase === 'hold') {
-          for (let k = 3; k >= 1; k--) {
-            const at = segEnd - k * 1000;
-            if (seg.dur > k && future(at)) intervalScheduleTone('tick', toCtx(at));
-          }
-        }
-        if (seg.phase === 'hold' && future(segEnd)) {
-          intervalScheduleTone(i === t.segs.length - 1 ? 'finish' : 'end', toCtx(segEnd));
-        }
-        segStart = segEnd;
-      }
+      t.activeTones = [];
     }
 
     function intervalVibrate(pattern) {
@@ -9767,11 +9761,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       t.startedAt = new Date();
       t.segIdx = 0;
       t.segStartMs = Date.now();
+      intervalMarkRoundStartIfNeeded();
       intervalRequestWakeLock();
-      intervalScheduleAllTones();
       if (t.segs[0].phase === 'hold') intervalVibrate(250);
-      t.intervalId = setInterval(intervalTick, 250);
       renderIntervalRunning();
+      intervalScheduleNextWake();
     };
 
     function intervalSegEndMs() {
@@ -9793,30 +9787,110 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       t.done.push({ round: seg.round, stepIdx: seg.stepIdx, typ: st.typ, typLabel: st.typLabel, sec: s });
     }
 
-    function intervalOnSegmentStart(lagMs) {
+    // Rundenbeginn merken (Zeitstempel), sobald der erste Schritt einer Runde (stepIdx 0, Phase 'hold') beginnt.
+    function intervalMarkRoundStartIfNeeded() {
       const t = intervalTimer;
-      // Vibration nur bei pünktlichem Wechsel, nicht beim Nachholen nach einer Hintergrundphase
-      if (lagMs < 1500) intervalVibrate(t.segs[t.segIdx].phase === 'hold' ? 250 : [120, 80, 120]);
-      renderIntervalRunning();
+      const seg = t.segs[t.segIdx];
+      if (seg && seg.phase === 'hold' && seg.stepIdx === 0) t.roundStartMs = t.segStartMs;
     }
 
-    function intervalTick() {
+    // Zeitstempel-Abgleich: holt übersprungene Segmentwechsel nach (Hintergrundphase), spielt dabei aber
+    // keine Zwischen-Töne nach – nur das Ergebnis des letzten Wechsels wird unten vertont. Gibt zurück, in
+    // welche Art Segment zuletzt gewechselt wurde ('none' | 'entered-hold' | 'entered-rest' | 'finished').
+    function intervalSync(nowMs) {
       const t = intervalTimer;
-      if (!t || t.segIdx < 0 || t.finished || t.pausedAtMs) return;
-      const now = Date.now();
-      let changed = false;
+      let crossedCount = 0;
       while (t.segIdx < t.segs.length) {
         const seg = t.segs[t.segIdx];
         const endMs = t.segStartMs + seg.dur * 1000;
-        if (now < endMs) break;
+        if (nowMs < endMs) break;
         intervalRecordHold(seg, seg.dur);
-        t.segStartMs = endMs; // exakt anschließen, keine aufsummierte Drift
         t.segIdx++;
-        changed = true;
+        t.segStartMs = endMs; // exakt anschließen, keine aufsummierte Drift
+        // Rundenzeit-Zeitstempel innerhalb jedes einzelnen Schritts der Nachhol-Schleife pflegen (nicht nur
+        // einmal am Ende) – sonst geht bei einem großen Sprung über mehrere Segmente hinweg (z.B. nach einer
+        // langen Hintergrundphase, die gleich eine ganze Runde überspringt) der Rundenbeginn verloren.
+        if (t.segs[t.segIdx]?.phase === 'roundpause') t.lastRoundDurationMs = endMs - t.roundStartMs;
+        intervalMarkRoundStartIfNeeded();
+        crossedCount++;
       }
-      if (t.segIdx >= t.segs.length) { intervalFinish(now - t.segStartMs); return; }
-      if (changed) intervalOnSegmentStart(now - t.segStartMs);
-      else updateIntervalRunningLive();
+      if (!crossedCount) return { outcome: 'none', crossedCount };
+      if (t.segIdx >= t.segs.length) return { outcome: 'finished', crossedCount };
+      return { outcome: t.segs[t.segIdx].phase === 'hold' ? 'entered-hold' : 'entered-rest', crossedCount };
+    }
+
+    // Ist das auf das aktuelle Segment folgende Segment eine Aktivität? Nur dann zählt das aktuelle Segment
+    // (Vorbereitung, Pause oder Rundenpause – oder eine direkt vorangehende Haltezeit ohne Pause) herunter.
+    function intervalNextIsHold() {
+      const t = intervalTimer;
+      return t.segs[t.segIdx + 1]?.phase === 'hold';
+    }
+
+    // Zählton 5-4-3-2-1 nur exakt beim Erreichen der jeweiligen Restsekunde, nie doppelt, nie nachgeholt.
+    function intervalMaybePlayCountdownTick(nowMs) {
+      const t = intervalTimer;
+      if (!intervalNextIsHold()) return;
+      const seg = t.segs[t.segIdx];
+      const endMs = t.segStartMs + seg.dur * 1000;
+      const remainingSec = Math.ceil((endMs - nowMs) / 1000);
+      if (remainingSec < 1 || remainingSec > COUNTDOWN_BEEP_SECONDS) return;
+      const key = t.segIdx + ':' + remainingSec;
+      if (t.lastTickKey === key) return;
+      t.lastTickKey = key;
+      intervalPlayTone('tick');
+    }
+
+    function intervalClearWake() {
+      const t = intervalTimer;
+      if (t?.wakeTimeoutId != null) { clearTimeout(t.wakeTimeoutId); t.wakeTimeoutId = null; }
+    }
+
+    // Zielt exakt auf die nächste volle Restsekunde der aktuellen Phase (nie auf einen festen 250-ms-Takt) –
+    // dadurch wachen Anzeige-Update und Zählton im selben Callback auf und können nicht auseinanderlaufen.
+    function intervalScheduleNextWake() {
+      intervalClearWake();
+      const t = intervalTimer;
+      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0) return;
+      const remainingMs = intervalSegEndMs() - Date.now();
+      const delay = remainingMs <= 0 ? 0 : Math.min(remainingMs, ((remainingMs - 1) % 1000) + 1);
+      t.wakeTimeoutId = setTimeout(intervalWake, Math.max(0, delay));
+    }
+
+    function intervalWake() {
+      const t = intervalTimer;
+      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0) return;
+      const now = Date.now();
+      const prevIdx = t.segIdx;
+      const prevPhase = t.segs[prevIdx]?.phase;
+      const { outcome, crossedCount } = intervalSync(now);
+      if (outcome === 'finished') {
+        // Letztes Segment war Halten → Schlusston ersetzt den sonst üblichen Ende-Ton (wie bisher).
+        intervalPlayTone('finish');
+        intervalFinish(0);
+        return;
+      }
+      if (outcome !== 'none') {
+        // Nur beim normalen Einzelschritt (kein Nachholen nach Hintergrundphase) wissen wir genau, welche
+        // Phase verlassen wurde, und können Ende-/Start-Ton wie bisher an die jeweilige Flanke hängen.
+        const singleStep = crossedCount === 1;
+        const leftHold = singleStep && prevPhase === 'hold';
+        const enteredHold = outcome === 'entered-hold';
+        if (leftHold) {
+          intervalPlayTone('end');
+          // Folgt Halten direkt auf Halten (Pause 0), kommt der Startton kurz nach dem Endton (wie bisher)
+          if (enteredHold) setTimeout(() => { if (intervalTimer === t && !t.pausedAtMs && !t.finished) intervalPlayTone('start'); }, 700);
+        } else if (enteredHold) {
+          intervalPlayTone('start');
+        }
+        // Vibration nur bei pünktlichem Wechsel, nicht beim Nachholen nach einer Hintergrundphase
+        const lagMs = now - t.segStartMs;
+        if (lagMs < 1500) intervalVibrate(enteredHold ? 250 : [120, 80, 120]);
+      }
+      // Auch nach einem Segmentwechsel prüfen: eine sehr kurze Pause/Vorbereitung kann sofort bei ihrem Beginn
+      // schon in ihrem eigenen 5-4-3-2-1-Fenster liegen (z.B. eine 3-Sekunden-Pause → Ton "3" direkt beim Eintritt).
+      intervalMaybePlayCountdownTick(now);
+      renderIntervalRunning();
+      intervalScheduleNextWake();
     }
 
     function intervalProgress() {
@@ -9841,6 +9915,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const after = seg.phase === 'hold' ? nextHold : t.segs.slice(t.segIdx).filter(s => s.phase === 'hold')[1];
       const paused = !!t.pausedAtMs;
       const btn = 'flex:1;padding:16px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;font-size:15px;';
+      // Rundenpause: Rundenzeit (eingefroren) + Gesamtzeit (läuft weiter) + Pause-Countdown (dominant) statt
+      // der sonst einzelnen großen Restzeit-Zahl. Außerhalb der Rundenpause bleibt der Aufbau wie bisher (A-d).
+      const remainingBlock = seg.phase === 'roundpause'
+        ? `<div class="iv-roundpause-row" style="margin-bottom:4px;">
+            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Runde</div><div class="iv-roundpause-val">${fmtZirkelTime((t.lastRoundDurationMs || 0) / 1000)}</div></div>
+            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Gesamt</div><div id="iv-total-time" class="iv-roundpause-val">${fmtZirkelTime(intervalProgress().elapsed)}</div></div>
+            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Pause</div><div id="iv-remaining" class="iv-roundpause-val iv-roundpause-val--pause" style="color:${ph.color};">${intervalRemainingSec()}</div></div>
+          </div>`
+        : `<div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>`;
       document.getElementById('interval-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:420px;">
           <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;">
@@ -9849,7 +9932,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           </div>
           <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.text || ph.color};margin-bottom:6px;">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</div>
           <div style="font-size:24px;font-weight:600;margin-bottom:4px;min-height:30px;">${current ? currentPrefix + planEsc(current) : ''}</div>
-          <div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>
+          ${remainingBlock}
           <div style="font-size:15px;color:var(--muted);margin:6px 0 16px;min-height:20px;">${after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '')}</div>
           <div style="background:var(--surface);border-radius:6px;height:10px;overflow:hidden;margin-bottom:4px;">
             <div id="iv-progress-bar" style="height:100%;width:0%;background:${ph.color};"></div>
@@ -9875,6 +9958,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (bar) bar.style.width = (total > 0 ? Math.round(elapsed / total * 100) : 0) + '%';
       const txt = document.getElementById('iv-progress-text');
       if (txt) txt.textContent = `${fmtZirkelTime(elapsed)} / ${fmtZirkelTime(total)}`;
+      const totalTime = document.getElementById('iv-total-time');
+      if (totalTime) totalTime.textContent = fmtZirkelTime(elapsed);
     }
 
     window.intervalTogglePause = function() {
@@ -9884,8 +9969,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         t.segStartMs += Date.now() - t.pausedAtMs;
         t.pausedAtMs = null;
         intervalTimerResumeAudio();
+        intervalScheduleNextWake();
       } else {
         t.pausedAtMs = Date.now();
+        intervalClearWake();
         intervalCancelTones();
       }
       renderIntervalRunning();
@@ -9894,13 +9981,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     async function intervalTimerResumeAudio() {
       const t = intervalTimer;
       try { if (t?.audioCtx?.state === 'suspended') await t.audioCtx.resume(); } catch (e) { /* optional */ }
-      intervalScheduleAllTones();
     }
 
     // Aktuelles Segment beenden. Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit.
     window.intervalSkip = function() {
       const t = intervalTimer;
       if (!t || t.segIdx < 0 || t.finished) return;
+      intervalClearWake();
       const now = Date.now();
       const seg = t.segs[t.segIdx];
       intervalRecordHold(seg, Math.min(seg.dur, ((t.pausedAtMs || now) - t.segStartMs) / 1000));
@@ -9908,23 +9995,24 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       t.segStartMs = now;
       if (t.pausedAtMs) t.pausedAtMs = now; // bleibt pausiert, am Anfang des nächsten Segments
       if (t.segIdx >= t.segs.length) {
-        intervalCancelTones();
-        if (t.audioCtx) intervalScheduleTone('finish', t.audioCtx.currentTime);
+        intervalPlayTone('finish');
         intervalFinish(0);
         return;
       }
-      intervalScheduleAllTones();
-      intervalOnSegmentStart(0);
+      intervalMarkRoundStartIfNeeded();
+      const enteredHold = t.segs[t.segIdx].phase === 'hold';
+      if (enteredHold) intervalPlayTone('start');
+      intervalVibrate(enteredHold ? 250 : [120, 80, 120]);
+      renderIntervalRunning();
+      if (!t.pausedAtMs) intervalScheduleNextWake();
     };
 
     function intervalFinish(lagMs) {
       const t = intervalTimer;
-      clearInterval(t.intervalId);
-      t.intervalId = null;
+      intervalClearWake();
       t.finished = true;
       t.pausedAtMs = null;
       intervalReleaseWakeLock();
-      // Schlusston ist bereits auf der Audio-Zeitachse geplant (nicht abbrechen)
       if (lagMs < 1500) intervalVibrate([400, 150, 400]);
       renderIntervalDone();
       window.saveIntervalResults();
@@ -10007,7 +10095,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.closeIntervalTimer = function() {
       const t = intervalTimer;
       if (t) {
-        if (t.intervalId) clearInterval(t.intervalId);
+        intervalClearWake();
         intervalCancelTones();
         intervalReleaseWakeLock();
         try { t.audioCtx?.close?.().catch(() => {}); } catch (e) { /* optional */ }
@@ -10035,8 +10123,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       // Laufende Haltezeit mit der tatsächlich gehaltenen Zeit übernehmen
       const seg = t.segs[t.segIdx];
       intervalRecordHold(seg, Math.min(seg.dur, (t.pausedAtMs - t.segStartMs) / 1000));
-      clearInterval(t.intervalId);
-      t.intervalId = null;
+      intervalClearWake();
       intervalCancelTones();
       intervalReleaseWakeLock();
       if (t.done.length && await showConfirm('Teilleistung speichern?', intervalResultsByType().map(g => `${g.typLabel}: ${fmtHoldSets(g.holdSec)}`).join(' · '), 'save', 'Speichern', false)) {
@@ -10046,15 +10133,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       window.closeIntervalTimer();
     };
 
-    // Rückkehr in den Vordergrund: Stand über Zeitstempel nachholen, Wake Lock und Töne erneuern
+    // Rückkehr in den Vordergrund: Stand über Zeitstempel nachholen (intervalWake synchronisiert, rendert und
+    // plant den nächsten Wake-Timeout neu), Wake Lock und AudioContext erneuern
     document.addEventListener('visibilitychange', async () => {
       const t = intervalTimer;
       if (!t || t.segIdx < 0 || t.finished || document.visibilityState !== 'visible') return;
-      intervalTick();
+      intervalWake();
       if (intervalTimer !== t || t.finished) return;
       intervalRequestWakeLock();
       if (!t.pausedAtMs) await intervalTimerResumeAudio();
-      renderIntervalRunning();
     });
 
     // ── Eigene Trainingsarten ─────────────────────────────────────────────────

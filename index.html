@@ -395,12 +395,68 @@
     @media (prefers-reduced-motion: reduce) { .fo-toggle-chev { transition: none; } }
     /* Trainingsplan: auf-/zuklappbare Tageskopfzeilen (Wochenansicht, nicht der Editor) */
     .plan-day-header { width: 100%; min-height: var(--fo-tap); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0; margin-bottom: 6px; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-    /* Intervall-Zirkel: Rundenpause zeigt Rundenzeit, Gesamtzeit und Pause-Countdown gleichzeitig */
-    .iv-roundpause-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; width: 100%; font-variant-numeric: tabular-nums; }
+    /* Intervall-Zirkel Ablauf: Vollbild-Dialog mit .fo-timer; Safe-Area-Abstände mit Rückfall 0 */
+    .iv-timer-modal { position: fixed; inset: 0; z-index: 10000; flex-direction: column; box-sizing: border-box; overflow: hidden; background: var(--fo-surface); color: var(--fo-text);
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+    .iv-timer-modal:focus { outline: none; }
+    .iv-timer-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 4px); right: calc(env(safe-area-inset-right, 0px) + 4px); z-index: 1; }
+    .iv-timer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
+    .iv-timer { flex: 1 0 auto; }
+    .iv-timer .fo-timer__top { padding-right: 56px; }
+    .iv-timer .fo-timer__count { flex-wrap: wrap; column-gap: 16px; row-gap: 0; }
+    .iv-timer .fo-timer__total .fo-bar > span { background: var(--fo-text-2); }
+    .iv-timer .fo-timer__now { min-height: var(--fo-lh-display); overflow-wrap: anywhere; }
+    .iv-timer .fo-timer__nextname { overflow-wrap: anywhere; }
+    .iv-timer .fo-timer__controls .fo-roundbtn { min-width: var(--fo-tap); }
+    .iv-wake-hint { margin: 0 var(--fo-s4) var(--fo-s4); font-size: var(--fo-fs-caption); line-height: var(--fo-lh-caption); color: var(--fo-text-2); text-align: center; }
+    /* Start- und Abschlussseite */
+    .iv-timer-page { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: var(--fo-s4); width: 100%; max-width: 420px; margin: 0 auto; padding: 52px var(--fo-s4) var(--fo-s6); box-sizing: border-box; }
+    .iv-page__head { text-align: center; }
+    .iv-page__badge { display: inline-grid; place-items: center; width: 56px; height: 56px; margin-bottom: 10px; border-radius: 16px; background: var(--fo-activity-tint); color: var(--fo-activity); }
+    .iv-page__title { margin: 0; font: 700 var(--fo-fs-display)/var(--fo-lh-display) var(--fo-font); overflow-wrap: anywhere; }
+    .iv-page__meta { margin: 4px 0 0; color: var(--fo-text-2); }
+    .iv-steps { max-height: 40vh; overflow-y: auto; }
+    .iv-step { min-height: 48px; }
+    .iv-step .fo-row__title { white-space: normal; }
+    .iv-step__no { width: 24px; flex: none; color: var(--fo-text-3); font-weight: 600; }
+    .iv-step__end { font-weight: 400; color: var(--fo-text-2); }
+    .iv-start { min-height: 64px; font-size: 20px; border-radius: 16px; }
+    .iv-done__list { padding: var(--fo-s3) var(--fo-s4); }
+    .iv-done__item { padding: 4px 0; }
+    .iv-done__empty { color: var(--fo-text-2); }
+    .iv-done__status { min-height: 20px; text-align: center; font-size: var(--fo-fs-small); line-height: var(--fo-lh-small); color: var(--fo-text-2); }
+    .iv-done__actions { display: flex; gap: var(--fo-s2); }
+    .iv-done__actions .fo-btn { flex: 1; }
+    .iv-done__actions .iv-done__close--wide { flex: 2; }
+    /* Intervall-Zirkel: Rundenpause zeigt Rundenzeit, Gesamtzeit und Pause-Countdown gleichzeitig (Pause dominant) */
+    .iv-roundpause-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; width: 100%; max-width: 420px; font-variant-numeric: tabular-nums; }
     .iv-roundpause-col { flex: 1; min-width: 0; text-align: center; }
+    .iv-roundpause-col--pause { flex: 1.4; }
     .iv-roundpause-label { font-size: var(--fo-fs-caption); line-height: var(--fo-lh-caption); color: var(--fo-text-3); margin-bottom: 2px; white-space: nowrap; }
-    .iv-roundpause-val { font-weight: 700; color: var(--fo-text); white-space: nowrap; font-size: clamp(20px, 7vw, 30px); }
-    .iv-roundpause-val--pause { color: var(--fo-primary); font-size: clamp(32px, 14vw, 64px); }
+    .iv-roundpause-val { font-weight: 700; line-height: 1; color: var(--fo-text); white-space: nowrap; font-size: clamp(20px, 7vw, 30px); }
+    .iv-roundpause-val--pause { color: var(--fo-primary); font-size: clamp(40px, 16vw, 72px); letter-spacing: -.03em; }
+    /* Kleine Höhe: kompaktere Abstände */
+    @media (max-height: 700px) {
+      .iv-timer .fo-timer__center { padding: var(--fo-s3) var(--fo-s4); }
+      .iv-timer .fo-timer__controls { padding: var(--fo-s3) var(--fo-s4) var(--fo-s4); }
+    }
+    /* Querformat: Anzeige links, Danach + Bedienung rechts, damit alle Schaltflächen sichtbar bleiben */
+    @media (orientation: landscape) and (max-height: 500px) {
+      .iv-timer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); grid-template-rows: auto auto 1fr auto auto; column-gap: var(--fo-s4); }
+      .iv-timer .fo-timer__top, .iv-timer .fo-timer__total, .iv-timer .iv-wake-hint { grid-column: 1 / -1; }
+      .iv-timer .fo-timer__center { grid-column: 1; grid-row: 3 / span 2; gap: 6px; padding: var(--fo-s2) var(--fo-s4); }
+      .iv-timer .fo-timer__time { font-size: clamp(64px, 30vh, 136px); }
+      .iv-timer .fo-timer__now { font-size: var(--fo-fs-title); line-height: var(--fo-lh-title); min-height: var(--fo-lh-title); }
+      .iv-timer .fo-timer__next { grid-column: 2; grid-row: 3; align-self: end; margin: var(--fo-s2) var(--fo-s4) 0 0; }
+      .iv-timer .fo-timer__controls { grid-column: 2; grid-row: 4; padding: var(--fo-s3) var(--fo-s4) var(--fo-s3) 0; }
+      .iv-roundpause-val--pause { font-size: clamp(40px, 18vh, 72px); }
+      .iv-timer-page { justify-content: flex-start; gap: var(--fo-s3); padding-top: var(--fo-s3); }
+      .iv-page__badge { width: 40px; height: 40px; margin-bottom: 4px; border-radius: 12px; }
+      .iv-page__title { font-size: var(--fo-fs-title); line-height: var(--fo-lh-title); }
+      .iv-steps { max-height: 30vh; }
+      .iv-start { min-height: 52px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .iv-timer-modal, .iv-timer-modal * { transition: none !important; animation: none !important; } }
     /* Toast mit Status-Icon */
     .toast { display: flex; align-items: center; gap: 8px; }
     .toast .fo-i.is-ok, .fo-status-ok { color: var(--fo-ok); }
@@ -1952,12 +2008,11 @@
     </div>
   </div>
 
-  <!-- Intervall-Zirkel Ablauf: Vollbild, legt sich über die App -->
-  <div id="interval-timer-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;flex-direction:column;">
-    <div style="display:flex;justify-content:flex-end;padding:12px 12px 0;">
-      <button onclick="requestCloseIntervalTimer()" aria-label="Schließen" style="background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:8px 14px;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
-    </div>
-    <div id="interval-timer-body" style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 20px max(40px, env(safe-area-inset-bottom, 40px));box-sizing:border-box;overflow-y:auto;"></div>
+  <!-- Intervall-Zirkel Ablauf: Vollbild-Dialog (.fo-timer), legt sich über die App -->
+  <div id="interval-timer-modal" class="iv-timer-modal" role="dialog" aria-modal="true" aria-label="Intervall-Zirkel" tabindex="-1" style="display:none;">
+    <button class="fo-iconbtn iv-timer-close" type="button" onclick="requestCloseIntervalTimer()" aria-label="Schließen"><svg class="fo-i fo-i--lg" aria-hidden="true"><use href="#i-close"/></svg></button>
+    <div id="iv-phase-live" class="fo-sr" aria-live="polite"></div>
+    <div id="interval-timer-body" class="iv-timer-body"></div>
   </div>
 
   <!-- Kopieren Modal -->
@@ -9452,14 +9507,16 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     const BEEP_COUNT_MS = 120;   // Dauer eines Zähltons in ms (unverändert aus dem bisherigen "tick")
     const BEEP_GO_HZ = Math.round(BEEP_COUNT_HZ * 1.5);  // Start-Ton: deutlich höher
     const BEEP_GO_MS = BEEP_COUNT_MS * 2;                 // Start-Ton: etwas länger
+    // cls: Phasen-Variante des Designsystems (.fo-timer--<cls> am Timer, .fo-phase--<cls> am Phasen-Label)
     const INTERVAL_PHASES = {
-      prep:       { label: 'Vorbereitung', color: 'var(--fo-text-2)' },
-      hold:       { label: 'Halten',       color: 'var(--fo-activity)', text: 'var(--fo-activity-strong)' },
-      pause:      { label: 'Pause',        color: 'var(--fo-primary)' },
-      roundpause: { label: 'Rundenpause',  color: 'var(--fo-primary)' }
+      prep:       { label: 'Vorbereitung', cls: 'prep' },
+      hold:       { label: 'Halten',       cls: 'hold' },
+      pause:      { label: 'Pause',        cls: 'pause' },
+      roundpause: { label: 'Rundenpause',  cls: 'pause' }
     };
     let intervalDraft = null;  // Konfiguration im Modal (Arbeitskopie, Werte ggf. noch als Text aus den Feldern)
     let intervalTimer = null;  // laufender Ablauf
+    let intervalTimerReturnFocus = null; // nur Darstellung: Fokus vor dem Öffnen des Timers (Rückgabe beim Schließen)
 
     async function loadIntervalTemplates() {
       const snap = await getDocs(userIntervalTemplateCol());
@@ -9712,10 +9769,33 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         wakeTimeoutId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, activeTones: [],
         roundStartMs: null, lastRoundDurationMs: null, lastTickKey: null
       };
+      intervalTimerReturnFocus = document.activeElement;
       renderIntervalIntro();
       pushModalState();
       document.getElementById('interval-timer-modal').style.display = 'flex';
+      // Fokus in den Dialog: auf "Start", sonst auf den Dialog selbst
+      (document.querySelector('#interval-timer-body .iv-start') || document.getElementById('interval-timer-modal')).focus({ preventScroll: true });
     };
+
+    // Schreibt den Timer-Inhalt neu. Hatte eine Schaltfläche im Timer den Fokus, bekommt die gleichwertige
+    // Schaltfläche (gleicher onclick) ihn danach zurück, sonst der Dialog – der Fokus fällt nie aus dem Dialog.
+    function setIntervalTimerBody(html) {
+      const body = document.getElementById('interval-timer-body');
+      const modal = document.getElementById('interval-timer-modal');
+      const active = document.activeElement;
+      const hadFocus = !!active && modal.contains(active) && body.contains(active);
+      const key = hadFocus ? active.getAttribute('onclick') : null;
+      body.innerHTML = html;
+      if (!hadFocus) return;
+      const same = key ? [...body.querySelectorAll('button')].find(b => b.getAttribute('onclick') === key) : null;
+      (same || modal).focus({ preventScroll: true });
+    }
+
+    // Phasenwechsel einmal ansagen (eigene, unsichtbare Live-Region; die Restzeit selbst ist nicht live)
+    function announceIntervalPhase(text) {
+      const live = document.getElementById('iv-phase-live');
+      if (live && live.textContent !== text) live.textContent = text;
+    }
 
     function intervalStepLabel(stepIdx) {
       return intervalTimer?.cfg.steps[stepIdx]?.typLabel || '';
@@ -9723,15 +9803,24 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function renderIntervalIntro() {
       const { cfg, segs } = intervalTimer;
-      const list = cfg.steps.map((st, i) =>
-        `<div style="padding:4px 0;">${i + 1}. ${planEsc(st.typLabel)} · ${st.holdSec} s${st.pauseSec > 0 ? ` · ${st.pauseSec} s Pause` : ''}</div>`).join('');
-      document.getElementById('interval-timer-body').innerHTML = `
-        <div style="text-align:center;width:100%;max-width:380px;">
-          <div style="font-size:26px;font-weight:600;margin-bottom:8px;">${foIcon('clock', 'fo-i--lg')} ${planEsc(cfg.name || 'Intervall-Zirkel')}</div>
-          <div style="color:var(--muted);margin-bottom:16px;">${cfg.rounds} Runde${cfg.rounds === 1 ? '' : 'n'} · ${cfg.prepSec} s Vorbereitung · ${fmtZirkelTime(intervalTotalSec(segs))} gesamt</div>
-          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:24px;max-height:40vh;overflow-y:auto;">${list}</div>
-          <button onclick="intervalTimerBegin()" class="btn" style="width:100%;padding:28px;font-size:24px;border-radius:14px;">${foIcon('play', 'fo-i--lg')} Start</button>
-        </div>`;
+      const list = cfg.steps.map((st, i) => `
+            <li class="fo-row iv-step">
+              <span class="fo-num iv-step__no">${i + 1}.</span>
+              <div class="fo-row__main"><div class="fo-row__title">${planEsc(st.typLabel)}</div></div>
+              <div class="fo-row__end iv-step__end">${st.holdSec} s${st.pauseSec > 0 ? ` · ${st.pauseSec} s Pause` : ''}</div>
+            </li>`).join('');
+      announceIntervalPhase('');
+      setIntervalTimerBody(`
+        <div class="iv-timer-page">
+          <div class="iv-page__head">
+            <div class="iv-page__badge">${foIcon('clock', 'fo-i--xl')}</div>
+            <h1 class="iv-page__title">${planEsc(cfg.name || 'Intervall-Zirkel')}</h1>
+            <p class="iv-page__meta fo-num">${cfg.rounds} Runde${cfg.rounds === 1 ? '' : 'n'} · ${cfg.prepSec} s Vorbereitung · ${fmtZirkelTime(intervalTotalSec(segs))} gesamt</p>
+          </div>
+          <ol class="fo-card fo-list iv-steps">${list}
+          </ol>
+          <button class="fo-btn fo-btn--primary fo-btn--block iv-start" type="button" onclick="intervalTimerBegin()">${foIcon('play', 'fo-i--lg', true)}Start</button>
+        </div>`);
     }
 
     // AudioContext im Tap-Handler erzeugen und mit einem stillen Puffer freischalten
@@ -9992,37 +10081,39 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const currentPrefix = seg.phase === 'hold' ? '' : 'Gleich: ';
       const after = seg.phase === 'hold' ? nextHold : t.segs.slice(t.segIdx).filter(s => s.phase === 'hold')[1];
       const paused = !!t.pausedAtMs;
-      const btn = 'flex:1;padding:16px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;font-size:15px;';
+      const nextText = after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '');
       // Rundenpause: Rundenzeit (eingefroren) + Gesamtzeit (läuft weiter) + Pause-Countdown (dominant) statt
-      // der sonst einzelnen großen Restzeit-Zahl. Außerhalb der Rundenpause bleibt der Aufbau wie bisher (A-d).
+      // der sonst einzelnen großen Restzeit-Zahl. Keine aria-live auf den Zahlen (keine Ansage jede Sekunde).
       const remainingBlock = seg.phase === 'roundpause'
-        ? `<div class="iv-roundpause-row" style="margin-bottom:4px;">
-            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Runde</div><div class="iv-roundpause-val">${fmtZirkelTime((t.lastRoundDurationMs || 0) / 1000)}</div></div>
-            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Gesamt</div><div id="iv-total-time" class="iv-roundpause-val">${fmtZirkelTime(intervalProgress().elapsed)}</div></div>
-            <div class="iv-roundpause-col"><div class="iv-roundpause-label">Pause</div><div id="iv-remaining" class="iv-roundpause-val iv-roundpause-val--pause" style="color:${ph.color};">${intervalRemainingSec()}</div></div>
-          </div>`
-        : `<div id="iv-remaining" style="font-size:min(38vw, 170px);font-weight:800;line-height:1.05;color:${ph.color};font-variant-numeric:tabular-nums;">${intervalRemainingSec()}</div>`;
-      document.getElementById('interval-timer-body').innerHTML = `
-        <div style="text-align:center;width:100%;max-width:420px;">
-          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;">
-            <span>Runde ${seg.round} von ${t.cfg.rounds}</span>
-            <span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span>
+        ? `<div class="iv-roundpause-row">
+              <div class="iv-roundpause-col"><div class="iv-roundpause-label">Runde</div><div class="iv-roundpause-val">${fmtZirkelTime((t.lastRoundDurationMs || 0) / 1000)}</div></div>
+              <div class="iv-roundpause-col"><div class="iv-roundpause-label">Gesamt</div><div id="iv-total-time" class="iv-roundpause-val">${fmtZirkelTime(intervalProgress().elapsed)}</div></div>
+              <div class="iv-roundpause-col iv-roundpause-col--pause"><div class="iv-roundpause-label">Pause</div><div id="iv-remaining" class="iv-roundpause-val iv-roundpause-val--pause" role="timer" aria-live="off">${intervalRemainingSec()}</div></div>
+            </div>`
+        : `<div id="iv-remaining" class="fo-timer__time" role="timer" aria-live="off">${intervalRemainingSec()}</div>`;
+      announceIntervalPhase((paused ? 'Pausiert · ' : '') + ph.label);
+      setIntervalTimerBody(`
+        <div class="fo-timer fo-timer--${ph.cls} iv-timer">
+          <div class="fo-timer__top">
+            <div class="fo-timer__count"><span>Runde ${seg.round} von ${t.cfg.rounds}</span><span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span></div>
           </div>
-          <div style="font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${ph.text || ph.color};margin-bottom:6px;">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</div>
-          <div style="font-size:24px;font-weight:600;margin-bottom:4px;min-height:30px;">${current ? currentPrefix + planEsc(current) : ''}</div>
-          ${remainingBlock}
-          <div style="font-size:15px;color:var(--muted);margin:6px 0 16px;min-height:20px;">${after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '')}</div>
-          <div style="background:var(--surface);border-radius:6px;height:10px;overflow:hidden;margin-bottom:4px;">
-            <div id="iv-progress-bar" style="height:100%;width:0%;background:${ph.color};"></div>
+          <div class="fo-timer__total">
+            <div class="fo-bar fo-bar--thick" aria-hidden="true"><span id="iv-progress-bar" style="width:0%"></span></div>
+            <div class="fo-timer__totalmeta"><span id="iv-progress-text"></span></div>
           </div>
-          <div id="iv-progress-text" style="font-size:12px;color:var(--muted);margin-bottom:18px;"></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="intervalTogglePause()" style="${btn}">${paused ? foIcon('play', 'fo-i--sm') + ' Weiter' : foIcon('pause', 'fo-i--sm') + ' Pause'}</button>
-            <button onclick="intervalSkip()" style="${btn}">${foIcon('skip', 'fo-i--sm')} Überspringen</button>
-            <button onclick="requestCloseIntervalTimer()" style="${btn}color:var(--danger);border-color:var(--danger);">${foIcon('close', 'fo-i--sm')} Abbrechen</button>
+          <div class="fo-timer__center">
+            <span class="fo-phase fo-phase--${ph.cls}">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</span>
+            ${remainingBlock}
+            <p class="fo-timer__now">${current ? currentPrefix + planEsc(current) : ''}</p>
           </div>
-          <div id="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};font-size:12px;color:var(--fo-text-2);margin-top:14px;">${foIcon('alertCircle', 'fo-i--sm')} Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
-        </div>`;
+          ${nextText ? `<div class="fo-timer__next"><div class="fo-timer__nextname">${nextText}</div></div>` : ''}
+          <div class="fo-timer__controls">
+            <button class="fo-roundbtn fo-roundbtn--danger" type="button" onclick="requestCloseIntervalTimer()"><span class="fo-roundbtn__c">${foIcon('close', 'fo-i--lg')}</span>Abbrechen</button>
+            <button class="fo-roundbtn fo-roundbtn--main" type="button" onclick="intervalTogglePause()"><span class="fo-roundbtn__c">${paused ? foIcon('play', 'fo-i--xl', true) : foIcon('pause', 'fo-i--xl')}</span>${paused ? 'Weiter' : 'Pause'}</button>
+            <button class="fo-roundbtn" type="button" onclick="intervalSkip()"><span class="fo-roundbtn__c">${foIcon('skip', 'fo-i--lg')}</span>Überspringen</button>
+          </div>
+          <div id="iv-wake-hint" class="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};">${foIcon('alertCircle', 'fo-i--sm')} Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
+        </div>`);
       updateIntervalRunningLive();
     }
 
@@ -10109,25 +10200,26 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function renderIntervalDone() {
       const t = intervalTimer;
       const groups = intervalResultsByType();
-      const list = groups.map(g => `<div style="padding:4px 0;">${planEsc(g.typLabel)}: ${fmtHoldSets(g.holdSec)}</div>`).join('')
-        || '<div style="color:var(--muted);">Keine Haltezeit absolviert</div>';
+      const list = groups.map(g => `<div class="iv-done__item">${planEsc(g.typLabel)}: ${fmtHoldSets(g.holdSec)}</div>`).join('')
+        || '<div class="iv-done__empty">Keine Haltezeit absolviert</div>';
       const status = t.saving ? foIcon('clock', 'fo-i--sm') + ' Speichere…'
         : t.saveError ? foIcon('alertCircle', 'fo-i--sm fo-status-bad') + ' Speichern fehlgeschlagen'
         : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? foIcon('okCircle', 'fo-i--sm fo-status-ok') + ' Im Trainingslog gespeichert' : '';
       // "Verwerfen" nur, solange es etwas zu löschen gibt und kein Speichervorgang gerade läuft – entspricht
       // der Bedienung, die der Kraft-Zirkel (Plan- und Ad-hoc-Start, gleicher Abschlussbildschirm) schon hat.
       const canDiscard = (t.savedEntryIds || []).length > 0 && !t.saving;
-      document.getElementById('interval-timer-body').innerHTML = `
-        <div style="text-align:center;width:100%;max-width:380px;">
-          <div style="font-size:24px;font-weight:600;margin-bottom:16px;">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</div>
-          <div style="text-align:left;background:var(--surface);border-radius:12px;padding:12px 16px;margin-bottom:12px;">${list}</div>
-          <div style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:20px;">${status}</div>
-          <div style="display:flex;gap:8px;">
-            ${t.saveError ? `<button onclick="saveIntervalResults()" class="btn" style="flex:1;padding:14px;">Erneut speichern</button>` : ''}
-            ${canDiscard ? `<button onclick="discardIntervalResults()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Verwerfen</button>` : ''}
-            <button onclick="closeIntervalTimer()" class="btn" style="flex:${canDiscard ? 2 : 1};padding:14px;${t.saveError ? 'background:var(--surface2);border:1px solid var(--border);color:var(--text);' : ''}">Schließen</button>
+      announceIntervalPhase('');
+      setIntervalTimerBody(`
+        <div class="iv-timer-page">
+          <h1 class="iv-page__title iv-page__head">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</h1>
+          <div class="fo-card iv-done__list">${list}</div>
+          <div class="iv-done__status">${status}</div>
+          <div class="iv-done__actions">
+            ${t.saveError ? `<button class="fo-btn fo-btn--primary" type="button" onclick="saveIntervalResults()">Erneut speichern</button>` : ''}
+            ${canDiscard ? `<button class="fo-btn fo-btn--secondary" type="button" onclick="discardIntervalResults()">Verwerfen</button>` : ''}
+            <button class="fo-btn ${t.saveError ? 'fo-btn--secondary' : 'fo-btn--primary'}${canDiscard ? ' iv-done__close--wide' : ''}" type="button" onclick="closeIntervalTimer()">Schließen</button>
           </div>
-        </div>`;
+        </div>`);
     }
 
     // Ein Eintrag je Übung im Format der manuellen Haltezeit-Eingabe (kein sets, kein zeit, kein act_kcal_calc)
@@ -10214,6 +10306,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       }
       document.getElementById('interval-timer-modal').style.display = 'none';
       intervalTimer = null;
+      // Nur Darstellung: Live-Region leeren, Fokus zurück an den Auslöser (oder an den Einstieg "Intervall-Zirkel")
+      announceIntervalPhase('');
+      const back = intervalTimerReturnFocus;
+      intervalTimerReturnFocus = null;
+      const target = back?.isConnected && back.offsetParent !== null ? back : document.querySelector('button[onclick="openIntervalConfig()"]');
+      target?.focus?.({ preventScroll: true });
     };
 
     window.requestCloseIntervalTimer = async function() {

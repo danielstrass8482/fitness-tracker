@@ -9677,7 +9677,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       intervalTimer = {
         cfg, segs: buildIntervalSegments(cfg),
         segIdx: -1, segStartMs: 0, pausedAtMs: null, startedAt: null,
-        done: [], finished: false, savedTyps: new Set(), saving: false, saveError: false,
+        done: [], finished: false, savedTyps: new Set(), savedEntryIds: [], saving: false, saveError: false,
         wakeTimeoutId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, activeTones: [],
         roundStartMs: null, lastRoundDurationMs: null, lastTickKey: null
       };
@@ -10083,6 +10083,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const status = t.saving ? foIcon('clock', 'fo-i--sm') + ' Speichere…'
         : t.saveError ? foIcon('alertCircle', 'fo-i--sm fo-status-bad') + ' Speichern fehlgeschlagen'
         : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? foIcon('okCircle', 'fo-i--sm fo-status-ok') + ' Im Trainingslog gespeichert' : '';
+      // "Verwerfen" nur, solange es etwas zu löschen gibt und kein Speichervorgang gerade läuft – entspricht
+      // der Bedienung, die der Kraft-Zirkel (Plan- und Ad-hoc-Start, gleicher Abschlussbildschirm) schon hat.
+      const canDiscard = (t.savedEntryIds || []).length > 0 && !t.saving;
       document.getElementById('interval-timer-body').innerHTML = `
         <div style="text-align:center;width:100%;max-width:380px;">
           <div style="font-size:24px;font-weight:600;margin-bottom:16px;">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</div>
@@ -10090,7 +10093,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           <div style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:20px;">${status}</div>
           <div style="display:flex;gap:8px;">
             ${t.saveError ? `<button onclick="saveIntervalResults()" class="btn" style="flex:1;padding:14px;">Erneut speichern</button>` : ''}
-            <button onclick="closeIntervalTimer()" class="btn" style="flex:1;padding:14px;${t.saveError ? 'background:var(--surface2);border:1px solid var(--border);color:var(--text);' : ''}">Schließen</button>
+            ${canDiscard ? `<button onclick="discardIntervalResults()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Verwerfen</button>` : ''}
+            <button onclick="closeIntervalTimer()" class="btn" style="flex:${canDiscard ? 2 : 1};padding:14px;${t.saveError ? 'background:var(--surface2);border:1px solid var(--border);color:var(--text);' : ''}">Schließen</button>
           </div>
         </div>`;
     }
@@ -10123,6 +10127,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
           trainingEntries.push(entry);
           t.savedTyps.add(g.typ);
+          t.savedEntryIds.push(entry.id);
         }
         window.trainingEntries = trainingEntries;
         showToast('Zirkel gespeichert', 'ok');
@@ -10137,6 +10142,35 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       renderTrainingHistory();
       renderDataStats();
       if (intervalTimer === t && t.finished) renderIntervalDone();
+    };
+
+    // Löscht ausschließlich die Einträge, die DIESER Zirkel-Lauf geschrieben hat (t.savedEntryIds), nicht
+    // andere Einträge gleichen Typs/Datums. Anders als beim Kraft-Zirkel ("Verwerfen" vor dem Speichern)
+    // existieren die Dokumente hier schon in Firestore – deshalb mit Rückfrage, wie bei undoPlanUnit.
+    window.discardIntervalResults = async function() {
+      const t = intervalTimer;
+      if (!t || t.saving || !(t.savedEntryIds || []).length) return;
+      if (!await showConfirm('Zirkel verwerfen?', 'Die gespeicherten Einträge dieses Laufs werden gelöscht.', 'alertCircle', 'Verwerfen', true)) return;
+      const ids = t.savedEntryIds.slice();
+      try {
+        for (const id of ids) {
+          await deleteDoc(doc(userTrainingCol(), String(id)));
+        }
+        trainingEntries = trainingEntries.filter(e => !ids.includes(e.id));
+        window.trainingEntries = trainingEntries;
+        t.savedEntryIds = [];
+        t.savedTyps = new Set();
+        saveToCache();
+        renderFoodLog();
+        renderTrainingHistory();
+        renderDataStats();
+        showToast('Zirkel verworfen', 'ok');
+      } catch (err) {
+        console.error('Intervall-Zirkel Verwerfen Fehler:', err);
+        showToast('Verwerfen fehlgeschlagen', 'bad');
+        return;
+      }
+      window.closeIntervalTimer();
     };
 
     window.closeIntervalTimer = function() {

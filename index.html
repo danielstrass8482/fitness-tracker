@@ -1950,13 +1950,18 @@
   </div>
 
   <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
-  <div id="zirkel-adhoc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 24px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
-      <h3 style="margin:0 0 16px;"><svg class="fo-i" aria-hidden="true"><use href="#i-circuit"/></svg> Ad-hoc Zirkel starten</h3>
-      <select id="zirkel-adhoc-select" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:16px;"></select>
-      <div style="display:flex;gap:8px;">
-        <button onclick="document.getElementById('zirkel-adhoc-modal').style.display='none'" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
-        <button onclick="startZirkelAdhoc()" class="btn" style="flex:2;padding:12px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-play"/></svg> Start</button>
+  <div id="zirkel-adhoc-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
+    <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
+      <div class="fo-sheet__grab"></div>
+      <div class="fo-sheet__head" style="border-bottom:0;">
+        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Ad-hoc Zirkel starten</h1>
+      </div>
+      <div class="fo-sheet__body" style="padding-top:4px;">
+        <div class="fo-select"><select id="zirkel-adhoc-select" aria-label="Zirkel-Vorlage"></select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+      </div>
+      <div class="fo-sheet__foot" style="padding-bottom:max(var(--fo-s3), env(safe-area-inset-bottom, var(--fo-s3)));">
+        <button class="fo-btn fo-btn--secondary" type="button" onclick="document.getElementById('zirkel-adhoc-modal').style.display='none'">Abbrechen</button>
+        <button class="fo-btn fo-btn--primary" type="button" onclick="startZirkelAdhoc()"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>
       </div>
     </div>
   </div>
@@ -1970,10 +1975,13 @@
   </div>
 
   <!-- Intervall-Zirkel konfigurieren (Haltezeit-Schritte mit Pausen, Vorlagen) -->
-  <div id="interval-config-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:24px 20px max(80px, env(safe-area-inset-bottom, 80px));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;max-height:92vh;overflow-y:auto;">
-      <h3 style="margin:0 0 14px;"><svg class="fo-i" aria-hidden="true"><use href="#i-clock"/></svg> Intervall-Zirkel</h3>
-      <div id="interval-config-body"></div>
+  <div id="interval-config-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;max-height:92vh;">
+      <div class="fo-sheet__grab"></div>
+      <div class="fo-sheet__head" style="border-bottom:0;">
+        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-clock"/></svg>Intervall-Zirkel</h1>
+      </div>
+      <div id="interval-config-body" style="display:flex;flex-direction:column;flex:1;min-height:0;"></div>
     </div>
   </div>
 
@@ -9598,60 +9606,56 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function renderIntervalConfig() {
       const d = intervalDraft;
-      const inp = 'width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;box-sizing:border-box;';
-      const sel = 'width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;';
-      const lbl = 'display:block;font-size:12px;color:var(--muted);margin-bottom:4px;';
-      const smallBtn = 'padding:6px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:13px;';
-      const num = (value, handler, min, placeholder) =>
-        `<input type="number" min="${min}" step="1" inputmode="numeric" pattern="[0-9]*" value="${value ?? ''}" placeholder="${placeholder}" onfocus="this.select()" oninput="${handler}" style="${inp}">`;
+      const num = (value, handler, min, placeholder, idAttr) =>
+        `<input class="fo-input" type="number" ${idAttr ? `id="${idAttr}"` : ''} min="${min}" step="1" inputmode="numeric" pattern="[0-9]*" value="${value ?? ''}" placeholder="${placeholder}" onfocus="this.select()" oninput="${handler}">`;
       const opts = getIntervalExerciseOptions();
 
       let html = `
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <select onchange="loadIntervalTemplate(this.value)" style="${sel}flex:1;">
+        <div class="fo-sheet__body" style="padding-top:4px;flex:1;min-height:0;">
+        <div class="fo-select"><select onchange="loadIntervalTemplate(this.value)" aria-label="Vorlage">
             <option value="">Neuer Zirkel</option>
             ${intervalTemplates.map(t => `<option value="${planEsc(t.id)}" ${t.id === d.id ? 'selected' : ''}>${planEsc(t.name || 'Ohne Namen')}</option>`).join('')}
-          </select>
-        </div>
-        <div style="margin-bottom:12px;"><label style="${lbl}">Name der Vorlage</label>
-          <input type="text" value="${planEsc(d.name)}" placeholder="z. B. Core Planks" oninput="intervalField('name', this.value)" style="${inp}font-size:16px;"></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
-          <div><label style="${lbl}">Vorbereitung (s)</label>${num(d.prepSec, "intervalField('prepSec', this.value)", 0, '10')}</div>
-          <div><label style="${lbl}">Runden</label>${num(d.rounds, "intervalField('rounds', this.value)", 1, '1')}</div>
-          <div><label style="${lbl}">Rundenpause (s)</label>${num(d.roundPauseSec, "intervalField('roundPauseSec', this.value)", 0, '0')}</div>
+          </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+        <div class="fo-field"><label class="fo-label" for="interval-name">Name der Vorlage</label>
+          <input class="fo-input" id="interval-name" type="text" value="${planEsc(d.name)}" placeholder="z. B. Core Planks" oninput="intervalField('name', this.value)"></div>
+        <div class="fo-grid3">
+          <div class="fo-field"><label class="fo-label" for="interval-prep">Vorbereitung (s)</label>${num(d.prepSec, "intervalField('prepSec', this.value)", 0, '10', 'interval-prep')}</div>
+          <div class="fo-field"><label class="fo-label" for="interval-rounds">Runden</label>${num(d.rounds, "intervalField('rounds', this.value)", 1, '1', 'interval-rounds')}</div>
+          <div class="fo-field"><label class="fo-label" for="interval-roundpause">Rundenpause (s)</label>${num(d.roundPauseSec, "intervalField('roundPauseSec', this.value)", 0, '0', 'interval-roundpause')}</div>
         </div>`;
 
       d.steps.forEach((st, i) => {
         const options = opts.some(o => o.id === st.typ) ? opts : [...opts, { id: st.typ, label: st.typLabel || st.typ }];
         html += `
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-            <span style="font-weight:600;flex:1;">Schritt ${i + 1}</span>
-            <button onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben" style="${smallBtn}">${foIcon('arrowUp', 'fo-i--sm')}</button>
-            <button onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} aria-label="Nach unten" style="${smallBtn}">${foIcon('arrowDown', 'fo-i--sm')}</button>
-            <button onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} title="Schritt entfernen" aria-label="Schritt entfernen" style="${smallBtn}">${foIcon('close', 'fo-i--sm')}</button>
+        <div style="border:1px solid var(--fo-line);border-radius:var(--fo-r-lg);padding:4px 10px 10px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:0;">
+            <span style="flex:1;font-weight:650;">Schritt ${i + 1}</span>
+            <button class="fo-iconbtn" type="button" onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben"><svg class="fo-i" aria-hidden="true"><use href="#i-arrowUp"/></svg></button>
+            <button class="fo-iconbtn" type="button" onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} aria-label="Nach unten"><svg class="fo-i" aria-hidden="true"><use href="#i-arrowDown"/></svg></button>
+            <button class="fo-iconbtn" type="button" onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} aria-label="Schritt entfernen" style="margin-right:-6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
           </div>
-          <select onchange="intervalStepField(${i}, 'typ', this.value)" style="${sel}margin-bottom:8px;">
+          <div class="fo-select"><select onchange="intervalStepField(${i}, 'typ', this.value)" aria-label="Übung Schritt ${i + 1}">
             ${options.map(o => `<option value="${planEsc(o.id)}" ${o.id === st.typ ? 'selected' : ''}>${planEsc(o.label)}</option>`).join('')}
-          </select>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
-            <div><label style="${lbl}">Halten (s)</label>${num(st.holdSec, `intervalStepField(${i}, 'holdSec', this.value)`, 1, '30')}</div>
-            <div><label style="${lbl}">Pause danach (s)</label>${num(st.pauseSec, `intervalStepField(${i}, 'pauseSec', this.value)`, 0, '5')}</div>
+          </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+          <div class="fo-grid2">
+            <div class="fo-field"><span class="fo-label">Halten (s)</span>${num(st.holdSec, `intervalStepField(${i}, 'holdSec', this.value)`, 1, '30')}</div>
+            <div class="fo-field"><span class="fo-label">Pause danach (s)</span>${num(st.pauseSec, `intervalStepField(${i}, 'pauseSec', this.value)`, 0, '5')}</div>
           </div>
         </div>`;
       });
 
       html += `
-        <button onclick="intervalAddStep()" style="width:100%;padding:10px;margin-bottom:10px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:14px;">+ Schritt</button>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Ist eine Rundenpause gesetzt, ersetzt sie die Pause nach dem letzten Schritt einer Runde.</div>
-        <div id="interval-config-summary" style="font-size:14px;color:var(--primary);margin-bottom:14px;">${intervalConfigSummaryText()}</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button onclick="saveIntervalTemplate()" style="flex:2;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">${foIcon('save', 'fo-i--sm')} Vorlage speichern</button>
-          ${d.id ? `<button onclick="deleteIntervalTemplate()" style="flex:1;padding:12px;background:none;border:1px solid var(--danger);border-radius:8px;color:var(--danger);cursor:pointer;">${foIcon('trash', 'fo-i--sm')} Löschen</button>` : ''}
+        <button class="fo-btn fo-btn--dashed fo-btn--block" type="button" onclick="intervalAddStep()"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg>Schritt</button>
+        <p class="fo-help" style="margin:0;">Ist eine Rundenpause gesetzt, ersetzt sie die Pause nach dem letzten Schritt einer Runde.</p>
+        <span id="interval-config-summary" class="fo-num" style="font-weight:650;color:var(--fo-primary);">${intervalConfigSummaryText()}</span>
+        <div class="fo-btnrow">
+          <button class="fo-btn fo-btn--secondary" type="button" onclick="saveIntervalTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Vorlage speichern</button>
+          ${d.id ? `<button class="fo-btn fo-btn--danger" type="button" onclick="deleteIntervalTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg>Löschen</button>` : ''}
         </div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="closeIntervalConfig()" style="flex:1;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Schließen</button>
-          <button onclick="openIntervalTimer()" class="btn" style="flex:2;padding:14px;font-size:16px;">Weiter ${foIcon('play', 'fo-i--sm')}</button>
+        </div>
+        <div class="fo-sheet__foot" style="padding-bottom:max(var(--fo-s3), env(safe-area-inset-bottom, var(--fo-s3)));">
+          <button class="fo-btn fo-btn--secondary" type="button" onclick="closeIntervalConfig()">Schließen</button>
+          <button class="fo-btn fo-btn--primary" type="button" onclick="openIntervalTimer()">Weiter<svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
         </div>`;
       document.getElementById('interval-config-body').innerHTML = html;
     }

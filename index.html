@@ -460,6 +460,10 @@
     .fo-timerow { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
     .fo-timerow > div { flex: 1; min-width: 0; }
     .fo-timerow__ctl { height: var(--fo-tap); min-height: var(--fo-tap); }
+    /* Training Loggen: Reps-/Haltezeit-Abschnitt per Klasse auf flex, nicht per Inline-Style – die
+       bestehenden Funktionen updateTrainingFormMode()/isTrainingFormHold() setzen weiterhin nur
+       el.style.display ('' oder 'none'), '' fällt dann auf diese Regel zurück (siehe Bericht Lauf 2B). */
+    #training-reps-section, #training-hold-section { display: flex; flex-direction: column; gap: var(--fo-s3); }
     @media (max-width: 768px) {
       .app-container > .fo-appbar { margin: -12px -12px 12px; }
       #bottom-nav.fo-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; margin: 0; height: auto; min-height: var(--fo-nav-h); padding: 0 4px env(safe-area-inset-bottom, 0px); }
@@ -1085,119 +1089,131 @@
       <div id="training-log-subtab" class="subtab-content active">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;">
         <!-- Training Entry -->
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <h3 style="margin-bottom:20px;">Training Loggen</h3>
-          
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
-              <input type="date" id="training-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+        <div class="fo-card">
+          <div class="fo-card__head"><h3 class="fo-card__title">Training Loggen</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+
+          <div class="fo-grid2">
+            <div class="fo-field">
+              <label class="fo-label" for="training-date">Datum</label>
+              <input class="fo-input" type="date" id="training-date">
             </div>
-            <div>
-              <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Uhrzeit</label>
-              <input type="time" id="training-time" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <div class="fo-field">
+              <label class="fo-label" for="training-time">Uhrzeit</label>
+              <input class="fo-input" type="time" id="training-time">
             </div>
-          </div>
-          
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Typ</label>
-            <select id="training-type" onchange="onTrainingTypeChange(this)" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-              <option value="pullups">Pull-ups</option>
-              <option value="pushups">Push-ups</option>
-              <option value="lunges">Lunges</option>
-              <option value="terraband_knie">Terraband Knie</option>
-            </select>
           </div>
 
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Variante</label>
-            <select id="training-variant" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-              <option value="regulaer">Regulär</option>
-              <option value="reverse">Reverse</option>
-              <option value="hammer">Hammer Grip</option>
-            </select>
-          </div>
-          
-          <div id="training-reps-section">
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anzahl Sets</label>
-            <div style="display:flex;align-items:center;gap:12px;">
-              <button type="button" onclick="adjustSets(-1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">−</button>
-              <span id="sets-count" style="font-size:20px;font-weight:600;min-width:32px;text-align:center;">3</span>
-              <button type="button" onclick="adjustSets(1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">+</button>
+          <div class="fo-field">
+            <label class="fo-label" for="training-type">Typ</label>
+            <div class="fo-select">
+              <select id="training-type" onchange="onTrainingTypeChange(this)">
+                <option value="pullups">Pull-ups</option>
+                <option value="pushups">Push-ups</option>
+                <option value="lunges">Lunges</option>
+                <option value="terraband_knie">Terraband Knie</option>
+              </select>
+              <svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg>
             </div>
           </div>
-          <div id="sets-inputs-container" style="margin-bottom:15px;"></div>
+
+          <div class="fo-field">
+            <label class="fo-label" for="training-variant">Variante</label>
+            <div class="fo-select">
+              <select id="training-variant">
+                <option value="regulaer">Regulär</option>
+                <option value="reverse">Reverse</option>
+                <option value="hammer">Hammer Grip</option>
+              </select>
+              <svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg>
+            </div>
+          </div>
+
+          <div id="training-reps-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <span class="fo-label" style="font-size:13px;">Anzahl Sets</span>
+            <div class="fo-stepper">
+              <button class="fo-iconbtn" type="button" onclick="adjustSets(-1)" aria-label="Ein Set weniger"><svg class="fo-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+              <span id="sets-count" class="fo-stepper__val">3</span>
+              <button class="fo-iconbtn" type="button" onclick="adjustSets(1)" aria-label="Ein Set mehr"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            </div>
+          </div>
+          <div id="sets-inputs-container" style="display:flex;flex-direction:column;gap:8px;"></div>
           </div>
           <input type="hidden" id="training-sets">
 
           <!-- Haltezeit-Übungen: Sekunden pro Satz statt Wiederholungen (keine Kalorien) -->
-          <div id="training-hold-section" style="display:none;margin-bottom:15px;">
-            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
-              <div>
-                <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Haltezeit (Sek.)</label>
-                <input type="number" id="hold-sec-all" min="1" max="3600" placeholder="45" inputmode="numeric" pattern="[0-9]*" onfocus="this.select()" oninput="onHoldAllInput()"
-                  style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:22px;font-weight:600;box-sizing:border-box;">
+          <div id="training-hold-section" style="display:none;">
+            <div class="fo-grid2">
+              <div class="fo-field">
+                <label class="fo-label" for="hold-sec-all">Haltezeit (Sek.)</label>
+                <input class="fo-input" type="number" id="hold-sec-all" min="1" max="3600" placeholder="45" inputmode="numeric" pattern="[0-9]*" onfocus="this.select()" oninput="onHoldAllInput()">
               </div>
-              <div>
-                <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Anzahl Sätze</label>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <button type="button" onclick="adjustHoldSets(-1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">−</button>
-                  <span id="hold-sets-count" style="font-size:20px;font-weight:600;min-width:28px;text-align:center;">3</span>
-                  <button type="button" onclick="adjustHoldSets(1)" style="width:44px;height:44px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;font-size:20px;cursor:pointer;">+</button>
+              <div class="fo-field">
+                <span class="fo-label">Anzahl Sätze</span>
+                <div class="fo-stepper">
+                  <button class="fo-iconbtn" type="button" onclick="adjustHoldSets(-1)" aria-label="Ein Satz weniger"><svg class="fo-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                  <span id="hold-sets-count" class="fo-stepper__val">3</span>
+                  <button class="fo-iconbtn" type="button" onclick="adjustHoldSets(1)" aria-label="Ein Satz mehr"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg></button>
                 </div>
               </div>
             </div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;margin-bottom:10px;">
-              <input type="checkbox" id="hold-individual" onchange="toggleHoldIndividual()" style="width:20px;height:20px;"> Sätze einzeln anpassen
+            <label style="display:flex;align-items:center;gap:8px;min-height:var(--fo-tap);cursor:pointer;">
+              <input type="checkbox" id="hold-individual" onchange="toggleHoldIndividual()" style="width:20px;height:20px;flex:none;"> <span class="fo-label" style="font-weight:400;color:var(--fo-text);">Sätze einzeln anpassen</span>
             </label>
             <div id="hold-inputs-container"></div>
           </div>
-          
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Notizen</label>
-            <textarea id="training-notiz" rows="2" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);resize:vertical;"></textarea>
+
+          <div class="fo-field">
+            <label class="fo-label" for="training-notiz">Notizen</label>
+            <textarea class="fo-input" id="training-notiz" rows="2" style="height:auto;padding:10px 12px;resize:vertical;"></textarea>
           </div>
-          
-          <button class="btn" onclick="saveTrainingEntry()" style="width:100%;">Training speichern</button>
-          <button id="zirkel-adhoc-log-btn" class="btn" onclick="openZirkelAdhocPicker()" style="display:none;width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-circuit"/></svg> Ad-hoc Zirkel starten</button>
-          <button class="btn" onclick="openIntervalConfig()" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-clock"/></svg> Intervall-Zirkel</button>
+
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveTrainingEntry()">Training speichern</button>
+            <button id="zirkel-adhoc-log-btn" class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openZirkelAdhocPicker()" style="display:none;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Ad-hoc Zirkel starten</button>
+            <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openIntervalConfig()"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-clock"/></svg>Intervall-Zirkel</button>
+          </div>
+          </div>
         </div>
 
         <!-- Eigene Trainingsarten -->
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);margin-top:20px;">
-          <h3 style="margin-bottom:15px;">Eigene Trainingsarten</h3>
-          <div id="custom-types-list" style="margin-bottom:15px;"></div>
-          <input type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);margin-bottom:8px;">
-          <button class="btn" onclick="addCustomType()" style="width:100%;">+ Hinzufügen</button>
-          <button onclick="migrateCustomTypes()" style="width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-sync"/></svg> Fehlende Arten anlegen</button>
+        <div class="fo-card" style="margin-top:20px;">
+          <div class="fo-card__head"><h3 class="fo-card__title">Eigene Trainingsarten</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+            <div id="custom-types-list"></div>
+            <div class="fo-field">
+              <label class="fo-label" for="custom-type-name" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">Name der eigenen Trainingsart</label>
+              <input class="fo-input" type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)">
+            </div>
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="addCustomType()"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg>Hinzufügen</button>
+            <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="migrateCustomTypes()"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Fehlende Arten anlegen</button>
+          </div>
         </div>
-        
-        <!-- Day Log -->
-        <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-          <h3 style="margin-bottom:20px;">Tageslog</h3>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:15px;">Schritte werden automatisch über Google Fit importiert.</p>
-          
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Datum</label>
-            <input type="date" id="log-date" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-          </div>
-          
-          <div style="margin-bottom:15px;">
-            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Gewicht (kg)</label>
-            <input type="number" id="log-weight" step="0.1" placeholder="75.0" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-          </div>
 
-          <input type="hidden" id="log-steps" value="">
-          
-          <button class="btn" onclick="saveDayLog()" style="width:100%;">Tageslog speichern</button>
+        <!-- Day Log -->
+        <div class="fo-card">
+          <div class="fo-card__head"><h3 class="fo-card__title">Tageslog</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+            <p class="fo-help" style="margin:0;">Schritte werden automatisch über Google Fit importiert.</p>
+            <div class="fo-field">
+              <label class="fo-label" for="log-date">Datum</label>
+              <input class="fo-input" type="date" id="log-date">
+            </div>
+            <div class="fo-field">
+              <label class="fo-label" for="log-weight">Gewicht (kg)</label>
+              <input class="fo-input" type="number" id="log-weight" step="0.1" placeholder="75.0">
+            </div>
+            <input type="hidden" id="log-steps" value="">
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveDayLog()">Tageslog speichern</button>
+          </div>
         </div>
       </div>
-      
+
       <!-- Training History -->
-      <div style="background:var(--surface);padding:25px;border-radius:12px;border:1px solid var(--border);">
-        <h3 style="margin-bottom:20px;">Letzte Einträge</h3>
-        <div id="training-history" style="max-height:400px;overflow-y:auto;"></div>
+      <div class="fo-card">
+        <div class="fo-card__head"><h3 class="fo-card__title">Letzte Einträge</h3></div>
+        <div id="training-history" style="max-height:400px;overflow-y:auto;border-top:1px solid var(--fo-line);"></div>
       </div>
       </div><!-- /training-log-subtab -->
 
@@ -6658,11 +6674,10 @@
       container.innerHTML = '';
       for (let i = 0; i < setsCount; i++) {
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
+        div.className = 'fo-setrow';
         div.innerHTML = `
-          <span style="font-size:13px;color:var(--muted);min-width:48px;">Set ${i+1}</span>
-          <input type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." inputmode="numeric" pattern="[0-9]*"
-            style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;"
+          <label class="fo-setrow__label" for="set-reps-${i}">Set ${i+1}</label>
+          <input class="fo-input" type="number" id="set-reps-${i}" min="1" max="999" placeholder="Wdh." inputmode="numeric" pattern="[0-9]*"
             oninput="updateHiddenSets()" onchange="updateHiddenSets()" onfocus="this.select()">
         `;
         container.appendChild(div);
@@ -6748,13 +6763,12 @@
       const prev = [];
       container.querySelectorAll('input[data-hold-idx]').forEach(el => { prev[parseInt(el.dataset.holdIdx)] = el.value; });
       const all = document.getElementById('hold-sec-all')?.value || '';
-      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;">';
+      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:var(--fo-s2);">';
       for (let i = 0; i < holdSetsCount; i++) {
         const v = prev[i] !== undefined && prev[i] !== '' ? prev[i] : all;
-        html += `<div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Satz ${i + 1} (s)</div>
-          <input type="number" data-hold-idx="${i}" id="hold-sec-${i}" min="1" max="3600" value="${v}" placeholder="Sek." inputmode="numeric" pattern="[0-9]*" onfocus="this.select()"
-            style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:20px;box-sizing:border-box;">
+        html += `<div class="fo-field">
+          <span class="fo-label">Satz ${i + 1} (s)</span>
+          <input class="fo-input" type="number" data-hold-idx="${i}" id="hold-sec-${i}" min="1" max="3600" value="${v}" placeholder="Sek." inputmode="numeric" pattern="[0-9]*" onfocus="this.select()">
         </div>`;
       }
       container.innerHTML = html + '</div>';
@@ -7014,7 +7028,7 @@
         .slice(0, 50);
       
       if (sorted.length === 0) {
-        container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Einträge</div>';
+        container.innerHTML = '<div class="fo-empty">Noch keine Einträge</div>';
         renderTrainingPlan();
         return;
       }
@@ -7028,7 +7042,7 @@
         yoga: typIcon('yoga') + ' Yoga', crosstraining: typIcon('crosstraining') + ' Crosstraining', cardio: typIcon('cardio') + ' Cardio',
         zirkel: typIcon('zirkel') + ' Zirkel'
       };
-      container.innerHTML = sorted.map(e => {
+      container.innerHTML = sorted.map((e, idx) => {
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
         const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
         const typ = e.typ || oldTypeMap[e.type] || e.type || '';
@@ -7046,32 +7060,32 @@
           setsArr = (e.sets || '').split('-').map(n => parseInt(n) || 0).filter(n => n > 0);
           setsTotal = setsArr.reduce((s, n) => s + n, 0);
           setsDisplay = setsArr.length > 0
-            ? setsArr.map((r, i) => `<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">S${i+1}: ${r}</span>`).join(' ')
+            ? setsArr.map((r, i) => `<span style="background:var(--fo-surface-2);padding:2px 6px;border-radius:4px;font-size:12px;">S${i+1}: ${r}</span>`).join(' ')
             : (e.sets || '');
         } else {
-          setsDisplay = `<span style="font-size:12px;color:var(--muted);">${e.sets || ''}</span>`;
+          setsDisplay = `<span style="font-size:12px;color:var(--fo-text-3);">${e.sets || ''}</span>`;
         }
-        const sourceBadge = isGarmin ? '<span style="font-size:10px;background:var(--fo-surface-2);color:var(--fo-text-2);padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>'
-          : isPlan ? '<span style="font-size:10px;background:var(--surface2);color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Plan</span>' : '';
+        const sourceBadge = isGarmin ? '<span class="fo-tag fo-tag--neutral" style="margin-left:6px;">Garmin</span>'
+          : isPlan ? '<span class="fo-tag" style="margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
-        if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--text);">${foIcon('clock', 'fo-i--sm')} ${fmtHoldSets(e.holdSec)}</span>`;
+        if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--fo-text);">${foIcon('clock', 'fo-i--sm')} ${fmtHoldSets(e.holdSec)}</span>`;
         // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
         const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
-        const timeDisplay = e.garminTime ? `<span style="color:var(--muted);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
+        const timeDisplay = e.garminTime ? `<span style="color:var(--fo-text-3);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         return `
-        <div style="padding:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:start;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:500;margin-bottom:4px;">${timeDisplay}${title}${sourceBadge}</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">
+        <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+          <div class="fo-row__main">
+            <div class="fo-row__title">${timeDisplay}${title}${sourceBadge}</div>
+            <div class="fo-row__sub fo-row__sub--wrap">
               ${setsDisplay}
-              ${setsTotal > 0 ? `<span style="color:var(--primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
+              ${setsTotal > 0 ? `<span style="color:var(--fo-primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
             </div>
-            <div style="font-size:12px;color:var(--muted);">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
+            <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
           </div>
-          <div style="display:flex;gap:6px;">
-            ${isManual ? `<button onclick="editTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:13px;">Ändern</button>` : ''}
-            <button onclick="deleteTraining('${e.id}')" style="padding:6px 12px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;font-size:13px;">Löschen</button>
+          <div class="fo-row__actions">
+            ${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
+            <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>
           </div>
         </div>
       `}).join('');
@@ -10333,23 +10347,29 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const container = document.getElementById('custom-types-list');
       if (!container) return;
       if (customTrainingTypes.length === 0) {
-        container.innerHTML = '<div style="font-size:13px;color:var(--muted);">Noch keine eigenen Arten</div>';
+        container.innerHTML = '<p class="fo-help" style="margin:0;">Noch keine eigenen Arten</p>';
         return;
       }
       container.innerHTML = customTrainingTypes.map((t, i) => t.id === renamingCustomTypeId ? `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-          <input type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()"
-            style="flex:1;min-width:0;padding:8px;background:var(--bg);border:1px solid var(--primary);border-radius:6px;color:var(--text);font-size:14px;">
-          <button onclick="saveCustomTypeRename(${i})" title="Namen speichern" aria-label="Namen speichern" style="padding:4px 10px;background:var(--primary);border:1px solid var(--primary);color:var(--fo-on-primary);border-radius:6px;cursor:pointer;font-size:12px;">${foIcon('check', 'fo-i--sm')}</button>
-          <button onclick="cancelCustomTypeRename()" title="Abbrechen" aria-label="Abbrechen" style="padding:4px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;font-size:12px;">${foIcon('close', 'fo-i--sm')}</button>
+        <div class="fo-row" style="padding-top:10px;padding-bottom:10px;${i > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+          <div class="fo-row__main">
+            <label class="fo-sr" for="custom-type-rename-input">Name der Trainingsart</label>
+            <input class="fo-input" type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()">
+          </div>
+          <div class="fo-row__actions">
+            <button class="fo-iconbtn" type="button" onclick="saveCustomTypeRename(${i})" aria-label="Namen speichern"><svg class="fo-i" aria-hidden="true"><use href="#i-check"/></svg></button>
+            <button class="fo-iconbtn" type="button" onclick="cancelCustomTypeRename()" aria-label="Abbrechen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
+          </div>
         </div>
       ` : `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:14px;flex:1;min-width:0;">${t.label}</span>
-          <button onclick="startCustomTypeRename(${i})" title="Umbenennen" aria-label="Umbenennen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">${foIcon('edit', 'fo-i--sm')}</button>
-          <button onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten"
-            style="padding:4px 10px;background:${t.kind === 'hold' ? 'var(--primary)' : 'none'};border:1px solid ${t.kind === 'hold' ? 'var(--primary)' : 'var(--border)'};color:${t.kind === 'hold' ? 'var(--fo-on-primary)' : 'var(--muted)'};border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
-          <button onclick="removeCustomType(${i})" aria-label="Entfernen" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">${foIcon('trash', 'fo-i--sm')}</button>
+        <div class="fo-row" style="padding-top:10px;padding-bottom:10px;${i > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+          <span class="fo-row__icon">${typIcon(t.id)}</span>
+          <div class="fo-row__main"><div class="fo-row__title">${t.label}</div></div>
+          <div class="fo-row__actions">
+            <button class="fo-iconbtn" type="button" onclick="startCustomTypeRename(${i})" aria-label="Umbenennen"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg></button>
+            <button class="fo-btn fo-btn--sm ${t.kind === 'hold' ? 'fo-btn--primary' : 'fo-btn--secondary'}" type="button" onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
+            <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="removeCustomType(${i})" aria-label="Entfernen"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg></button>
+          </div>
         </div>
       `).join('');
     }

@@ -833,24 +833,6 @@
     .subtab-content { display: none; }
     .subtab-content.active { display: block; }
 
-    /* Dashboard buttons */
-    .dash-btn {
-      padding: 6px 14px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--muted);
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .dash-btn:hover { color: var(--text); }
-    .dash-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: var(--fo-on-primary);
-    }
-
     /* ── Responsive / Mobile-First ────────────────────────────────────────── */
 
     /* Layout foundation for mobile */
@@ -1358,49 +1340,50 @@
     <div id="dashboard-tab" class="subtab-content active">
 
       <!-- ── Haupt-Chart ──────────────────────────────────────────────── -->
-      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+      <section class="fo-card" style="margin-bottom:20px;">
+        <div class="fo-card__body" style="display:flex;flex-direction:column;gap:16px;">
 
         <!-- Steuerleiste -->
-        <div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:16px;align-items:flex-end;">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
 
           <!-- Zeitraum -->
           <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ZEITRAUM</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" data-range="1M" onclick="setDashRange('1M',this)">1M</button>
-              <button class="dash-btn" data-range="2M" onclick="setDashRange('2M',this)">2M</button>
-              <button class="dash-btn" data-range="3M" onclick="setDashRange('3M',this)">3M</button>
-              <button class="dash-btn" data-range="6M" onclick="setDashRange('6M',this)">6M</button>
-              <button class="dash-btn" data-range="12M" onclick="setDashRange('12M',this)">12M</button>
-              <button class="dash-btn" data-range="all" onclick="setDashRange('all',this)">Alles</button>
+            <span class="fo-label" style="display:block;margin-bottom:6px;">Zeitraum</span>
+            <div class="fo-chips" role="group" aria-label="Zeitraum">
+              <button class="fo-chip is-active" type="button" data-range="1M" aria-pressed="true" onclick="setDashRange('1M',this)">1M</button>
+              <button class="fo-chip" type="button" data-range="2M" aria-pressed="false" onclick="setDashRange('2M',this)">2M</button>
+              <button class="fo-chip" type="button" data-range="3M" aria-pressed="false" onclick="setDashRange('3M',this)">3M</button>
+              <button class="fo-chip" type="button" data-range="6M" aria-pressed="false" onclick="setDashRange('6M',this)">6M</button>
+              <button class="fo-chip" type="button" data-range="12M" aria-pressed="false" onclick="setDashRange('12M',this)">12M</button>
+              <button class="fo-chip" type="button" data-range="all" aria-pressed="false" onclick="setDashRange('all',this)">Alles</button>
             </div>
           </div>
 
           <!-- Ansicht -->
           <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">ANSICHT</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" data-view="days" onclick="setDashView('days',this)">Tage</button>
-              <button class="dash-btn" data-view="weeks" onclick="setDashView('weeks',this)">Wochen</button>
-              <button class="dash-btn" data-view="months" onclick="setDashView('months',this)">Monate</button>
+            <span class="fo-label" style="display:block;margin-bottom:6px;">Ansicht</span>
+            <div class="fo-chips" role="group" aria-label="Ansicht">
+              <button class="fo-chip is-active" type="button" data-view="days" aria-pressed="true" onclick="setDashView('days',this)">Tage</button>
+              <button class="fo-chip" type="button" data-view="weeks" aria-pressed="false" onclick="setDashView('weeks',this)">Wochen</button>
+              <button class="fo-chip" type="button" data-view="months" aria-pressed="false" onclick="setDashView('months',this)">Monate</button>
             </div>
           </div>
 
           <!-- Summe / Schnitt -->
           <div id="dash-agg-control" style="display:none;">
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">WERTE</div>
-            <div style="display:flex;gap:4px;">
-              <button class="dash-btn active" id="dash-sum-btn" onclick="setDashAgg('sum',this)">Summe</button>
-              <button class="dash-btn" id="dash-avg-btn" onclick="setDashAgg('avg',this)">Schnitt</button>
+            <span class="fo-label" style="display:block;margin-bottom:6px;">Werte</span>
+            <div class="fo-chips" role="group" aria-label="Werte">
+              <button class="fo-chip is-active" type="button" id="dash-sum-btn" aria-pressed="true" onclick="setDashAgg('sum',this)">Summe</button>
+              <button class="fo-chip" type="button" id="dash-avg-btn" aria-pressed="false" onclick="setDashAgg('avg',this)">Schnitt</button>
             </div>
           </div>
         </div>
 
         <!-- Variablen -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-          <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 1</div>
-            <select id="dash-var1" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+        <div class="fo-grid2">
+          <div class="fo-field">
+            <span class="fo-label">Variable 1</span>
+            <div class="fo-select"><select id="dash-var1" aria-label="Variable 1">
               <option value="">— keine —</option>
               <optgroup label="Ernährung">
                 <option value="kcal">Kalorien konsumiert</option>
@@ -1425,15 +1408,15 @@
                 <option value="kcal_breakdown">Kalorienziel Aufschlüsselung (Stacked)</option>
                 <option value="kat_breakdown">Kategorien-Intake (100% Stacked)</option>
               </optgroup>
-            </select>
-            <div style="display:flex;gap:6px;margin-top:6px;">
-              <button id="dash-type1-bar" onclick="setDashType1('bar',this)" style="flex:1;padding:5px;font-size:12px;background:var(--fo-primary);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">▋ Balken</button>
-              <button id="dash-type1-line" onclick="setDashType1('line',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">╱ Linie</button>
+            </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+            <div class="fo-seg fo-seg--inline">
+              <button id="dash-type1-bar" type="button" onclick="setDashType1('bar',this)" style="flex:1;background:var(--fo-primary);color:var(--fo-on-primary);">Balken</button>
+              <button id="dash-type1-line" type="button" onclick="setDashType1('line',this)" style="flex:1;background:transparent;color:var(--fo-text-2);">Linie</button>
             </div>
           </div>
-          <div>
-            <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.08em;margin-bottom:6px;">VARIABLE 2</div>
-            <select id="dash-var2" style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
+          <div class="fo-field">
+            <span class="fo-label">Variable 2</span>
+            <div class="fo-select"><select id="dash-var2" aria-label="Variable 2">
               <option value="">— keine —</option>
               <optgroup label="Ernährung">
                 <option value="kcal">Kalorien konsumiert</option>
@@ -1454,11 +1437,11 @@
                 <option value="run_km">Laufkilometer</option>
                 <option value="trainings">Trainingseinheiten</option>
               </optgroup>
-            </select>
-            <div id="dash-var2-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:5px;">Nicht verfügbar bei Aufschlüsselung</div>
-            <div id="dash-type2-btns" style="display:flex;gap:6px;margin-top:6px;">
-              <button id="dash-type2-bar" onclick="setDashType2('bar',this)" style="flex:1;padding:5px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;">▋ Balken</button>
-              <button id="dash-type2-line" onclick="setDashType2('line',this)" style="flex:1;padding:5px;font-size:12px;background:var(--fo-chart-2);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">╱ Linie</button>
+            </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+            <p id="dash-var2-hint" class="fo-help" style="display:none;margin:4px 0 0;">Nicht verfügbar bei Aufschlüsselung</p>
+            <div id="dash-type2-btns" class="fo-seg fo-seg--inline">
+              <button id="dash-type2-bar" type="button" onclick="setDashType2('bar',this)" style="flex:1;background:transparent;color:var(--fo-text-2);">Balken</button>
+              <button id="dash-type2-line" type="button" onclick="setDashType2('line',this)" style="flex:1;background:var(--fo-chart-2);color:var(--fo-on-primary);">Linie</button>
             </div>
           </div>
         </div>
@@ -1467,34 +1450,36 @@
         <div style="position:relative;height:300px;width:100%;">
           <canvas id="dash-chart"></canvas>
         </div>
-        <div id="dash-chart-empty" style="display:none;text-align:center;padding:60px;color:var(--muted);font-size:14px;">Keine Daten für diesen Zeitraum</div>
-      </div>
+        <div id="dash-chart-empty" style="display:none;text-align:center;padding:60px;color:var(--fo-text-3);font-size:14px;">Keine Daten für diesen Zeitraum</div>
+        </div>
+      </section>
 
       <!-- ── Workout Auswertung ──────────────────────────────────────────── -->
-      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
-          <h3 style="font-size:15px;margin:0;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-strength"/></svg> Workout</h3>
-          <select id="workout-type-select" onchange="renderWorkoutChart()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">
-          </select>
+      <section class="fo-card" style="margin-bottom:20px;">
+        <div class="fo-card__head" style="flex-wrap:wrap;">
+          <h3 class="fo-card__title" style="display:flex;align-items:center;gap:6px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-strength"/></svg>Workout</h3>
+          <div class="fo-select fo-select--compact" style="flex:none;"><select id="workout-type-select" onchange="renderWorkoutChart()" aria-label="Übung"></select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:14px;">
-          <button id="workout-metric-total" onclick="setWorkoutMetric('total',this)" style="padding:5px 12px;font-size:12px;background:var(--fo-primary);color:var(--fo-on-primary);border:none;border-radius:6px;cursor:pointer;">Σ Gesamt</button>
-          <button id="workout-metric-max" onclick="setWorkoutMetric('max',this)" style="padding:5px 12px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-arrowUp"/></svg> Max/Set</button>
+        <div class="fo-card__body" style="border-top:1px solid var(--fo-line);display:flex;flex-direction:column;gap:14px;">
+          <div class="fo-seg fo-seg--inline" style="align-self:flex-start;">
+            <button id="workout-metric-total" type="button" onclick="setWorkoutMetric('total',this)" style="background:var(--fo-primary);color:var(--fo-on-primary);">Gesamt</button>
+            <button id="workout-metric-max" type="button" onclick="setWorkoutMetric('max',this)" style="background:transparent;color:var(--fo-text-2);"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-arrowUp"/></svg>Max/Set</button>
+          </div>
+          <div style="position:relative;height:220px;">
+            <canvas id="workout-chart"></canvas>
+          </div>
+          <div id="workout-chart-empty" style="display:none;text-align:center;padding:40px;color:var(--fo-text-3);font-size:14px;">Keine Trainingsdaten für diesen Zeitraum</div>
         </div>
-        <div style="position:relative;height:220px;">
-          <canvas id="workout-chart"></canvas>
-        </div>
-        <div id="workout-chart-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px;">Keine Trainingsdaten für diesen Zeitraum</div>
-      </div>
+      </section>
 
       <!-- ── Kacheln ──────────────────────────────────────────────────── -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:20px;" id="dash-tiles"></div>
 
       <!-- ── Letzte Aktivitäten ───────────────────────────────────────── -->
-      <div style="background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-        <h3 style="margin-bottom:16px;font-size:15px;">Letzte Aktivitäten</h3>
-        <div id="recent-activity" style="max-height:280px;overflow-y:auto;"></div>
-      </div>
+      <section class="fo-card" style="margin-bottom:20px;">
+        <div class="fo-card__head"><h3 class="fo-card__title">Letzte Aktivitäten</h3></div>
+        <div id="recent-activity" style="max-height:280px;overflow-y:auto;border-top:1px solid var(--fo-line);"></div>
+      </section>
 
 
 
@@ -2757,35 +2742,33 @@
     let workoutMetric = 'total'; // 'total' oder 'max'
     let dashChartInstance = null;
 
+    // Balken/Linie- und Gesamt/Max-Umschalter sehen aus wie .fo-seg__btn (siehe Markup), die aktive
+    // Seite bekommt ihre Akzentfarbe aber weiterhin per Inline-Style gesetzt statt per .is-active-Klasse:
+    // Variable 2 und ihr Linien-Chart teilen bewusst die Chart-2-Farbe (nicht die Primärfarbe aus
+    // .fo-seg__btn.is-active), damit Umschalter und Diagrammfarbe sichtbar zusammengehören.
     window.setWorkoutMetric = function(metric, el) {
       workoutMetric = metric;
-      document.getElementById('workout-metric-total').style.background = metric === 'total' ? 'var(--fo-primary)' : 'var(--bg)';
-      document.getElementById('workout-metric-total').style.color = metric === 'total' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('workout-metric-total').style.border = metric === 'total' ? 'none' : '1px solid var(--border)';
-      document.getElementById('workout-metric-max').style.background = metric === 'max' ? 'var(--fo-primary)' : 'var(--bg)';
-      document.getElementById('workout-metric-max').style.color = metric === 'max' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('workout-metric-max').style.border = metric === 'max' ? 'none' : '1px solid var(--border)';
+      document.getElementById('workout-metric-total').style.background = metric === 'total' ? 'var(--fo-primary)' : 'transparent';
+      document.getElementById('workout-metric-total').style.color = metric === 'total' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
+      document.getElementById('workout-metric-max').style.background = metric === 'max' ? 'var(--fo-primary)' : 'transparent';
+      document.getElementById('workout-metric-max').style.color = metric === 'max' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
       renderWorkoutChart();
     };
 
     window.setDashType1 = function(type, el) {
       dashChart1 = type;
-      document.getElementById('dash-type1-bar').style.background = type === 'bar' ? 'var(--fo-primary)' : 'var(--bg)';
-      document.getElementById('dash-type1-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('dash-type1-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
-      document.getElementById('dash-type1-line').style.background = type === 'line' ? 'var(--fo-primary)' : 'var(--bg)';
-      document.getElementById('dash-type1-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('dash-type1-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
+      document.getElementById('dash-type1-bar').style.background = type === 'bar' ? 'var(--fo-primary)' : 'transparent';
+      document.getElementById('dash-type1-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
+      document.getElementById('dash-type1-line').style.background = type === 'line' ? 'var(--fo-primary)' : 'transparent';
+      document.getElementById('dash-type1-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
       renderDashboard();
     };
     window.setDashType2 = function(type, el) {
       dashChart2 = type;
-      document.getElementById('dash-type2-bar').style.background = type === 'bar' ? 'var(--fo-chart-2)' : 'var(--bg)';
-      document.getElementById('dash-type2-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('dash-type2-bar').style.border = type === 'bar' ? 'none' : '1px solid var(--border)';
-      document.getElementById('dash-type2-line').style.background = type === 'line' ? 'var(--fo-chart-2)' : 'var(--bg)';
-      document.getElementById('dash-type2-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--muted)';
-      document.getElementById('dash-type2-line').style.border = type === 'line' ? 'none' : '1px solid var(--border)';
+      document.getElementById('dash-type2-bar').style.background = type === 'bar' ? 'var(--fo-chart-2)' : 'transparent';
+      document.getElementById('dash-type2-bar').style.color = type === 'bar' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
+      document.getElementById('dash-type2-line').style.background = type === 'line' ? 'var(--fo-chart-2)' : 'transparent';
+      document.getElementById('dash-type2-line').style.color = type === 'line' ? 'var(--fo-on-primary)' : 'var(--fo-text-2)';
       renderDashboard();
     };
 
@@ -2814,14 +2797,14 @@
 
     window.setDashRange = function(r, el) {
       dashRange = r;
-      document.querySelectorAll('[data-range]').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+      document.querySelectorAll('[data-range]').forEach(b => { b.classList.remove('is-active'); b.setAttribute('aria-pressed', 'false'); });
+      el.classList.add('is-active'); el.setAttribute('aria-pressed', 'true');
       renderDashboard();
     };
     window.setDashAgg = function(agg, el) {
       dashAgg = agg;
-      document.querySelectorAll('#dash-sum-btn, #dash-avg-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+      document.querySelectorAll('#dash-sum-btn, #dash-avg-btn').forEach(b => { b.classList.remove('is-active'); b.setAttribute('aria-pressed', 'false'); });
+      el.classList.add('is-active'); el.setAttribute('aria-pressed', 'true');
       renderDashboard();
     };
 
@@ -2831,8 +2814,8 @@
       const aggControl = document.getElementById('dash-agg-control');
       if (aggControl) aggControl.style.display = v === 'days' ? 'none' : 'block';
       renderWorkoutChart();
-      document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+      document.querySelectorAll('[data-view]').forEach(b => { b.classList.remove('is-active'); b.setAttribute('aria-pressed', 'false'); });
+      el.classList.add('is-active'); el.setAttribute('aria-pressed', 'true');
       renderDashboard();
     };
     // ── Build daily data index ─────────────────────────────────────────────
@@ -3544,8 +3527,8 @@
       ];
 
       document.getElementById('dash-tiles').innerHTML = tiles.map(t => `
-        <div style="background:var(--surface);padding:18px;border-radius:12px;border:1px solid var(--border);">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${t.label}</div>
+        <div class="fo-card" style="padding:18px;">
+          <div class="fo-label" style="margin-bottom:6px;">${t.label}</div>
           <div style="font-size:26px;font-weight:600;color:${t.color};">
             ${t.value !== null ? fmt(t.value) + (t.unit ? ' ' + t.unit : '') : '–'}
           </div>
@@ -3571,21 +3554,21 @@
           })
           .slice(0, 15);
         if (recent.length === 0) {
-          recentContainer.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px;">Noch keine Aktivitäten</div>';
+          recentContainer.innerHTML = '<div class="fo-empty">Noch keine Aktivitäten</div>';
         } else {
-          recentContainer.innerHTML = recent.map(e => {
+          recentContainer.innerHTML = recent.map((e, idx) => {
             const calcKcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
             const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-            const label = typeLabels[typ] || customTypeLabel(typ, e);
-            const badge = e.source === 'garmin' ? '<span style="font-size:10px;background:var(--fo-surface-2);color:var(--fo-text-2);padding:2px 6px;border-radius:4px;margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span style="font-size:10px;background:var(--fo-primary-tint);color:var(--fo-primary);padding:2px 6px;border-radius:4px;margin-left:6px;">Google Fit</span>' : '';
+            const label = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + customTypeLabel(typ, e);
+            const badge = e.source === 'garmin' ? '<span class="fo-tag fo-tag--neutral" style="margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span class="fo-tag" style="margin-left:6px;">Google Fit</span>' : '';
             return `
-              <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-                <div>
-                  <div style="font-weight:500;font-size:14px;">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
-                  <div style="font-size:12px;color:var(--muted);">${e.datum} · ${isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || '')}</div>
+              <div class="fo-row"${idx > 0 ? ' style="border-top:1px solid var(--fo-line);"' : ''}>
+                <div class="fo-row__main">
+                  <div class="fo-row__title">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
+                  <div class="fo-row__sub">${e.datum} · ${isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || '')}</div>
                 </div>
-                ${calcKcal > 0 ? `<div style="font-size:14px;font-weight:600;color:var(--fo-text);">${fmt(calcKcal)} kcal</div>` : ''}
+                ${calcKcal > 0 ? `<div class="fo-row__end">${fmt(calcKcal)} <small>kcal</small></div>` : ''}
               </div>
             `;
           }).join('');

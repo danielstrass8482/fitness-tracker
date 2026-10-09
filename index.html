@@ -8376,7 +8376,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         Object.assign(r, { entry: e, via: isAutoActivity(e) ? 'garmin' : 'log', status, cmp });
         used.add(e);
       });
-      const extra = dayEntries.filter(e => !used.has(e));
+      // Nur ungematchte Einträge zeigen, die selbst im Plan entstanden sind (source:'plan' – Abhaken oder
+      // Ad-hoc-Zirkel). Garmin/Google-Fit/Strava-Aktivitäten und sonstige manuell geloggte Einträge gehören
+      // nur in die Übersicht, nicht in den Plan (siehe Bericht, Teil 1).
+      const extra = dayEntries.filter(e => !used.has(e) && e.source === 'plan');
       return { result, extra };
     }
 

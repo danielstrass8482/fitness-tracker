@@ -8469,7 +8469,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const dates = planWeekDates(planWeekOffset);
       const todayStr = planYmd(new Date());
       const fmtShort = d => d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-      const navBtn = 'width:40px;height:40px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;cursor:pointer;';
       const weekMonday = planYmd(dates[0]);
       const weekPlan = planForWeek(weekMonday);
       // Standard-Zustand neu setzen, sobald eine andere Woche angezeigt wird (Wochenwechsel oder Neuladen):
@@ -8478,18 +8477,19 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         planExpandedDays = planWeekOffset === 0 ? new Set([berlinTodayStr()]) : new Set();
         planExpandedDaysWeek = weekMonday;
       }
+      // Wochenwechsel im Stil der gemeinsamen Datumsnavigation (.fo-datenav), siehe #shared-date-nav
       const weekHeader = `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
-          <button onclick="shiftPlanWeek(-1)" style="${navBtn}">‹</button>
-          <div style="text-align:center;">
-            <div style="font-weight:600;">KW ${planIsoWeek(dates[0])} · ${fmtShort(dates[0])}–${fmtShort(dates[6])}</div>
-            <div style="font-size:12px;color:var(--muted);">%STATUS%${planWeekOffset !== 0 ? ` · <a href="#" onclick="shiftPlanWeek(0);return false;" style="color:var(--primary);">Heute</a>` : ''}</div>
+        <div class="fo-datenav" style="margin-bottom:14px;">
+          <button class="fo-iconbtn" type="button" onclick="shiftPlanWeek(-1)" aria-label="Vorherige Woche"><svg class="fo-i" aria-hidden="true"><use href="#i-chevL"/></svg></button>
+          <div class="fo-datenav__label" style="flex-direction:column;gap:0;">
+            <span>KW ${planIsoWeek(dates[0])} · ${fmtShort(dates[0])}–${fmtShort(dates[6])}</span>
+            <span style="font-size:12px;font-weight:400;color:var(--fo-text-3);">%STATUS%${planWeekOffset !== 0 ? ` · <a href="#" onclick="shiftPlanWeek(0);return false;" style="color:var(--fo-primary);">Heute</a>` : ''}</span>
           </div>
-          <button onclick="shiftPlanWeek(1)" style="${navBtn}">›</button>
+          <button class="fo-iconbtn" type="button" onclick="shiftPlanWeek(1)" aria-label="Nächste Woche"><svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
         </div>`;
       if (!weekPlan) {
         container.innerHTML = weekHeader.replace('%STATUS%', '') +
-          `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:14px;">${foIcon('clock', 'fo-i--sm')} Lade Plan dieser Woche…</div>`;
+          `<div class="fo-card" style="padding:24px;text-align:center;color:var(--fo-text-3);font-size:14px;">${foIcon('clock', 'fo-i--sm')} Lade Plan dieser Woche…</div>`;
         loadPlanForWeek(weekMonday);
         return;
       }
@@ -8513,20 +8513,23 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         result.forEach(({ unit: u, entry: e, via, status: matchStatus, cmp }) => {
           const isZirkel = u.typ === 'zirkel';
           const title = isZirkel
-            ? `<span style="font-size:13px;background:var(--surface2);color:var(--primary);padding:2px 8px;border-radius:6px;">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
+            ? `<span class="fo-tag">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
             : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
           const target = isZirkel
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u.dauerMin))} kcal`].join(' · ')
             : planTarget(u);
           const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
-              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
-              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 12px;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('')}
+              <summary style="cursor:pointer;font-size:12px;color:var(--fo-text-3);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
+              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('')}
             </details>` : '';
           const deviated = matchStatus === 'deviated';
           let left, status = '';
           if (e) {
-            const boxColor = deviated ? 'var(--fo-text-2)' : 'var(--primary)';
-            left = `<span style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:${boxColor};color:var(--fo-on-primary);font-size:14px;flex-shrink:0;">${deviated ? '~' : foIcon('check', 'fo-i--sm')}</span>`;
+            // Erledigt bzw. abweichend erledigt: reiner Anzeige-Haken (nicht anklickbar, Rückgängig ist
+            // der eigene Button unten) – .fo-check ohne .fo-checkhit-Wrapper, da hier keine Tippfläche nötig ist.
+            left = deviated
+              ? `<span class="fo-check is-on" style="background:var(--fo-text-2);border-color:var(--fo-text-2);">~</span>`
+              : `<span class="fo-check is-on"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg></span>`;
             const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
             const kcalHtml = kcal > 0 ? ` · <span style="color:var(--fo-text);">${fmt(kcal)} kcal</span>` : '';
             const viaWord = via === 'garmin' ? 'via Garmin' : via === 'log' ? 'erfasst' : 'abgehakt';
@@ -8542,24 +8545,24 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
                 e.distanz > 0 ? planFmtKm(parseFloat(e.distanz)) : '',
                 e.zeit || ''
               ].filter(Boolean).join(' · ');
-              status = `<div style="font-size:12px;color:var(--primary);">${foIcon('check', 'fo-i--sm')} ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
+              status = `<div style="font-size:12px;color:var(--fo-primary);">${foIcon('check', 'fo-i--sm')} ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
             }
             if (via === 'plan') {
-              status += `<button onclick="undoPlanUnit('${planEsc(e.id)}')" style="margin-top:4px;padding:2px 8px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;cursor:pointer;">Rückgängig</button>`;
+              status += `<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="undoPlanUnit('${planEsc(e.id)}')" style="margin-top:4px;">Rückgängig</button>`;
             }
           } else if (isFuture) {
-            left = `<span style="width:24px;height:24px;display:inline-block;border-radius:6px;border:2px dashed var(--border);flex-shrink:0;"></span>`;
+            left = `<span style="width:26px;height:26px;display:inline-block;border-radius:8px;border:2px dashed var(--fo-line-strong);flex-shrink:0;"></span>`;
           } else {
-            left = `<button onclick="openPlanComplete('${ds}','${u.id}')" title="Abhaken" style="width:44px;height:44px;margin:-10px -10px -10px -10px;padding:10px;border:none;background:none;cursor:pointer;flex-shrink:0;"><span style="display:block;width:24px;height:24px;box-sizing:border-box;border-radius:6px;border:2px solid var(--primary);"></span></button>`;
+            left = `<button class="fo-checkhit" type="button" onclick="openPlanComplete('${ds}','${u.id}')" aria-label="Abhaken"><span class="fo-check"></span></button>`;
           }
-          rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);">
+          rows += `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);">
             ${left}
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:500;font-size:14px;${e ? 'opacity:.75;' : ''}">${title}</div>
-              ${target ? `<div style="font-size:12px;color:var(--muted);">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
+            <div class="fo-row__main">
+              <div class="fo-row__title" style="${e ? 'opacity:.75;' : ''}">${title}</div>
+              ${target ? `<div class="fo-row__sub">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
               ${zirkelList}
-              ${isZirkel && !e && !isFuture ? `<button onclick="openZirkelTimer('${ds}','${u.id}')" class="btn" style="margin-top:6px;padding:7px 16px;width:auto;font-size:13px;">${foIcon('play', 'fo-i--sm')} Start</button>` : ''}
-              ${u.notiz ? `<div style="font-size:12px;color:var(--muted);">${planEsc(u.notiz)}</div>` : ''}
+              ${isZirkel && !e && !isFuture ? `<button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="openZirkelTimer('${ds}','${u.id}')" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>` : ''}
+              ${u.notiz ? `<div class="fo-row__sub">${planEsc(u.notiz)}</div>` : ''}
               ${status}
             </div>
           </div>`;
@@ -8569,27 +8572,27 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           const title = (typIcon(e.typ) ? typIcon(e.typ) + ' ' : '') + planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
           const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
           const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
-          rows += `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);opacity:.6;">
-            <span style="width:24px;text-align:center;flex-shrink:0;font-size:12px;color:var(--muted);">+</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;">${title}</div>
-              <div style="font-size:12px;color:var(--muted);">${meta}${kcal > 0 ? ` · ${fmt(kcal)} kcal` : ''}</div>
+          rows += `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);opacity:.6;">
+            <span style="width:26px;text-align:center;flex-shrink:0;font-size:12px;color:var(--fo-text-3);">+</span>
+            <div class="fo-row__main">
+              <div class="fo-row__title" style="font-weight:400;">${title}</div>
+              <div class="fo-row__sub">${meta}${kcal > 0 ? ` · ${fmt(kcal)} kcal` : ''}</div>
             </div>
           </div>`;
         });
 
-        if (!rows) rows = `<div style="padding:8px 0;border-top:1px solid var(--border);font-size:13px;color:var(--muted);">Ruhetag</div>`;
+        if (!rows) rows = `<div class="fo-row__sub" style="padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);">Ruhetag</div>`;
 
         const dayExpanded = planExpandedDays.has(ds);
-        daysHtml += `<div style="background:var(--surface);border:1px solid ${isToday ? 'var(--primary)' : 'var(--border)'};border-radius:12px;padding:12px 14px;margin-bottom:10px;">
-          <button type="button" class="plan-day-header" data-plan-day="${ds}" aria-expanded="${dayExpanded}" aria-controls="plan-day-${ds}" onclick="togglePlanDay(this)">
-            <span style="font-weight:600;${isToday ? 'color:var(--primary);' : ''}">${label}${isToday ? ' · Heute' : ''}</span>
+        daysHtml += `<div class="fo-card" style="${isToday ? 'border-color:var(--fo-primary);' : ''}margin-bottom:10px;">
+          <button type="button" class="plan-day-header" data-plan-day="${ds}" aria-expanded="${dayExpanded}" aria-controls="plan-day-${ds}" onclick="togglePlanDay(this)" style="padding:12px 14px;margin-bottom:0;">
+            <span style="font-weight:600;${isToday ? 'color:var(--fo-primary);' : ''}">${label}${isToday ? ' · Heute' : ''}</span>
             <span style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:12px;color:var(--muted);">${fmtShort(d)}</span>
+              <span style="font-size:12px;color:var(--fo-text-3);">${fmtShort(d)}</span>
               ${foIcon('chevD', 'fo-toggle-chev' + (dayExpanded ? ' is-open' : ''))}
             </span>
           </button>
-          <div id="plan-day-${ds}" ${dayExpanded ? '' : 'hidden'}>
+          <div id="plan-day-${ds}" ${dayExpanded ? '' : 'hidden'} style="padding:0 14px 12px;border-top:1px solid var(--fo-line);">
             ${rows}
           </div>
         </div>`;
@@ -8598,9 +8601,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const isPastWeek = weekMonday < planCurrentMonday();
       const emptyText = isPastWeek ? 'Für diese Woche gab es noch keinen Trainingsplan.' : 'Noch kein Trainingsplan angelegt.';
       container.innerHTML = weekHeader.replace('%STATUS%', totalPlanned > 0 ? `${totalDone}/${totalPlanned} Einheiten erledigt` : '') + `
-        ${hasPlan ? '' : `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:14px;">${emptyText}</div>`}
+        ${hasPlan ? '' : `<p class="fo-help" style="margin:0 0 10px;text-align:center;">${emptyText}</p>`}
         ${daysHtml}
-        <button class="btn" onclick="openPlanEditor()" style="width:100%;margin-top:6px;">${foIcon('edit', 'fo-i--sm')} Plan bearbeiten</button>`;
+        <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openPlanEditor()" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg>Plan bearbeiten</button>`;
     }
 
     window.shiftPlanWeek = function(dir) {

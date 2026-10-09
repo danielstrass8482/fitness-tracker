@@ -631,7 +631,13 @@
        (#analyse-composer) klebt sticky am unteren Rand, oberhalb der unteren Navigation. */
     #analyse-tab { max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
-    #analyse-messages { min-height: 40dvh; margin-bottom: 16px; }
+    /* padding-bottom statt margin-bottom: reserviert echten Platz vor dem sticky Composer, auch beim
+       Scrollen ans Dokumentende. Fester Fehlbetrag von 40px zwischen "optischem Ende" und Composer-
+       Oberkante empirisch gemessen (Playwright, 390x844 und 360x780, Composer-Höhe 252-418px,
+       Bericht Teil 0) – unabhängig von Composer-Höhe/Viewport, daher Konstante statt 1:1-Zuschlag.
+       --composer-h (siehe installAnalyseComposerSizeObserver) sorgt dafür, dass der Abstand bei
+       wachsendem Eingabefeld nie kleiner als 16px wird. */
+    #analyse-messages { min-height: 40dvh; padding-bottom: max(16px, calc(var(--composer-h, 252px) - 196px)); }
     #analyse-empty-hint { color: var(--fo-text-3); font-size: 14px; text-align: center; margin: 32px 0; }
 
     .analyse-msg { margin-bottom: 20px; scroll-margin-top: 12px; }
@@ -689,6 +695,7 @@
       min-height: 88px;
       max-height: 40dvh;
       padding: 10px;
+      font: inherit; /* Browser-Default für textarea ist monospace; Kurzform zurücksetzen, daher danach erneut: */
       font-size: 16px;
       line-height: 1.5;
       background: var(--fo-bg);
@@ -897,6 +904,11 @@
         max-width: 100% !important;
         overflow-x: hidden !important;
       }
+      /* KI-Analyse: #analyse-composer gleicht die Nav-Höhe bereits selbst aus (sticky bottom +
+         syncAnalyseComposerOffset) – die generische 80px-Reserve oben wäre hier doppelt gerechnet
+         und erzeugte einen leeren Streifen über der Navigation (Bericht Teil 0b). Nur für diese
+         Ansicht auf das normale Innenpolster zurücksetzen, Grafiken/Dashboard unverändert. */
+      .app-container:has(#analyse-tab.active) { padding-bottom: 12px !important; }
 
       /* Two-column grids → single column */
       [style*="grid-template-columns:1fr 1fr"],
@@ -6214,6 +6226,7 @@
           loadOuraStatus();
         }
         if (target === 'analyse') showAnalyseSubtab();
+        else uninstallAnalyseComposerSizeObserver(); // KI-Analyse-Ansicht verlassen (Bericht Teil 0a)
         if ((target === 'ernaehrung' || target === 'uebersicht') && userId) {
           // Silent background sync for last 2 days
           const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
@@ -6599,6 +6612,8 @@
     // Analyse-Tab: Lade-/Render-Schritte des sichtbaren Unterbereichs (wie bisher beim Öffnen von Dashboard bzw. Analyse)
     function showAnalyseSubtab() {
       if (document.getElementById('dashboard-tab')?.classList.contains('active')) {
+        // Grafiken: KI-Analyse-Ansicht verlassen, Composer-Größenbeobachter abmelden (Bericht Teil 0a)
+        uninstallAnalyseComposerSizeObserver();
         // Re-render dashboard when it becomes visible (canvas needs to be in DOM)
         requestAnimationFrame(() => {
           renderDashboard();
@@ -6608,7 +6623,7 @@
       } else if (userId) {
         updateAnalyseKeyState();
         updateAnalysisContextSizeEstimate();
-        requestAnimationFrame(() => { syncAnalyseComposerOffset(); installAnalyseViewportHandler(); });
+        requestAnimationFrame(() => { syncAnalyseComposerOffset(); installAnalyseViewportHandler(); installAnalyseComposerSizeObserver(); });
       }
     }
 
@@ -7288,6 +7303,29 @@
     }
     window.addEventListener('resize', syncAnalyseComposerOffset);
     window.addEventListener('orientationchange', () => setTimeout(syncAnalyseComposerOffset, 200));
+
+    // Schreibt die tatsächliche (gerenderte) Höhe von #analyse-composer als --composer-h auf das
+    // gemeinsame Elternelement #analyse-tab (CSS-Variablen vererben sich nur an Nachfahren, nicht an
+    // Geschwister) – damit kann #analyse-messages seinen unteren Abstand an der realen Composer-Höhe
+    // ausrichten (wachsendes Textfeld, umbrechende Größenzeile, Querformat), siehe Bericht Teil 0a.
+    // Nur registriert, solange die KI-Analyse-Ansicht aktiv ist (siehe showAnalyseSubtab/Tab-Wechsel).
+    let analyseComposerSizeObserver = null;
+    function installAnalyseComposerSizeObserver() {
+      if (analyseComposerSizeObserver || !window.ResizeObserver) return;
+      const composer = document.getElementById('analyse-composer');
+      const tab = document.getElementById('analyse-tab');
+      if (!composer || !tab) return;
+      analyseComposerSizeObserver = new ResizeObserver(entries => {
+        const h = entries[0].borderBoxSize?.[0]?.blockSize ?? composer.getBoundingClientRect().height;
+        tab.style.setProperty('--composer-h', h + 'px');
+      });
+      analyseComposerSizeObserver.observe(composer);
+    }
+    function uninstallAnalyseComposerSizeObserver() {
+      if (!analyseComposerSizeObserver) return;
+      analyseComposerSizeObserver.disconnect();
+      analyseComposerSizeObserver = null;
+    }
 
     // Hält den Eingabebereich über der eingeblendeten Bildschirmtastatur (visualViewport verkleinert
     // sich dabei, das Layout-Viewport in der Regel nicht). Versatz nur per transform, nur solange

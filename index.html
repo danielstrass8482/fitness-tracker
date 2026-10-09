@@ -2242,8 +2242,14 @@
     // Typ-Icons für Aktivitätszeilen. Ohne passendes Sprite-Icon bleibt das bisherige Emoji (gemeldete Ausnahme).
     const TYP_ICONS = { laufen: 'run', rad: 'bike', rad_indoor: 'bike', rad_ebike: 'ebike', gehen: 'walk', wandern: 'walk', kraft: 'strength', pullups: 'strength', pushups: 'strength', yoga: 'yoga', cardio: 'heart', zirkel: 'circuit' };
     const TYP_EMOJI = { schwimmen: '🏊', lunges: '🦵', terraband_knie: '🦵', crosstraining: '⚡' };
+    // Eigene Übungen (ID-Präfix custom_, siehe window.addCustomType) stehen nicht in TYP_ICONS: Haltezeit-
+    // Übungen (Typ-Dokument kind:'hold', siehe isHoldType) bekommen das plank-Icon, alle anderen strength –
+    // unabhängig vom Namen (kein Namensraten), und auch ohne geladenes Typ-Dokument (dann greift isHoldType's
+    // eigener false-Fallback, siehe dort). Einzige Stelle, die Icons für Aktivitäten/Übungen/Trainingstypen
+    // bestimmt (Übersicht, Gruppen, Training Loggen, Plan) – alle anderen Typen unverändert.
     function typIcon(typ, cls = 'fo-i--sm') {
       if (TYP_ICONS[typ]) return foIcon(TYP_ICONS[typ], cls);
+      if (String(typ || '').startsWith('custom_')) return foIcon(isHoldType(typ) ? 'plank' : 'strength', cls);
       if (TYP_EMOJI[typ]) return `<span aria-hidden="true">${TYP_EMOJI[typ]}</span>`;
       return '';
     }
@@ -7026,7 +7032,9 @@
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
         const oldTypeMap = { 'push': 'pushups', 'pull': 'pullups' };
         const typ = e.typ || oldTypeMap[e.type] || e.type || '';
-        const typeLabel = typeLabels[typ] || customTypeLabel(typ, e);
+        // typeLabels[typ] enthält für vordefinierte Typen das Icon bereits fest im String; eigene
+        // Übungen (customTypeLabel-Zweig) haben dort keines, daher hier wie im Plan über typIcon() ergänzen.
+        const typeLabel = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + customTypeLabel(typ, e);
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
         const variantLabel = e.variantLabel || e.variante || e.variant || '';
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;

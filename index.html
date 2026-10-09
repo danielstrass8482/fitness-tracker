@@ -392,6 +392,9 @@
     /* Auf-/Zuklappen: ein chevD, der zugeklappt nach rechts zeigt */
     .fo-toggle-chev { transform: rotate(-90deg); transition: transform .15s; color: var(--fo-text-3); }
     .fo-toggle-chev.is-open { transform: none; }
+    @media (prefers-reduced-motion: reduce) { .fo-toggle-chev { transition: none; } }
+    /* Trainingsplan: auf-/zuklappbare Tageskopfzeilen (Wochenansicht, nicht der Editor) */
+    .plan-day-header { width: 100%; min-height: var(--fo-tap); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0; margin-bottom: 6px; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
     /* Intervall-Zirkel: Rundenpause zeigt Rundenzeit, Gesamtzeit und Pause-Countdown gleichzeitig */
     .iv-roundpause-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; width: 100%; font-variant-numeric: tabular-nums; }
     .iv-roundpause-col { flex: 1; min-width: 0; text-align: center; }
@@ -8115,6 +8118,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     const PLAN_DEVIATION_LIMIT = 0.2; // >20% Abweichung von Zieldistanz/-dauer → "abgewichen"
 
     let planWeekOffset = 0;   // 0 = aktuelle Woche
+    // Auf-/zugeklappte Tage der Wochenansicht (renderPlanWeek, NICHT der Editor – der hat planOpenDays).
+    // Nur im Speicher, nichts nach Firestore/localStorage geschrieben. Reset auf den Standard (nur heute
+    // offen, sonst nichts) bei Wochenwechsel und Neuladen; bleibt beim Neuzeichnen derselben Woche erhalten.
+    let planExpandedDays = new Set();
+    let planExpandedDaysWeek = null; // Montag der Woche, für die planExpandedDays aktuell gilt
     let planEditMode = false;
     let planDraft = null;     // Arbeitskopie im Editor
     let planOpenDays = new Set(); // im Editor aufgeklappte Tage
@@ -8401,6 +8409,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const navBtn = 'width:40px;height:40px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;cursor:pointer;';
       const weekMonday = planYmd(dates[0]);
       const weekPlan = planForWeek(weekMonday);
+      // Standard-Zustand neu setzen, sobald eine andere Woche angezeigt wird (Wochenwechsel oder Neuladen):
+      // aktuelle Woche → nur der heutige Tag (Berliner Zeit) offen; andere Woche → alle Tage zu.
+      if (planExpandedDaysWeek !== weekMonday) {
+        planExpandedDays = planWeekOffset === 0 ? new Set([berlinTodayStr()]) : new Set();
+        planExpandedDaysWeek = weekMonday;
+      }
       const weekHeader = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
           <button onclick="shiftPlanWeek(-1)" style="${navBtn}">‹</button>
@@ -8503,12 +8517,18 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
         if (!rows) rows = `<div style="padding:8px 0;border-top:1px solid var(--border);font-size:13px;color:var(--muted);">Ruhetag</div>`;
 
+        const dayExpanded = planExpandedDays.has(ds);
         daysHtml += `<div style="background:var(--surface);border:1px solid ${isToday ? 'var(--primary)' : 'var(--border)'};border-radius:12px;padding:12px 14px;margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <button type="button" class="plan-day-header" data-plan-day="${ds}" aria-expanded="${dayExpanded}" aria-controls="plan-day-${ds}" onclick="togglePlanDay(this)">
             <span style="font-weight:600;${isToday ? 'color:var(--primary);' : ''}">${label}${isToday ? ' · Heute' : ''}</span>
-            <span style="font-size:12px;color:var(--muted);">${fmtShort(d)}</span>
+            <span style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:var(--muted);">${fmtShort(d)}</span>
+              ${foIcon('chevD', 'fo-toggle-chev' + (dayExpanded ? ' is-open' : ''))}
+            </span>
+          </button>
+          <div id="plan-day-${ds}" ${dayExpanded ? '' : 'hidden'}>
+            ${rows}
           </div>
-          ${rows}
         </div>`;
       });
 
@@ -8523,6 +8543,20 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.shiftPlanWeek = function(dir) {
       planWeekOffset = dir === 0 ? 0 : planWeekOffset + dir;
       renderTrainingPlan(true);
+    };
+
+    // Tageskopf der Plan-Wochenansicht auf-/zuklappen (B1-B3). Direktes DOM-Umschalten wie toggleActivityGroup/
+    // toggleMeal, kein Neuzeichnen der ganzen Woche nötig – kein Sprung, kein Verlust der Scrollposition.
+    window.togglePlanDay = function(header) {
+      const key = header.dataset.planDay;
+      const content = document.getElementById('plan-day-' + key);
+      if (!content) return;
+      const chev = header.querySelector('.fo-toggle-chev');
+      const willOpen = !!content.hidden;
+      content.hidden = !willOpen;
+      chev?.classList.toggle('is-open', willOpen);
+      if (willOpen) planExpandedDays.add(key); else planExpandedDays.delete(key);
+      header.setAttribute('aria-expanded', String(willOpen));
     };
 
     // ── Editor ────────────────────────────────────────────────────────────────
@@ -8884,6 +8918,16 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         const plan = normalizeTrainingPlan(planDraft);
         const monday = planCurrentMonday();
         await setDoc(doc(userPlanCol(), monday), { ...plan, datum: monday, updatedAt: new Date().toISOString() });
+        // B-c: geänderte Tage der aktuellen Woche in der Wochenansicht aufklappen, falls sie zugeklappt waren
+        // (nur wenn die aktuelle Woche gezeigt wird – der Plan gilt ab planCurrentMonday()).
+        if (planWeekOffset === 0) {
+          const datesThisWeek = planWeekDates(0);
+          PLAN_DAYS.forEach(({ key }, i) => {
+            if (JSON.stringify(trainingPlan[key] || []) !== JSON.stringify(plan[key] || [])) {
+              planExpandedDays.add(planYmd(datesThisWeek[i]));
+            }
+          });
+        }
         trainingPlan = plan;
         trainingPlanFrom = monday;
         cachePut('trainingplan', trainingPlan);

@@ -6190,12 +6190,14 @@
     window.confirmDialogResolve = null;
 
     // icon: Name eines Sprite-Icons; andere Werte (Emoji ohne passendes Icon) werden als Text gezeigt
-    function showConfirm(message, submessage = '', icon = 'trash', okLabel = 'Löschen', okDanger = true) {
+    // cancelLabel: Beschriftung des linken (weißen) Knopfs; Standard "Abbrechen" wie bisher
+    function showConfirm(message, submessage = '', icon = 'trash', okLabel = 'Löschen', okDanger = true, cancelLabel = 'Abbrechen') {
       return new Promise(resolve => {
         const iconEl = document.getElementById('confirm-icon');
         if (/^[A-Za-z]+$/.test(icon)) iconEl.innerHTML = foIcon(icon, 'fo-i--xl'); else iconEl.textContent = icon;
         document.getElementById('confirm-message').textContent = message;
         document.getElementById('confirm-submessage').textContent = submessage;
+        document.getElementById('confirm-cancel').textContent = cancelLabel;
         const okBtn = document.getElementById('confirm-ok');
         okBtn.textContent = okLabel;
         okBtn.style.background = okDanger ? 'var(--danger)' : 'var(--primary)';
@@ -9445,7 +9447,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.requestCloseZirkelTimer = async function() {
       if (!zirkelTimerState) return;
       const submsg = zirkelTimerState.phase === 'done' ? 'Das Ergebnis wird nicht gespeichert.' : 'Dein Fortschritt geht verloren.';
-      const ok = await showConfirm('Zirkel abbrechen?', submsg, 'alertCircle', 'Abbrechen', true);
+      const ok = await showConfirm('Zirkel abbrechen?', submsg, 'alertCircle', 'Zirkel abbrechen', true, 'Weiter trainieren');
       if (ok) closeZirkelTimerModal();
     };
 
@@ -10329,7 +10331,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       // Während der Rückfrage anhalten, damit keine Haltezeit unbemerkt weiterläuft
       const wasPaused = !!t.pausedAtMs;
       if (!wasPaused) window.intervalTogglePause();
-      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', 'alertCircle', 'Abbrechen', true);
+      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', 'alertCircle', 'Zirkel abbrechen', true, 'Weiter trainieren');
       if (intervalTimer !== t) return;
       if (!ok) { if (!wasPaused) window.intervalTogglePause(); return; }
       // Laufende Haltezeit mit der tatsächlich gehaltenen Zeit übernehmen

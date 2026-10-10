@@ -1296,6 +1296,7 @@
             <span id="bar-kcal-label" style="display:none;">0%</span>
           </div>
           <div class="fo-kpi__goal" id="daily-kcal-goal">kcal</div>
+          <div class="fo-help" id="daily-kcal-provisional" hidden>vorläufig</div>
         </div>
         <div class="fo-kpi">
           <div class="fo-kpi__value" id="daily-protein">0g</div>
@@ -1649,6 +1650,12 @@
             <label class="fo-label" for="settings-tdee">Täglicher Kalorienbedarf (TDEE)</label>
             <input class="fo-input" type="number" id="settings-tdee" placeholder="2700">
             <p class="fo-help" style="margin:0;">Wird automatisch aus dem Rechner befüllt, kann aber manuell überschrieben werden</p>
+          </div>
+
+          <div class="fo-field">
+            <label class="fo-label" for="settings-assumed-steps">Angenommene Alltagsschritte (bis echte Schritte vorliegen)</label>
+            <input class="fo-input" type="number" id="settings-assumed-steps" min="0" max="30000" step="500" inputmode="numeric" placeholder="10000">
+            <p class="fo-help" style="margin:0;">Gilt nur für den heutigen Tag, solange noch keine Garmin-Schritte da sind, und wird dann durch die echten Schritte ersetzt.</p>
           </div>
 
           <!-- Makro-Vorschlag -->
@@ -2667,6 +2674,29 @@
       return 0;
     }
 
+    // Platzhalter für die Alltagsschritte des laufenden Tages (Einstellung "Angenommene Alltagsschritte"):
+    // gilt nur für heute (Berlin) und nur, solange für heute keine echten Schritte vorliegen. Sobald Garmin-
+    // Schritte da sind, rechnet das Ziel wieder mit ihnen (nach oben wie nach unten). Vergangene Tage unverändert.
+    const ASSUMED_DAILY_STEPS_DEFAULT = 10000;
+    const ASSUMED_DAILY_STEPS_MAX = 30000;
+
+    // Eingabe/gespeicherter Wert → ganze Zahl 0…MAX; leer, negativ oder nicht numerisch → null (= Standard)
+    function normalizeAssumedDailySteps(value) {
+      if (value === null || value === undefined || String(value).trim() === '') return null;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.min(ASSUMED_DAILY_STEPS_MAX, Math.round(n));
+    }
+
+    function getAssumedDailySteps() {
+      return normalizeAssumedDailySteps(settings?.assumedDailySteps) ?? ASSUMED_DAILY_STEPS_DEFAULT;
+    }
+
+    // Einzige Entscheidung, ob der Platzhalter greift: heute und keine echten Schritte (daySteps aus getKcalStepsForDate)
+    function usesAssumedDailySteps(date, daySteps) {
+      return daySteps <= 0 && date === berlinTodayStr();
+    }
+
     window.calcHistoricalKcalGoal = function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       try {
         const s = settings;
@@ -2701,8 +2731,9 @@
           .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
           .reduce((sum, e) => sum + (e.schritte || 0), 0);
 
-        // Alltagsschritte (Garmin, sonst Oura-Fallback), Aktivitäts-Schritte werden abgezogen
-        const totalSteps = Math.max(0, daySteps - activitySteps);
+        // Alltagsschritte (Garmin, sonst Oura-Fallback), Aktivitäts-Schritte werden abgezogen;
+        // heute ohne echte Schritte: Platzhalter aus den Einstellungen
+        const totalSteps = usesAssumedDailySteps(date, daySteps) ? getAssumedDailySteps() : Math.max(0, daySteps - activitySteps);
         const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);
 
@@ -4750,6 +4781,12 @@
       const todayGoal = todayGoalObj?.total || 0;
       const goalText = todayGoal > 0 ? `Ziel ${fmt(todayGoal)} kcal` : 'kcal';
       document.getElementById('daily-kcal-goal').textContent = goalText;
+      // Hinweis "vorläufig": heute ohne echte Schritte rechnet das Ziel mit dem Platzhalter für die Alltagsschritte
+      const provisionalEl = document.getElementById('daily-kcal-provisional');
+      if (provisionalEl) {
+        const goalDayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
+        provisionalEl.hidden = !(todayGoal > 0 && usesAssumedDailySteps(currentDate, getKcalStepsForDate(currentDate, goalDayLog)));
+      }
 
       // Widget-Daten via Android Bridge aktualisieren (heute + letzte 7 Tage)
       try {
@@ -7253,6 +7290,8 @@
         // Fill form
         if (document.getElementById('settings-tdee')) {
           document.getElementById('settings-tdee').value = settings.tdee || '';
+          const assumedStepsEl = document.getElementById('settings-assumed-steps');
+          if (assumedStepsEl) assumedStepsEl.value = getAssumedDailySteps();
           document.getElementById('settings-protein').value = settings.proteinGoal || '';
           document.getElementById('settings-carbs').value = settings.carbsGoal || '';
           document.getElementById('settings-fat').value = settings.fatGoal || '';
@@ -7335,10 +7374,15 @@
       const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
       const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
       const anthropicApiKey = document.getElementById('settings-anthropic-key')?.value.trim() || '';
+      // Leer/negativ/Text → nicht speichern (es gilt der Standard), über der Grenze → Grenze
+      const assumedDailySteps = normalizeAssumedDailySteps(document.getElementById('settings-assumed-steps')?.value);
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays, recipeDisplay, anthropicApiKey
+        gender, age, height, weight, activityLevel, detailDays, recipeDisplay, anthropicApiKey,
+        ...(assumedDailySteps !== null ? { assumedDailySteps } : {})
       };
+      const assumedStepsEl = document.getElementById('settings-assumed-steps');
+      if (assumedStepsEl) assumedStepsEl.value = getAssumedDailySteps();
 
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');

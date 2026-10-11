@@ -454,7 +454,9 @@
       .iv-timer .fo-timer__next { grid-column: 2; grid-row: 3; align-self: end; margin: var(--fo-s2) var(--fo-s4) 0 0; }
       .iv-timer .fo-timer__controls { grid-column: 2; grid-row: 4; padding: var(--fo-s3) var(--fo-s4) var(--fo-s3) 0; }
       .iv-roundpause-val--pause { font-size: clamp(40px, 18vh, 72px); }
-      .iv-timer-page { justify-content: flex-start; gap: var(--fo-s3); padding-top: var(--fo-s3); }
+      /* padding-top mind. so groß wie der Platzbedarf des Schließen-X oben rechts (iv-timer-close), sonst
+         überlappt die erste Zeile (z.B. Abschluss-Screen) den Button */
+      .iv-timer-page { justify-content: flex-start; gap: var(--fo-s3); padding-top: calc(env(safe-area-inset-top, 0px) + 44px); }
       .iv-page__badge { width: 40px; height: 40px; margin-bottom: 4px; border-radius: 12px; }
       .iv-page__title { font-size: var(--fo-fs-title); line-height: var(--fo-lh-title); }
       .iv-steps { max-height: 30vh; }
@@ -4638,9 +4640,30 @@
         case 'rad_ebike':
         case 'schwimmen':
           return calcActivityKcal(asBase);
+        case 'zirkel':
+          // Neue Einträge (Übungen mit metClass, seit der Intensitätsklassen-Erweiterung) nutzen die
+          // klassenbasierte Berechnung; ältere Zirkel-Einträge ohne metClass bleiben unverändert bei der
+          // bisherigen Pauschale (MET 4.0 auf die Gesamtdauer, Fallthrough zur Standard-Formel unten).
+          if (entry.uebungen?.some(x => x.metClass)) return calcZirkelEntryKcal(entry, weight);
+          break;
       }
       const met = PLAN_MET[entry.typ] ?? PLAN_MET_DEFAULT;
       return hours > 0 ? Math.round(met * weight * hours) : 0;
+    }
+
+    // Zirkel-Kalorien für einen gespeicherten/vorläufigen Eintrag (manuelles Nachtragen, Vorschau, sowie
+    // bei der Aggregation in Statistiken/Kalorienziel): Arbeitszeit je Übung aus den Detail-Zeilen (details),
+    // summiert über Runde + Typ + Variante; ohne Details (Rand-/Altfall) aus uebungen geschätzt.
+    function calcZirkelEntryKcal(entry, weight) {
+      const unit = { runden: entry.runden, pauseSec: entry.pauseSec, prepSec: entry.prepSec, sideSwitchSec: entry.sideSwitchSec, uebungen: entry.uebungen || [] };
+      const details = Array.isArray(entry.details) ? entry.details : null;
+      if (details && details.length) {
+        const workSecFor = (x, r) => details
+          .filter(d => d.round === r && d.typ === x.typ && (d.variant || '') === (x.variant || ''))
+          .reduce((sum, d) => sum + (d.sec || 0), 0);
+        return calcZirkelKcal(unit, weight, workSecFor);
+      }
+      return calcZirkelKcal(unit, weight, x => zirkelEstimateWorkSec(x));
     }
 
     // Aktivitätskalorien für manuell geloggte Einträge (Loggen-Tab): keine Dauer-Eingabe dort,
@@ -8284,18 +8307,100 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     }
 
-    // Dauer je Übung: mode 'time' → holdSec, mode 'reps' → wdh × 3s. Wechselpause (pro Übung, pauseSec)
-    // zählt nach jeder Übung AUSSER der letzten einer Runde (dort gilt stattdessen die Rundenpause).
+    // ── Zirkel: Intensitätsklassen (Kalorien) und perSide-Standardwerte je Übung ───────────────
+    // Drei Klassen × MET, mittel ist der Standard für unbekannte/neue eigene Übungen (siehe zirkelDefaultMetClass).
+    const ZIRKEL_MET_CLASSES = { leicht: 3.0, mittel: 4.0, intensiv: 5.5 };
+    const ZIRKEL_MET_DEFAULT_CLASS = 'mittel';
+    const ZIRKEL_PAUSE_MET = 1.5; // alle Pausen (Vorbereitung, Wechselpausen, Seitenwechsel, Rundenpausen)
+    function zirkelMetForClass(cls) {
+      return ZIRKEL_MET_CLASSES[cls] || ZIRKEL_MET_CLASSES[ZIRKEL_MET_DEFAULT_CLASS];
+    }
+    // Eingebaute Typen mit fester Klasse (unabhängig von der Variante). 'kraft' hat keinen Fix-Wert hier,
+    // weil dort die Variante (Freitext) entscheidet, siehe ZIRKEL_LEICHT_RE/ZIRKEL_INTENSIV_RE unten.
+    const ZIRKEL_TYP_MET_CLASS = { pullups: 'intensiv', pushups: 'intensiv', lunges: 'intensiv', terraband_knie: 'mittel' };
+    // Label-Abgleich (case-insensitiv) für 'kraft'+Variante UND custom_-Typen ohne eigene Katalog-Klasse –
+    // wirkt auf den Anzeigenamen, damit es unabhängig davon funktioniert, ob eine Übung als typ:'kraft' mit
+    // Variantentext oder als eigener custom_-Typ angelegt wurde (siehe Grep-Ergebnis zu Übungsbezeichnern).
+    const ZIRKEL_LEICHT_RE = /bird\s*dog|glute\s*bridge|mobili|dehn/i;
+    const ZIRKEL_INTENSIV_RE = /split\s*squat|squat|pull-?up|push-?up|liegestütz/i;
+    // perSide-Standard: an für Seitplank, Bird Dog, Split Squats, einbeinige Übungen (danach pro Übung änderbar)
+    const ZIRKEL_PERSIDE_RE = /seit.?plank|side.?plank|bird\s*dog|split\s*squat|einbeinig|single.?leg/i;
+
+    function zirkelExerciseLabelFor(typ, variant) {
+      return (planTypLabel(typ) + ' ' + (variant || '')).trim();
+    }
+
+    // Katalog-Standardklasse für eine Übung: fester Typ → eigenes Feld am custom_-Typ-Dokument → Label-Abgleich
+    // → 'mittel'. Wird nur als Vorbelegung genutzt (beim Hinzufügen/Typwechsel); danach frei editierbar und
+    // am jeweiligen Zirkel-Übungsobjekt gespeichert (bleibt beim Verschieben erhalten).
+    function zirkelDefaultMetClass(typ, variant) {
+      if (ZIRKEL_TYP_MET_CLASS[typ]) return ZIRKEL_TYP_MET_CLASS[typ];
+      const custom = String(typ).startsWith('custom_') ? customTrainingTypes.find(t => t.id === typ) : null;
+      if (custom?.metClass) return custom.metClass;
+      const label = zirkelExerciseLabelFor(typ, variant);
+      if (ZIRKEL_LEICHT_RE.test(label)) return 'leicht';
+      if (ZIRKEL_INTENSIV_RE.test(label)) return 'intensiv';
+      return ZIRKEL_MET_DEFAULT_CLASS;
+    }
+
+    function zirkelDefaultPerSide(typ, variant) {
+      const custom = String(typ).startsWith('custom_') ? customTrainingTypes.find(t => t.id === typ) : null;
+      if (custom && 'perSideDefault' in custom) return !!custom.perSideDefault;
+      return ZIRKEL_PERSIDE_RE.test(zirkelExerciseLabelFor(typ, variant));
+    }
+
+    // Geschätzte Arbeitszeit einer Übung in Sekunden (manuelles Nachtragen und Editor-Vorschau; der
+    // Live-Timer nutzt stattdessen die gemessene Zeit). mode 'time': Haltezeit (je Seite ×2 bei perSide).
+    // mode 'reps': 3s/Wdh (ZIRKEL_SEC_PER_WDH), bei perSide-reps ist wdh bereits "je Seite" → ×2.
+    function zirkelEstimateWorkSec(x) {
+      const sides = x.perSide ? 2 : 1;
+      return x.mode === 'time'
+        ? sides * Math.max(0, parseInt(x.holdSec) || 0)
+        : sides * Math.max(0, parseInt(x.wdh) || 0) * ZIRKEL_SEC_PER_WDH;
+    }
+
+    // Gemeinsame Kalorienberechnung für Zirkel (Live-Timer, manuelles Nachtragen, Editor-Vorschau):
+    // Arbeitszeit je Übung × Intensitätsklasse-MET; alle Pausen (Vorbereitung, Wechselpausen, Seitenwechsel,
+    // Rundenpausen) × MET 1.5, bewusst konservativ. workSecFor(x, round, exIdx) liefert die Arbeitszeit einer
+    // Übung in einer Runde in Sekunden (Aufrufer-spezifisch: gemessen bzw. geschätzt, siehe zirkelEstimateWorkSec).
+    function calcZirkelKcal(unit, weight, workSecFor) {
+      const runden = Math.max(0, parseInt(unit.runden) || 0);
+      const uebungen = unit.uebungen || [];
+      if (!runden || !uebungen.length) return 0;
+      const pauseSec = Math.max(0, Number(unit.pauseSec) || 0);
+      const prepSec = Math.max(0, Number(unit.prepSec) || 0);
+      const sideSwitchSec = Math.max(0, Number(unit.sideSwitchSec) || 0);
+      const pauseKcal = sec => sec > 0 ? ZIRKEL_PAUSE_MET * weight * (sec / 3600) : 0;
+      let kcal = pauseKcal(prepSec);
+      for (let r = 1; r <= runden; r++) {
+        uebungen.forEach((x, i) => {
+          const workSec = Math.max(0, workSecFor(x, r, i) || 0);
+          kcal += zirkelMetForClass(x.metClass) * weight * (workSec / 3600);
+          if (x.mode === 'time' && x.perSide) kcal += pauseKcal(sideSwitchSec);
+          const lastEx = i === uebungen.length - 1;
+          if (lastEx && r === runden) return;
+          if (lastEx) kcal += pauseKcal(pauseSec);
+          else kcal += pauseKcal(x.pauseSec);
+        });
+      }
+      return Math.round(kcal);
+    }
+
+    // Dauer je Übung: mode 'time' → Haltezeit (je Seite ×2 bei perSide) + ggf. Seitenwechsel,
+    // mode 'reps' → wdh × 3s (bei perSide ×2). Wechselpause (pro Übung, pauseSec) zählt nach jeder
+    // Übung AUSSER der letzten einer Runde (dort gilt stattdessen die Rundenpause).
     // Gesamt = Vorbereitung + Runden × ΣÜbung je Runde + (Runden − 1) × Rundenpause.
     function calcZirkelDauerMin(z) {
       const runden = Math.max(0, parseInt(z.runden) || 0);
       const pauseSec = Math.max(0, Number(z.pauseSec) || 0); // Rundenpause
       const prepSec = Math.max(0, Number(z.prepSec) || 0);
+      const sideSwitchSec = Math.max(0, Number(z.sideSwitchSec) || 0);
       const uebungen = z.uebungen || [];
       if (runden === 0 || !uebungen.length) return 0;
       let perRoundSec = 0;
       uebungen.forEach((x, i) => {
-        perRoundSec += x.mode === 'time' ? Math.max(0, parseInt(x.holdSec) || 0) : Math.max(0, parseInt(x.wdh) || 0) * ZIRKEL_SEC_PER_WDH;
+        perRoundSec += zirkelEstimateWorkSec(x);
+        if (x.mode === 'time' && x.perSide) perRoundSec += sideSwitchSec;
         if (i < uebungen.length - 1) perRoundSec += Math.max(0, parseInt(x.pauseSec) || 0); // Wechselpause (nicht nach der letzten Übung)
       });
       if (perRoundSec === 0) return 0;
@@ -8303,32 +8408,45 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return Math.ceil(Math.round(sec) / 60);
     }
 
-    // Eine Zirkel-Übung normalisieren: { typ, variant, mode:'time'|'reps', holdSec, wdh, pauseSec }.
-    // legacyModeFallback greift nur, wenn kein mode gespeichert ist (alte Daten): Plan-Zirkel kannte nur
-    // Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time').
+    // Eine Zirkel-Übung normalisieren: { typ, variant, mode:'time'|'reps', holdSec, wdh, pauseSec, perSide,
+    // metClass }. legacyModeFallback greift nur, wenn kein mode gespeichert ist (alte Daten): Plan-Zirkel
+    // kannte nur Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time'). perSide/
+    // metClass fehlen bei alten Daten ebenfalls → Katalog-Standard (perSide: false, siehe 3.1 "alte Übungen
+    // ohne perSide gelten als false"; metClass: zirkelDefaultMetClass).
     function normalizeZirkelUebung(x, legacyModeFallback) {
       const mode = x.mode === 'time' || x.mode === 'reps' ? x.mode : legacyModeFallback;
+      const typ = x.typ || '';
+      const variant = String(x.variant || '').trim();
       return {
-        typ: x.typ || '',
-        variant: String(x.variant || '').trim(),
-        mode,
+        typ, variant, mode,
         holdSec: Math.max(0, parseInt(x.holdSec) || 0),
         wdh: Math.max(0, parseInt(x.wdh) || 0),
-        pauseSec: Math.max(0, Math.round(Number(x.pauseSec) || 0))
+        pauseSec: Math.max(0, Math.round(Number(x.pauseSec) || 0)),
+        perSide: !!x.perSide,
+        metClass: x.metClass === 'leicht' || x.metClass === 'mittel' || x.metClass === 'intensiv' ? x.metClass : zirkelDefaultMetClass(typ, variant)
       };
     }
 
-    // Segmentliste für den Live-Timer (ein Eintrag pro Übung/Pause, in Ablaufreihenfolge).
+    // Segmentliste für den Live-Timer (ein Eintrag pro Übung/Seite/Pause, in Ablaufreihenfolge).
     // dur ist in Sekunden, bei mode 'reps' null (kein automatisches Ende, siehe Live-Timer).
+    // mode 'time' + perSide: zwei 'time'-Segmente (side 'links'/'rechts') mit einem 'sideswitch'-Segment
+    // dazwischen. mode 'reps' + perSide: ein einziges 'reps'-Segment (eine Bestätigung für beide Seiten).
     // Nach der letzten Übung einer Runde: keine Wechselpause, ggf. Rundenpause; nach der letzten Runde: keine Pause.
     function buildZirkelSegments(cfg) {
       const segs = [];
       const uebungen = cfg.uebungen || [];
       const runden = Math.max(0, parseInt(cfg.runden) || 0);
+      const sideSwitchSec = Math.max(0, Number(cfg.sideSwitchSec) || 0);
       if (cfg.prepSec > 0) segs.push({ phase: 'prep', dur: cfg.prepSec, round: 1, exIdx: -1 });
       for (let r = 1; r <= runden; r++) {
         uebungen.forEach((ex, i) => {
-          segs.push({ phase: ex.mode, dur: ex.mode === 'time' ? ex.holdSec : null, round: r, exIdx: i });
+          if (ex.mode === 'time' && ex.perSide) {
+            segs.push({ phase: 'time', dur: ex.holdSec, round: r, exIdx: i, side: 'links' });
+            if (sideSwitchSec > 0) segs.push({ phase: 'sideswitch', dur: sideSwitchSec, round: r, exIdx: i });
+            segs.push({ phase: 'time', dur: ex.holdSec, round: r, exIdx: i, side: 'rechts' });
+          } else {
+            segs.push({ phase: ex.mode, dur: ex.mode === 'time' ? ex.holdSec : null, round: r, exIdx: i });
+          }
           const lastEx = i === uebungen.length - 1;
           if (lastEx && r === runden) return; // nach der letzten Übung der letzten Runde: nichts mehr
           if (lastEx) {
@@ -8353,6 +8471,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
             ? Math.max(0, Math.round(Number(u.pauseSec)))
             : Math.max(0, Math.round((parseFloat(String(u.pauseMin ?? 0).replace(',', '.')) || 0) * 60)),
           prepSec: Math.max(0, Math.round(Number(u.prepSec) || 0)),
+          // Seitenwechsel-Pause (nur bei perSide-Halteübungen genutzt); Standard 5s, auf Zirkelebene einstellbar
+          sideSwitchSec: u.sideSwitchSec != null && u.sideSwitchSec !== '' && !isNaN(Number(u.sideSwitchSec))
+            ? Math.max(0, Math.round(Number(u.sideSwitchSec))) : 5,
           // Alte Plan-Zirkel kannten nur Wiederholungen (kein mode-Feld) → Fallback 'reps'
           uebungen: (Array.isArray(u.uebungen) ? u.uebungen : []).map(x => normalizeZirkelUebung(x, 'reps')),
           notiz: u.notiz || ''
@@ -8507,7 +8628,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     // Zielwert einer Zirkel-Übung: "45 s" (Halten) oder "12×" (Wiederholungen)
     function planUebungValueLabel(x) {
-      return x.mode === 'time' ? `${x.holdSec} s` : `${x.wdh}×`;
+      const val = x.mode === 'time' ? `${x.holdSec} s` : `${x.wdh}×`;
+      return x.perSide ? `${val} je Seite` : val;
     }
 
     // Kurzbeschreibung für die auto-generierte Notiz, z.B. "Push-ups Weit"
@@ -8518,8 +8640,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return x.variant ? name + ' ' + x.variant : name;
     }
 
-    function planZirkelKcal(dauerMin) {
-      return calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(dauerMin) });
+    // Geschätzte Kalorien einer Zirkel-Einheit/Vorlage (Vorschau, nicht gemessen): calcZirkelKcal mit der
+    // Arbeitszeit-Schätzung je Übung (zirkelEstimateWorkSec), gleiche Funktion wie beim Live-Timer/manuellen Nachtragen.
+    function planZirkelKcal(z) {
+      return calcZirkelKcal(z, settings.weight || 75, x => zirkelEstimateWorkSec(x));
     }
 
     // "3 × 12 Wdh" bei gleichen Sets, sonst "12-11-10 Wdh"; plus Pause
@@ -8649,7 +8773,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
             ? `<span class="fo-tag">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
             : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
           const target = isZirkel
-            ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u.dauerMin))} kcal`].join(' · ')
+            ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
             : planTarget(u);
           const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
               <summary style="cursor:pointer;font-size:12px;color:var(--fo-text-3);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
@@ -8813,12 +8937,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function planZirkelSummaryText(z) {
       const dauer = calcZirkelDauerMin(z);
-      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
+      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(z))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
     }
 
     function updatePlanZirkelSummary(key, idx) {
       const el = document.getElementById(`zsum-${key}-${idx}`);
-      if (el) el.textContent = planZirkelSummaryText(planDraft[key][idx]);
+      // innerHTML, nicht textContent: planZirkelSummaryText enthält Icon-Markup (foIcon), keine Nutzereingaben
+      if (el) el.innerHTML = planZirkelSummaryText(planDraft[key][idx]);
     }
 
     // ── Gemeinsamer Zirkel-Editor (Plan-Einheit UND Vorlage) ───────────────────
@@ -8842,7 +8967,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.zirkelField = function(ctx, key, idx, field, value) {
       const z = zirkelCtxUnit(ctx, key, idx);
       if (field === 'runden') z.runden = parseInt(value) || 0;
-      else if (field === 'pauseSec' || field === 'prepSec') z[field] = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
+      else if (field === 'pauseSec' || field === 'prepSec' || field === 'sideSwitchSec') z[field] = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
       else z[field] = value;
       zirkelCtxSummary(ctx, key, idx);
     };
@@ -8856,7 +8981,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         typ, variant: '', mode,
         holdSec: mode === 'time' ? (prev?.holdSec || 30) : 0,
         wdh: mode === 'reps' ? (prev?.wdh || 10) : 0,
-        pauseSec: prev?.pauseSec ?? 0
+        pauseSec: prev?.pauseSec ?? 0,
+        perSide: zirkelDefaultPerSide(typ, ''),
+        metClass: zirkelDefaultMetClass(typ, '')
       });
       zirkelCtxRerender(ctx, key, idx);
     };
@@ -8866,11 +8993,23 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       zirkelCtxRerender(ctx, key, idx);
     };
 
+    // Reihenfolge ändern (Pfeile statt Drag-and-drop, wegen Touch-Konflikten mit dem Scrollen im WebView).
+    // Modus, Werte, perSide und Intensitätsklasse bleiben erhalten (stehen am Übungsobjekt selbst).
+    window.zirkelMoveUebung = function(ctx, key, idx, j, dir) {
+      const list = zirkelCtxUnit(ctx, key, idx).uebungen;
+      const k = j + dir;
+      if (k < 0 || k >= list.length) return;
+      [list[j], list[k]] = [list[k], list[j]];
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
     window.zirkelUebungType = function(ctx, key, idx, j, value) {
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
       x.typ = value;
       x.variant = '';
       x._variantCustom = false;
+      x.perSide = zirkelDefaultPerSide(value, '');
+      x.metClass = zirkelDefaultMetClass(value, '');
       zirkelCtxRerender(ctx, key, idx);
     };
 
@@ -8878,6 +9017,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
       x._variantCustom = value === PLAN_CUSTOM_OPTION;
       x.variant = x._variantCustom ? '' : value;
+      // Katalog-Vorschlag an die Variante anpassen (z.B. "Plank" vs. "Glute Bridge"); bei eigener
+      // Variante (Freitext) bleiben perSide/Klasse unverändert, bis der Freitext feststeht.
+      if (!x._variantCustom) {
+        x.perSide = zirkelDefaultPerSide(x.typ, x.variant);
+        x.metClass = zirkelDefaultMetClass(x.typ, x.variant);
+      }
       zirkelCtxRerender(ctx, key, idx);
     };
 
@@ -8889,6 +9034,18 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       zirkelCtxRerender(ctx, key, idx);
     };
 
+    window.zirkelUebungPerSide = function(ctx, key, idx, j, value) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      x.perSide = !!value;
+      zirkelCtxRerender(ctx, key, idx); // Feldbeschriftungen (Sek./Wdh. "je Seite") ändern sich
+    };
+
+    window.zirkelUebungMetClass = function(ctx, key, idx, j, value) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      if (value === 'leicht' || value === 'mittel' || value === 'intensiv') x.metClass = value;
+      zirkelCtxSummary(ctx, key, idx);
+    };
+
     window.zirkelUebungField = function(ctx, key, idx, j, field, value) {
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
       if (field === 'holdSec' || field === 'wdh') x[field] = parseInt(value) || 0;
@@ -8897,31 +9054,45 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       zirkelCtxSummary(ctx, key, idx);
     };
 
-    // Eine Übungs-Zeile: Typ, Variante, Umschalter Halten/Wdh., Zielwert (Sek. bzw. Wdh.), Wechselpause danach
-    function zirkelUebungRowHtml(ctx, key, idx, x, j, inp) {
+    // Eine Übungs-Zeile: Typ, Verschieben (Pfeile), Variante, Umschalter Halten/Wdh., Zielwert
+    // (Sek. bzw. Wdh., "je Seite" wenn perSide), Wechselpause danach, perSide-Schalter, Intensitätsklasse
+    function zirkelUebungRowHtml(ctx, key, idx, x, j, total, inp) {
       const args = `'${ctx}','${key}',${idx},${j}`;
       return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
-          <div style="display:flex;gap:8px;margin-bottom:6px;">
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
             <select onchange="zirkelUebungType(${args},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
+            <button onclick="zirkelMoveUebung(${args},-1)" ${j === 0 ? 'disabled' : ''} title="Nach oben" aria-label="Nach oben" style="padding:8px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;opacity:${j === 0 ? '.4' : '1'};">${foIcon('arrowUp', 'fo-i--sm')}</button>
+            <button onclick="zirkelMoveUebung(${args},1)" ${j === total - 1 ? 'disabled' : ''} title="Nach unten" aria-label="Nach unten" style="padding:8px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;opacity:${j === total - 1 ? '.4' : '1'};">${foIcon('arrowDown', 'fo-i--sm')}</button>
             <button onclick="zirkelRemoveUebung('${ctx}','${key}',${idx},${j})" title="Übung entfernen" aria-label="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
           </div>
           <select onchange="zirkelUebungVariant(${args},this.value)" style="${inp}margin-bottom:6px;">${planVariantOptions(x)}</select>
           ${x._variantCustom ? `<input type="text" value="${planEsc(x.variant)}" placeholder="Eigene Variante, z.B. Bulgarian Split Squat" oninput="zirkelUebungField(${args},'variant',this.value)" style="${inp}margin-bottom:6px;">` : ''}
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
             <div style="flex:none;display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
               <button type="button" onclick="zirkelUebungMode(${args},'time')" style="padding:7px 12px;border:none;background:${x.mode === 'time' ? 'var(--primary)' : 'none'};color:${x.mode === 'time' ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:600;">Halten</button>
               <button type="button" onclick="zirkelUebungMode(${args},'reps')" style="padding:7px 12px;border:none;background:${x.mode === 'reps' ? 'var(--primary)' : 'none'};color:${x.mode === 'reps' ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:600;">Wdh.</button>
             </div>
             ${x.mode === 'time'
-              ? `<input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.holdSec || ''}" placeholder="Sek." title="Haltezeit (Sek.)" oninput="zirkelUebungField(${args},'holdSec',this.value)" style="${inp}width:76px;flex:none;">`
-              : `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="zirkelUebungField(${args},'wdh',this.value)" style="${inp}width:76px;flex:none;">`}
+              ? `<input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.holdSec || ''}" placeholder="Sek." title="${x.perSide ? 'Haltezeit je Seite (Sek.)' : 'Haltezeit (Sek.)'}" oninput="zirkelUebungField(${args},'holdSec',this.value)" style="${inp}width:76px;flex:none;">`
+              : `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.wdh || ''}" placeholder="Wdh" title="${x.perSide ? 'Wiederholungen je Seite' : 'Wiederholungen pro Runde'}" oninput="zirkelUebungField(${args},'wdh',this.value)" style="${inp}width:76px;flex:none;">`}
             <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.pauseSec || ''}" placeholder="0" title="Wechselpause danach (Sek.), nicht nach der letzten Übung einer Runde" oninput="zirkelUebungField(${args},'pauseSec',this.value)" style="${inp}width:70px;flex:none;">
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;min-height:28px;">
+              <input type="checkbox" ${x.perSide ? 'checked' : ''} onchange="zirkelUebungPerSide(${args},this.checked)" style="width:18px;height:18px;flex:none;">
+              je Seite
+            </label>
+            <select onchange="zirkelUebungMetClass(${args},this.value)" title="Intensitätsklasse für die Kalorienberechnung" style="${inp}width:auto;flex:none;padding:6px 8px;">
+              <option value="leicht"${x.metClass === 'leicht' ? ' selected' : ''}>Leicht</option>
+              <option value="mittel"${x.metClass === 'mittel' ? ' selected' : ''}>Mittel</option>
+              <option value="intensiv"${x.metClass === 'intensiv' ? ' selected' : ''}>Intensiv</option>
+            </select>
           </div>
         </div>`;
     }
 
     function renderZirkelUebungenListHtml(ctx, key, idx, uebungen, inp) {
-      return uebungen.map((x, j) => zirkelUebungRowHtml(ctx, key, idx, x, j, inp)).join('')
+      return uebungen.map((x, j) => zirkelUebungRowHtml(ctx, key, idx, x, j, uebungen.length, inp)).join('')
         + `<button onclick="zirkelAddUebung('${ctx}','${key}',${idx})" style="width:100%;margin-bottom:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Übung</button>`;
     }
 
@@ -8938,6 +9109,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
             <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.pauseSec ?? ''}" oninput="zirkelField('plan','${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
           <div><label style="${lbl}">Vorbereitung (Sek)</label>
             <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.prepSec ?? ''}" oninput="zirkelField('plan','${key}',${idx},'prepSec',this.value)" style="${inp}"></div>
+        </div>
+        <div class="plan-row" style="gap:8px;margin-bottom:8px;">
+          <div><label style="${lbl}">Seitenwechsel (Sek, bei "je Seite")</label>
+            <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${z.sideSwitchSec ?? ''}" oninput="zirkelField('plan','${key}',${idx},'sideSwitchSec',this.value)" style="${inp}"></div>
+          <div></div>
         </div>
         <label style="${lbl}">Übungen</label>
         ${renderZirkelUebungenListHtml('plan', key, idx, z.uebungen, inp)}
@@ -9039,7 +9215,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     window.openPlanEditor = function() {
       planDraft = JSON.parse(JSON.stringify(normalizeTrainingPlan(trainingPlan)));
-      planOpenDays = new Set(PLAN_DAYS.filter(({ key }) => planDraft[key].length > 0).map(({ key }) => key));
+      planOpenDays = new Set(); // alle Wochentage starten zugeklappt; danach wie bisher auf-/zuklappbar
       planEditMode = true;
       renderTrainingPlan(true);
     };
@@ -9056,8 +9232,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     window.planAddZirkel = function(key) {
       planDraft[key].push({
-        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150, prepSec: 0,
-        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 0 }], notiz: ''
+        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150, prepSec: 0, sideSwitchSec: 5,
+        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 0, perSide: false, metClass: zirkelDefaultMetClass('kraft', '') }],
+        notiz: ''
       });
       renderTrainingPlan(true);
     };
@@ -9114,7 +9291,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     // berechnete Dauer ohne Re-render aktualisieren (Fokus behalten)
     function updatePlanStrengthDauer(key, idx) {
       const el = document.getElementById(`udauer-${key}-${idx}`);
-      if (el) el.textContent = planStrengthDauerText(planDraft[key][idx]);
+      // innerHTML, nicht textContent: planStrengthDauerText enthält Icon-Markup (foIcon), keine Nutzereingaben
+      if (el) el.innerHTML = planStrengthDauerText(planDraft[key][idx]);
     }
 
     // Anzahl Sets geändert → Set-Felder neu (vorhandene Werte bleiben, neue = letzter Wert)
@@ -9202,14 +9380,24 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (unit.typ === 'zirkel') {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
         const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
-        const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec }));
-        // Manuell ohne Live-Timer: mode 'time' nimmt die Zielzeit (holdSec), mode 'reps' schätzt 3s/Wdh
+        const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec, perSide: x.perSide, metClass: x.metClass }));
+        // Manuell ohne Live-Timer: mode 'time' nimmt die Zielzeit (holdSec, je Seite bei perSide), mode
+        // 'reps' schätzt 3s/Wdh (ZIRKEL_SEC_PER_WDH), bei perSide-reps ebenfalls je Seite. Gleiche Detail-
+        // Form wie beim Live-Timer: time+perSide zwei Zeilen mit side, reps+perSide eine Zeile mit perSide:true.
         const details = [];
         for (let r = 1; r <= runden; r++) {
-          uebungen.forEach(x => details.push({
-            round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh,
-            sec: x.mode === 'time' ? x.holdSec : x.wdh * ZIRKEL_SEC_PER_WDH
-          }));
+          uebungen.forEach(x => {
+            if (x.mode === 'time' && x.perSide) {
+              details.push({ round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'links' });
+              details.push({ round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'rechts' });
+            } else {
+              details.push({
+                round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh,
+                sec: zirkelEstimateWorkSec(x),
+                ...(x.mode === 'reps' && x.perSide ? { perSide: true } : {})
+              });
+            }
+          });
         }
         // Vorbelegt mit berechneter Dauer, vom User überschreibbar (längere Pausen etc.)
         const dauerMin = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
@@ -9226,6 +9414,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           runden,
           pauseSec,
           prepSec: unit.prepSec,
+          sideSwitchSec: unit.sideSwitchSec,
           uebungen,
           details
         };
@@ -9295,7 +9484,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (!planCompleteCtx.dauerManual) {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
         const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
-        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseSec, prepSec: planCompleteCtx.unit.prepSec, uebungen: planCompleteCtx.unit.uebungen });
+        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseSec, prepSec: planCompleteCtx.unit.prepSec, sideSwitchSec: planCompleteCtx.unit.sideSwitchSec, uebungen: planCompleteCtx.unit.uebungen });
       }
       updatePlanCompletePreview();
     };
@@ -9494,7 +9683,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         segs: buildZirkelSegments(unit), segIdx: -1, segStartMs: null, pausedAtMs: null,
         done: [], startMs: null, elapsedSec: 0,
         wakeTimeoutId: null, lastTickKey: null, wakeLock: null, audioCtx: null, activeTones: [],
-        repLockUntil: 0, finished: false
+        repLockUntil: 0, finished: false,
+        expandedRounds: new Set() // welche Runden in der Rundenpause/Abschluss-Zusammenfassung aufgeklappt sind
       };
       zirkelTimerReturnFocus = document.activeElement;
       renderZirkelTimerIntro();
@@ -9524,6 +9714,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return INTERVAL_PHASES[seg.phase] || { label: '', cls: seg.phase };
     }
 
+    // Übungsname für ein Segment, bei perSide+time mit Seite ("Seitplank (links)")
+    function zirkelSegExerciseLabel(unit, seg) {
+      const label = planUebungLabel(unit.uebungen[seg.exIdx]);
+      return seg.side ? `${label} (${seg.side})` : label;
+    }
+
     // Übungsliste (Intro/Ablauf): Zielwert mode-aware ("45 s" bzw. "12×"), aktuelle/kommende Übung hervorgehoben
     function zirkelExerciseListHtml(unit, highlightIdx) {
       return `<ul class="fo-card fo-list zk-exercises">${unit.uebungen.map((x, i) => `
@@ -9531,19 +9727,56 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           </ul>`;
     }
 
-    // Protokoll der in diesem Lauf abgeschlossenen Übungen (eine Zeile je Übung-Vorkommen)
-    function zirkelDoneListHtml(t) {
-      if (!t.done.length) return '';
-      const row = (label, value) => `<li class="fo-row zk-round"><div class="fo-row__main"><div class="fo-row__title">${label}</div></div><div class="fo-row__end fo-num">${value}</div></li>`;
-      return `<ol class="fo-card fo-list zk-rounds">${t.done.map(h =>
-        row(`Runde ${h.round} · ${planEsc(planTypLabel(h.typ))}${h.variant ? ' · ' + planEsc(h.variant) : ''}`, fmtZirkelTime(h.sec))
-      ).join('')}</ol>`;
+    // Fertige Runden aus done[] gruppieren: [{round, totalSec, items:[...]}], items in Erfassungsreihenfolge
+    function zirkelRoundsFromDone(done) {
+      const byRound = new Map();
+      done.forEach(h => {
+        if (!byRound.has(h.round)) byRound.set(h.round, []);
+        byRound.get(h.round).push(h);
+      });
+      return [...byRound.keys()].sort((a, b) => a - b).map(r => {
+        const items = byRound.get(r);
+        return { round: r, totalSec: items.reduce((sum, h) => sum + h.sec, 0), items };
+      });
     }
 
-    // Neueste Zeile des Protokolls im sichtbaren Bereich halten
-    function zirkelScrollRoundsToEnd() {
-      const wrap = document.querySelector('#zirkel-timer-body .zk-rounds-wrap');
-      if (wrap) wrap.scrollTop = wrap.scrollHeight;
+    // Einzelne Übungszeile innerhalb einer aufgeklappten Runde: bei perSide Zeit/Wdh. je Seite kennzeichnen
+    function zirkelItemLabel(h) {
+      const base = planTypLabel(h.typ) + (h.variant ? ' · ' + h.variant : '');
+      if (h.side) return base + ' (' + (h.side === 'links' ? 'links' : 'rechts') + ')';
+      if (h.perSide) return base + ' (je Seite)';
+      return base;
+    }
+    function zirkelItemValue(h) {
+      return h.mode === 'time' ? fmtZirkelTime(h.sec) : `${h.wdh}× · ${fmtZirkelTime(h.sec)}`;
+    }
+
+    // Eine Runden-Zeile: zugeklappt "Runde N · Gesamtzeit", aufgeklappt zusätzlich jede Übung einzeln
+    function zirkelRoundRowHtml(t, r) {
+      const expanded = t.expandedRounds.has(r.round);
+      const head = `<li class="fo-row zk-round" style="cursor:pointer;" onclick="zirkelToggleRound(${r.round})">
+          <span class="fo-row__icon">${foIcon(expanded ? 'chevD' : 'chevR', 'fo-i--sm')}</span>
+          <div class="fo-row__main"><div class="fo-row__title">Runde ${r.round}</div></div>
+          <div class="fo-row__end fo-num">${fmtZirkelTime(r.totalSec)}</div>
+        </li>`;
+      const items = expanded ? r.items.map(h =>
+        `<li class="fo-row zk-round" style="padding-left:28px;"><div class="fo-row__main"><div class="fo-row__title">${planEsc(zirkelItemLabel(h))}</div></div><div class="fo-row__end fo-num">${zirkelItemValue(h)}</div></li>`
+      ).join('') : '';
+      return head + items;
+    }
+
+    window.zirkelToggleRound = function(round) {
+      const t = zirkelTimerState;
+      if (!t) return;
+      if (t.expandedRounds.has(round)) t.expandedRounds.delete(round); else t.expandedRounds.add(round);
+      if (t.finished) renderZirkelTimerDone(); else renderZirkelTimerRunning();
+    };
+
+    // Abschluss-Screen: alle Runden, Standard zugeklappt (Teil 1.1)
+    function zirkelDoneRoundsHtml(t) {
+      const rounds = zirkelRoundsFromDone(t.done);
+      if (!rounds.length) return '';
+      return `<ol class="fo-card fo-list zk-rounds">${rounds.map(r => zirkelRoundRowHtml(t, r)).join('')}</ol>`;
     }
 
     function renderZirkelTimerIntro() {
@@ -9573,18 +9806,19 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const ph = zirkelPhaseInfo(seg);
       const isReps = seg.phase === 'reps';
       const isExercise = seg.phase === 'time' || seg.phase === 'reps';
-      const exLabel = seg.exIdx >= 0 ? planUebungLabel(unit.uebungen[seg.exIdx]) : '';
-      // Während einer Übung: Vorschau der NÄCHSTEN Übung. Während Pause/Vorbereitung: die KOMMENDE Übung selbst.
+      const exLabel = seg.exIdx >= 0 ? zirkelSegExerciseLabel(unit, seg) : '';
+      // Während einer Übung: Vorschau der NÄCHSTEN Übung. Während Pause/Seitenwechsel/Vorbereitung: die KOMMENDE Übung selbst.
       const upcoming = isExercise
         ? t.segs.slice(t.segIdx + 1).find(s => s.phase === 'time' || s.phase === 'reps')
         : t.segs.slice(t.segIdx).find(s => s.phase === 'time' || s.phase === 'reps');
       const highlightIdx = isExercise ? seg.exIdx : (upcoming ? upcoming.exIdx : -1);
-      const current = isExercise ? exLabel : (upcoming ? `Gleich: ${planEsc(planUebungLabel(unit.uebungen[upcoming.exIdx]))}` : '');
-      const nextText = isExercise ? (upcoming ? `Danach: ${planEsc(planUebungLabel(unit.uebungen[upcoming.exIdx]))}` : 'Letzte Übung') : '';
+      const current = isExercise ? exLabel : (upcoming ? `Gleich: ${planEsc(zirkelSegExerciseLabel(unit, upcoming))}` : '');
+      const nextText = isExercise ? (upcoming ? `Danach: ${planEsc(zirkelSegExerciseLabel(unit, upcoming))}` : 'Letzte Übung') : '';
       const paused = !!t.pausedAtMs;
+      const repsEx = isReps ? unit.uebungen[seg.exIdx] : null;
 
       const centerBlock = isReps
-        ? `<div class="fo-timer__now" style="margin:0;">${unit.uebungen[seg.exIdx].wdh} Wdh.</div>
+        ? `<div class="fo-timer__now" style="margin:0;">${repsEx.wdh} Wdh.${repsEx.perSide ? ' je Seite' : ''}</div>
            <div id="zirkel-remaining" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelElapsedInSegSec(t))}</div>`
         : `<div id="zirkel-remaining" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelRemainingSec(t))}</div>`;
 
@@ -9602,6 +9836,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
              <button class="fo-roundbtn" type="button" onclick="zirkelTimerSkip()"><span class="fo-roundbtn__c">${foIcon('skip', 'fo-i--lg')}</span>Überspringen</button>
            </div>`;
 
+      // Rundenliste: NUR in der Rundenpause, dort ausschließlich die gerade beendete Runde (zugeklappt,
+      // aufklappbar). In Übung, Wechselpause, Seitenwechsel und Vorbereitung keine Liste (Teil 1.2).
+      const justFinished = seg.phase === 'roundpause' ? zirkelRoundsFromDone(t.done).find(r => r.round === seg.round) : null;
+      const roundsBlock = justFinished ? `<div class="zk-rounds-wrap"><ol class="fo-card fo-list zk-rounds">${zirkelRoundRowHtml(t, justFinished)}</ol></div>` : '';
+
       announceZirkelPhase((paused ? 'Pausiert · ' : '') + ph.label);
       setZirkelTimerBody(`
         <div class="fo-timer fo-timer--${ph.cls} iv-timer zk-run">
@@ -9613,19 +9852,28 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           </div>
           ${nextText ? `<div class="fo-timer__next"><div class="fo-timer__nextname">${nextText}</div></div>` : ''}
           ${zirkelExerciseListHtml(unit, highlightIdx)}
-          <div class="zk-rounds-wrap">${zirkelDoneListHtml(t)}</div>
+          ${roundsBlock}
           ${controls}
         </div>`);
-      zirkelScrollRoundsToEnd();
+    }
+
+    // Arbeitszeit je Übung/Runde aus den bereits abgeschlossenen Segmenten (t.done), inkl. beider Seiten bei
+    // time+perSide (zwei done-Einträge mit gleichem round+exIdx, summiert). Gemeinsame Basis für die Vorschau
+    // (renderZirkelTimerDone) und den gespeicherten Eintrag (saveZirkelTimer) – beide zeigen denselben Wert.
+    function zirkelDoneWorkSecFor(t) {
+      return (x, round, exIdx) => t.done
+        .filter(h => h.round === round && h.exIdx === exIdx)
+        .reduce((sum, h) => sum + h.sec, 0);
     }
 
     function renderZirkelTimerDone() {
-      const { unit, elapsedSec } = zirkelTimerState;
-      const kcal = calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(elapsedSec / 60) });
+      const t = zirkelTimerState;
+      const { unit, elapsedSec } = t;
+      const kcal = calcZirkelKcal(unit, settings.weight || 75, zirkelDoneWorkSecFor(t));
       setZirkelTimerBody(`
         <div class="iv-timer-page">
           <h1 class="iv-page__title iv-page__head">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</h1>
-          ${zirkelDoneListHtml(zirkelTimerState) || '<p class="fo-help">Keine Übung absolviert</p>'}
+          ${zirkelDoneRoundsHtml(t) || '<p class="fo-help">Keine Übung absolviert</p>'}
           <div class="zk-done-summary">
             <div class="zk-done-label">Gesamtzeit</div>
             <div id="zirkel-elapsed" class="zk-done-value fo-num">${fmtZirkelTime(elapsedSec)}</div>
@@ -9679,7 +9927,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const seg = t.segs[t.segIdx];
       if (seg.phase !== 'time' && seg.phase !== 'reps') return;
       const ex = t.unit.uebungen[seg.exIdx];
-      t.done.push({ round: seg.round, exIdx: seg.exIdx, typ: ex.typ, variant: ex.variant, mode: ex.mode, wdh: ex.wdh, sec: Math.max(0, Math.round(measuredSec)) });
+      const rec = { round: seg.round, exIdx: seg.exIdx, typ: ex.typ, variant: ex.variant, mode: ex.mode, wdh: ex.wdh, sec: Math.max(0, Math.round(measuredSec)) };
+      if (seg.side) rec.side = seg.side; // mode 'time' + perSide: eine Zeile je Seite
+      if (seg.phase === 'reps' && ex.perSide) rec.perSide = true; // mode 'reps' + perSide: eine Zeile für beide Seiten
+      t.done.push(rec);
     }
 
     // Reine Zustandsänderung (kein Ton/Vibration) – Aufrufer entscheiden je nach Übergang selbst darüber
@@ -9713,14 +9964,18 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return { outcome: t.segs[t.segIdx].phase, crossedCount };
     }
 
-    // Nur in Pause/Rundenpause/Vorbereitung: Zählton 5-4-3-2-1 nur wenn das NÄCHSTE Segment eine Haltezeit ist
+    // Zählton in den letzten Sekunden JEDES automatisch ablaufenden Segments (Halten, Wechselpause,
+    // Rundenpause, Seitenwechsel, Vorbereitung) – unabhängig davon, was danach kommt (Fehlerkorrektur:
+    // vorher piepte die Wechselpause nach einer Reps-Übung gar nicht). Dauer > 5s: letzte 5 Sekunden,
+    // Dauer ≤ 5s: nur letzte 3 Sekunden, Dauer 0: keine Pieps.
     function zirkelMaybePlayCountdownTick(now) {
       const t = zirkelTimerState;
       const seg = t.segs[t.segIdx];
-      if (seg.dur == null || t.segs[t.segIdx + 1]?.phase !== 'time') return;
+      if (seg.dur == null || seg.dur <= 0) return;
+      const tickWindow = seg.dur > 5 ? 5 : 3;
       const endMs = t.segStartMs + seg.dur * 1000;
       const remainingSec = Math.ceil((endMs - now) / 1000);
-      if (remainingSec < 1 || remainingSec > COUNTDOWN_BEEP_SECONDS) return;
+      if (remainingSec < 1 || remainingSec > tickWindow) return;
       const key = t.segIdx + ':' + remainingSec;
       if (t.lastTickKey === key) return;
       t.lastTickKey = key;
@@ -9746,7 +10001,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         zirkelScheduleNextWake();
         return;
       }
-      const prevPhase = seg.phase;
       const { outcome, crossedCount } = zirkelSync(now);
       if (outcome === 'finished') {
         playTimerTone(t, 'finish');
@@ -9754,18 +10008,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         return;
       }
       if (outcome !== 'none') {
-        const singleStep = crossedCount === 1;
-        const leftTime = singleStep && prevPhase === 'time';
-        const enteredTime = outcome === 'time';
-        const enteredReps = outcome === 'reps';
-        if (leftTime) {
-          playTimerTone(t, 'end');
-          if (enteredTime) setTimeout(() => { if (zirkelTimerState === t && !t.pausedAtMs && !t.finished) playTimerTone(t, 'start'); }, 700);
-        } else if (enteredTime) {
-          playTimerTone(t, 'start');
-        }
+        // Einheitlicher Schlusston nur bei einem einzelnen, pünktlichen Wechsel – nach einer Hintergrundphase
+        // (mehrere Segmente auf einmal übersprungen) werden keine verpassten Töne nachgeholt.
+        if (crossedCount === 1) playTimerTone(t, 'start');
         const lagMs = now - t.segStartMs;
-        if (lagMs < 1500) intervalVibrate(enteredTime || enteredReps ? 250 : [120, 80, 120]);
+        if (lagMs < 1500) intervalVibrate(outcome === 'time' || outcome === 'reps' ? 250 : [120, 80, 120]);
       }
       zirkelMaybePlayCountdownTick(now);
       renderZirkelTimerRunning();
@@ -9784,13 +10031,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const first = t.segs[0];
       zirkelEnterSegment(0, t.startMs);
       if (zirkelTimerState !== t || t.finished) return;
-      if (first.phase === 'time') playTimerTone(t, 'start');
       intervalVibrate(first.phase === 'time' || first.phase === 'reps' ? 250 : [120, 80, 120]);
       zirkelScheduleNextWake();
     };
 
     // "Fertig" (nur mode 'reps'): gemessene Zeit seit Beginn der Übung festhalten, danach automatisch die
-    // Wechselpause (falls gesetzt) bzw. direkt die nächste Übung/Rundenpause/der Abschluss.
+    // Wechselpause (falls gesetzt) bzw. direkt die nächste Übung/Rundenpause/der Abschluss. Kein Ton beim
+    // Druck selbst (nur Vibration) – der Schlusston gilt nur für automatisch ablaufende Segmente.
     window.zirkelTimerRepDone = function() {
       const t = zirkelTimerState;
       if (!t || t.finished || t.segIdx < 0) return;
@@ -9804,14 +10051,16 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const nextIdx = t.segIdx + 1;
       const enteredPhase = t.segs[nextIdx]?.phase;
       zirkelEnterSegment(nextIdx, now);
-      if (zirkelTimerState !== t || t.finished) return;
-      if (enteredPhase === 'time') playTimerTone(t, 'start');
+      if (zirkelTimerState !== t) return;
+      if (t.finished) { playTimerTone(t, 'finish'); return; }
       intervalVibrate(enteredPhase === 'time' || enteredPhase === 'reps' ? 250 : [120, 80, 120]);
       zirkelScheduleNextWake();
     };
 
     // Aktuelles Segment vorzeitig beenden (automatische Segmente; 'reps' hat keinen Skip, nur "Fertig").
-    // Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit.
+    // Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit. Zuverlässig ohne nachlaufende
+    // Töne: zirkelClearWake() verhindert einen geplanten Wake-Timeout, cancelTimerTones() schneidet noch
+    // klingende Pieps/Schlusstöne sofort ab.
     window.zirkelTimerSkip = function() {
       const t = zirkelTimerState;
       if (!t || t.finished || t.segIdx < 0) return;
@@ -9825,8 +10074,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (t.pausedAtMs) t.pausedAtMs = now; // bleibt pausiert, am Anfang des nächsten Segments
       const enteredPhase = t.segs[nextIdx]?.phase;
       zirkelEnterSegment(nextIdx, now);
-      if (zirkelTimerState !== t || t.finished) return;
-      if (enteredPhase === 'time') playTimerTone(t, 'start');
+      if (zirkelTimerState !== t) return;
+      if (t.finished) { playTimerTone(t, 'finish'); return; }
+      playTimerTone(t, 'start'); // einheitlicher Schlusston, auch beim manuellen Überspringen
       intervalVibrate(enteredPhase === 'time' || enteredPhase === 'reps' ? 250 : [120, 80, 120]);
       if (!t.pausedAtMs) zirkelScheduleNextWake();
     };
@@ -9901,14 +10151,18 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     };
 
     window.saveZirkelTimer = async function() {
-      if (!zirkelTimerState || !zirkelTimerState.finished) return;
-      const { unit, ds, planUnitId, elapsedSec, done } = zirkelTimerState;
+      const t = zirkelTimerState;
+      if (!t || !t.finished) return;
+      const { unit, ds, planUnitId, elapsedSec, done } = t;
       const zeit = planMinToZeit(elapsedSec / 60);
       const datum = ds || planYmd(new Date());
-      const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec }));
-      // details: eine Zeile je abgeschlossener Übung (Runde, Typ, Variante, mode, Zielwert, gemessene Dauer) –
-      // damit bleibt die Auswertung je Übung (z.B. Plank-Haltezeit über die Zeit) möglich.
-      const details = done.map(h => ({ round: h.round, typ: h.typ, variant: h.variant, mode: h.mode, wdh: h.wdh, sec: h.sec }));
+      const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec, perSide: x.perSide, metClass: x.metClass }));
+      // details: eine Zeile je abgeschlossener Übung/Seite (Runde, Typ, Variante, mode, Zielwert, gemessene
+      // Dauer, bei perSide side bzw. perSide:true) – damit bleibt die Auswertung je Übung über die Zeit möglich.
+      const details = done.map(h => ({
+        round: h.round, typ: h.typ, variant: h.variant, mode: h.mode, wdh: h.wdh, sec: h.sec,
+        ...(h.side ? { side: h.side } : {}), ...(h.perSide ? { perSide: true } : {})
+      }));
       const autoNotiz = `${unit.runden}× ` + uebungen.map(planUebungShort).join(' / ');
       const timeNow = new Date().toTimeString().slice(0, 8);
       const entry = {
@@ -9917,10 +10171,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         notiz: autoNotiz,
         source: 'plan',
         ...(planUnitId ? { planUnitId } : {}),
-        runden: unit.runden, pauseSec: unit.pauseSec, prepSec: unit.prepSec, uebungen, details,
+        runden: unit.runden, pauseSec: unit.pauseSec, prepSec: unit.prepSec, sideSwitchSec: unit.sideSwitchSec, uebungen, details,
         timestamp: datum + 'T' + timeNow
       };
-      entry.act_kcal_calc = calcActivityKcal(entry);
+      // Dieselbe Berechnung wie die Vorschau im Abschluss-Screen (renderZirkelTimerDone, zirkelDoneWorkSecFor) –
+      // garantiert denselben kcal-Wert wie dort angezeigt.
+      entry.act_kcal_calc = calcZirkelKcal(unit, settings.weight || 75, zirkelDoneWorkSecFor(t));
 
       const btn = document.getElementById('zirkel-timer-save-btn');
       if (btn) btn.disabled = true;
@@ -9961,7 +10217,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       time:       { label: 'Halten',       cls: 'hold' }, // Zirkel-Live-Timer: mode 'time' (siehe buildZirkelSegments)
       reps:       { label: 'Wiederholungen', cls: 'reps' }, // Zirkel-Live-Timer: mode 'reps'
       pause:      { label: 'Pause',        cls: 'pause' },
-      roundpause: { label: 'Rundenpause',  cls: 'pause' }
+      roundpause: { label: 'Rundenpause',  cls: 'pause' },
+      sideswitch: { label: 'Seitenwechsel', cls: 'pause' }
     };
 
     // Alte Vorlage (vor dem Zirkel-Umbau): { rounds, roundPauseSec, steps:[{typ, holdSec, pauseSec}] }, reine
@@ -9977,6 +10234,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         runden: Math.max(1, parseInt(isOld ? raw.rounds : raw.runden) || 1),
         pauseSec: Math.max(0, Math.round(Number(isOld ? raw.roundPauseSec : raw.pauseSec) || 0)),
         prepSec: Math.max(0, Math.round(Number(raw.prepSec) || 0)),
+        sideSwitchSec: raw.sideSwitchSec != null && raw.sideSwitchSec !== '' && !isNaN(Number(raw.sideSwitchSec))
+          ? Math.max(0, Math.round(Number(raw.sideSwitchSec))) : 5,
         uebungen: (Array.isArray(srcUebungen) ? srcUebungen : []).map(x => normalizeZirkelUebung(x, isOld ? 'time' : 'reps')),
         updatedAt: raw.updatedAt || null
       };
@@ -9997,8 +10256,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function newZirkelTemplateDraft() {
       return {
-        id: null, name: '', runden: 3, pauseSec: 60, prepSec: 10,
-        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 10 }]
+        id: null, name: '', runden: 3, pauseSec: 60, prepSec: 10, sideSwitchSec: 5,
+        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 10, perSide: false, metClass: zirkelDefaultMetClass('kraft', '') }]
       };
     }
 
@@ -10017,12 +10276,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function zirkelTemplateSummaryText() {
       const dauer = calcZirkelDauerMin(zirkelTemplateDraft);
-      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
+      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(zirkelTemplateDraft))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
     }
 
     function updateZirkelTemplateSummary() {
       const el = document.getElementById('zirkel-template-summary');
-      if (el) el.textContent = zirkelTemplateSummaryText();
+      // innerHTML, nicht textContent: zirkelTemplateSummaryText enthält Icon-Markup (foIcon), keine Nutzereingaben
+      if (el) el.innerHTML = zirkelTemplateSummaryText();
     }
 
     function renderZirkelTemplateEditor() {
@@ -10043,6 +10303,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
             <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${d.pauseSec ?? ''}" oninput="zirkelField('template','',0,'pauseSec',this.value)" style="${inp}"></div>
           <div><label style="${lbl}">Vorbereitung (s)</label>
             <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${d.prepSec ?? ''}" oninput="zirkelField('template','',0,'prepSec',this.value)" style="${inp}"></div>
+        </div>
+        <div class="plan-row" style="gap:8px;margin-bottom:8px;">
+          <div><label style="${lbl}">Seitenwechsel (s, bei "je Seite")</label>
+            <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${d.sideSwitchSec ?? ''}" oninput="zirkelField('template','',0,'sideSwitchSec',this.value)" style="${inp}"></div>
+          <div></div>
         </div>
         <label style="${lbl}">Übungen</label>
         ${renderZirkelUebungenListHtml('template', '', 0, d.uebungen, inp)}
@@ -10142,10 +10407,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     // Töne: [Frequenz Hz, Versatz s, Dauer s, Wellenform, Lautstärke]. "tick" und "start" nutzen die
     // COUNTDOWN_BEEP_SECONDS/BEEP_*-Konstanten oben, damit beide an einer Stelle einstellbar bleiben.
+    // "start": einheitlicher Schlusston für JEDES automatisch ablaufende Segment (Ende Halten, Ende Pause,
+    // Ende Seitenwechsel, Ende Vorbereitung) – energischer/heller/länger als "tick", ersetzt den früheren
+    // separaten, dumpfen Endton der Halteübungen (ehemals eigener Ton "end").
     const INTERVAL_TONES = {
       tick:   [[BEEP_COUNT_HZ, 0, BEEP_COUNT_MS / 1000, 'sine', 0.35]],                         // 5-4-3-2-1, immer gleiche Tonhöhe
-      start:  [[BEEP_GO_HZ, 0, BEEP_GO_MS / 1000, 'square', 0.2]],                               // "Jetzt geht's los": höher, länger, ein Ton
-      end:    [[784, 0, 0.2, 'triangle', 0.45], [392, 0.2, 0.45, 'triangle', 0.45]],             // Ende Halten: unverändert, absteigend
+      start:  [[BEEP_GO_HZ, 0, BEEP_GO_MS / 1000, 'square', 0.2]],                               // Schlusston/"los": höher, länger, ein Ton
       finish: [[523, 0, 0.18, 'sine', 0.35], [659, 0.18, 0.18, 'sine', 0.35], [784, 0.36, 0.18, 'sine', 0.35], [1047, 0.54, 0.7, 'sine', 0.35]]
     };
 
@@ -10271,6 +10538,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           <div class="fo-row__actions">
             <button class="fo-iconbtn" type="button" onclick="startCustomTypeRename(${i})" aria-label="Umbenennen"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg></button>
             <button class="fo-btn fo-btn--sm ${t.kind === 'hold' ? 'fo-btn--primary' : 'fo-btn--secondary'}" type="button" onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
+            <button class="fo-btn fo-btn--sm fo-btn--secondary" type="button" onclick="cycleCustomTypeMetClass(${i})" title="Intensitätsklasse (MET) für den Zirkel wechseln: Standard für diese Übung in neuen Zirkel-Übungszeilen">${planEsc(t.metClass || ZIRKEL_MET_DEFAULT_CLASS)}</button>
             <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="removeCustomType(${i})" aria-label="Entfernen"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg></button>
           </div>
         </div>
@@ -10337,6 +10605,26 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         showToast(kind === 'hold' ? `${t.label}: Haltezeit` : `${t.label}: Wiederholungen`, 'ok');
       } catch (e) {
         console.error('Toggle hold type error:', e);
+        showToast('Speichern fehlgeschlagen', 'bad');
+      }
+    };
+
+    // Intensitätsklasse (MET) als Katalog-Standard für den Zirkel: nur die Vorbelegung neuer Zirkel-
+    // Übungszeilen dieses Typs (zirkelDefaultMetClass); bereits angelegte Zirkel-Übungen bleiben unverändert.
+    window.cycleCustomTypeMetClass = async function(index) {
+      const t = customTrainingTypes[index];
+      if (!t) return;
+      const order = ['leicht', 'mittel', 'intensiv'];
+      const cur = order.includes(t.metClass) ? t.metClass : ZIRKEL_MET_DEFAULT_CLASS;
+      const metClass = order[(order.indexOf(cur) + 1) % order.length];
+      try {
+        await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, metClass }, { merge: true });
+        t.metClass = metClass;
+        cachePut('customTrainingTypes', customTrainingTypes);
+        renderCustomTypes();
+        showToast(`${t.label}: ${metClass}`, 'ok');
+      } catch (e) {
+        console.error('Toggle metClass error:', e);
         showToast('Speichern fehlgeschlagen', 'bad');
       }
     };

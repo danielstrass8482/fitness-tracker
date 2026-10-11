@@ -353,7 +353,7 @@
     .fo-nav__item.is-active,.fo-nav__item[aria-current="page"]{color:var(--fo-primary)}
     .fo-nav__item.is-active .fo-nav__pill,.fo-nav__item[aria-current="page"] .fo-nav__pill{background:var(--fo-primary-tint)}
 
-    /* ---------- INTERVALL-ZIRKEL (Vollbild) ---------- */
+    /* ---------- ZIRKEL LIVE-TIMER (Vollbild) ---------- */
     .fo-timer{display:flex;flex-direction:column;background:var(--fo-surface);min-height:100%}
     .fo-timer__top{display:flex;align-items:center;gap:8px;padding:4px 4px 4px var(--fo-s4);min-height:52px}
     .fo-timer__count{flex:1;display:flex;gap:16px;font:650 var(--fo-fs-body)/var(--fo-lh-body) var(--fo-font);color:var(--fo-text-2);font-variant-numeric:tabular-nums}
@@ -363,10 +363,12 @@
     .fo-timer__center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:var(--fo-s6) var(--fo-s4)}
     .fo-phase{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border-radius:var(--fo-r-pill);font:700 18px/24px var(--fo-font);letter-spacing:.08em;text-transform:uppercase}
     .fo-phase--hold{background:var(--fo-activity-tint);color:var(--fo-activity-strong)}
+    .fo-phase--reps{background:var(--fo-primary-tint);color:var(--fo-primary)} /* Zirkel-Live-Timer: mode 'reps' (Stoppuhr + "Fertig") */
     .fo-phase--pause{background:var(--fo-primary-tint);color:var(--fo-primary)}
     .fo-phase--prep{background:var(--fo-surface-2);color:var(--fo-text-2)}
     .fo-timer__time{font:700 var(--fo-fs-timer)/1 var(--fo-font);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--fo-text)}
     .fo-timer--hold .fo-timer__time{color:var(--fo-activity)}
+    .fo-timer--reps .fo-timer__time{color:var(--fo-primary)}
     .fo-timer--pause .fo-timer__time{color:var(--fo-primary)}
     .fo-timer__phasebar{width:100%;max-width:320px}
     .fo-timer--hold .fo-timer__phasebar>span{background:var(--fo-activity)}
@@ -1232,8 +1234,7 @@
 
           <div style="display:flex;flex-direction:column;gap:8px;">
             <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveTrainingEntry()">Training speichern</button>
-            <button id="zirkel-adhoc-log-btn" class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openZirkelAdhocPicker()" style="display:none;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Ad-hoc Zirkel starten</button>
-            <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openIntervalConfig()"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-clock"/></svg>Intervall-Zirkel</button>
+            <button id="zirkel-start-btn" class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="openZirkelPicker()"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Zirkel starten</button>
           </div>
           </div>
         </div>
@@ -2010,45 +2011,40 @@
     </div>
   </div>
 
-  <!-- Ad-hoc Zirkel: welchen Plan-Zirkel starten -->
+  <!-- Zirkel starten: Plan-Zirkel (je Tag) oder gespeicherte Vorlage auswählen, oder neue Vorlage anlegen -->
   <div id="zirkel-adhoc-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)document.getElementById('zirkel-adhoc-modal').style.display='none'">
     <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
       <div class="fo-sheet__grab"></div>
       <div class="fo-sheet__head" style="border-bottom:0;">
-        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Ad-hoc Zirkel starten</h1>
+        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Zirkel starten</h1>
       </div>
       <div class="fo-sheet__body" style="padding-top:4px;">
-        <div class="fo-select"><select id="zirkel-adhoc-select" aria-label="Zirkel-Vorlage"></select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+        <div class="fo-select"><select id="zirkel-adhoc-select" aria-label="Zirkel" onchange="updateZirkelPickerButtons()"></select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
       </div>
       <div class="fo-sheet__foot" style="padding-bottom:max(var(--fo-s3), env(safe-area-inset-bottom, var(--fo-s3)));">
         <button class="fo-btn fo-btn--secondary" type="button" onclick="document.getElementById('zirkel-adhoc-modal').style.display='none'">Abbrechen</button>
-        <button class="fo-btn fo-btn--primary" type="button" onclick="startZirkelAdhoc()"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>
+        <button id="zirkel-picker-edit-btn" class="fo-btn fo-btn--secondary" type="button" onclick="editZirkelFromPicker()" style="display:none;"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg>Bearbeiten</button>
+        <button id="zirkel-picker-start-btn" class="fo-btn fo-btn--primary" type="button" onclick="startZirkelFromPicker()"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>
       </div>
     </div>
   </div>
 
-  <!-- Zirkel Live-Timer (Kraft-Zirkel): Vollbild-Dialog (.fo-timer), legt sich über die App während ein Zirkel läuft -->
-  <div id="zirkel-timer-modal" class="iv-timer-modal" role="dialog" aria-modal="true" aria-label="Zirkel" tabindex="-1" style="display:none;">
-    <button class="fo-iconbtn iv-timer-close" type="button" onclick="requestCloseZirkelTimer()" aria-label="Schließen"><svg class="fo-i fo-i--lg" aria-hidden="true"><use href="#i-close"/></svg></button>
-    <div id="zirkel-timer-body" class="iv-timer-body"></div>
-  </div>
-
-  <!-- Intervall-Zirkel konfigurieren (Haltezeit-Schritte mit Pausen, Vorlagen) -->
-  <div id="interval-config-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
+  <!-- Zirkel-Vorlage anlegen/bearbeiten (Runden, Rundenpause, Vorbereitung, Übungen mit Halten/Wdh.) -->
+  <div id="zirkel-template-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;max-height:92vh;">
       <div class="fo-sheet__grab"></div>
       <div class="fo-sheet__head" style="border-bottom:0;">
-        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-clock"/></svg>Intervall-Zirkel</h1>
+        <h1 class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Zirkel-Vorlage</h1>
       </div>
-      <div id="interval-config-body" style="display:flex;flex-direction:column;flex:1;min-height:0;"></div>
+      <div id="zirkel-template-body" style="display:flex;flex-direction:column;flex:1;min-height:0;"></div>
     </div>
   </div>
 
-  <!-- Intervall-Zirkel Ablauf: Vollbild-Dialog (.fo-timer), legt sich über die App -->
-  <div id="interval-timer-modal" class="iv-timer-modal" role="dialog" aria-modal="true" aria-label="Intervall-Zirkel" tabindex="-1" style="display:none;">
-    <button class="fo-iconbtn iv-timer-close" type="button" onclick="requestCloseIntervalTimer()" aria-label="Schließen"><svg class="fo-i fo-i--lg" aria-hidden="true"><use href="#i-close"/></svg></button>
-    <div id="iv-phase-live" class="fo-sr" aria-live="polite"></div>
-    <div id="interval-timer-body" class="iv-timer-body"></div>
+  <!-- Zirkel Live-Timer: Vollbild-Dialog (.fo-timer), legt sich über die App während ein Zirkel läuft -->
+  <div id="zirkel-timer-modal" class="iv-timer-modal" role="dialog" aria-modal="true" aria-label="Zirkel" tabindex="-1" style="display:none;">
+    <button class="fo-iconbtn iv-timer-close" type="button" onclick="requestCloseZirkelTimer()" aria-label="Schließen"><svg class="fo-i fo-i--lg" aria-hidden="true"><use href="#i-close"/></svg></button>
+    <div id="zk-phase-live" class="fo-sr" aria-live="polite"></div>
+    <div id="zirkel-timer-body" class="iv-timer-body"></div>
   </div>
 
   <!-- Kopieren Modal -->
@@ -6164,9 +6160,8 @@
       'barcode-container',
       'confirm-dialog',
       'zirkel-adhoc-modal',
-      'zirkel-timer-modal',
-      'interval-timer-modal',
-      'interval-config-modal'
+      'zirkel-template-modal',
+      'zirkel-timer-modal'
     ];
 
     // Wenn ein Modal geöffnet wird, pushState damit Back-Button es schließen kann
@@ -6193,11 +6188,6 @@
           // (User bricht die Abfrage ab), funktioniert der nächste Back-Druck wieder normal.
           pushModalState();
           window.requestCloseZirkelTimer();
-        }
-        else if (openModal === 'interval-timer-modal') {
-          // Wie beim Zirkel-Timer: History-Eintrag wiederherstellen, Abbruch erst nach Rückfrage
-          pushModalState();
-          window.requestCloseIntervalTimer();
         }
         else document.getElementById(openModal).style.display = 'none';
       } else {
@@ -6620,7 +6610,7 @@
           return;
         }
         if (!isSwipeDateArea()) return;
-        if (intervalTimer) return; // Zirkel-Timer läuft
+        if (zirkelTimerState) return; // Zirkel-Timer läuft
         if (isAnyModalOpen()) return;
         const t = e.touches[0];
         if (t.clientX < SWIPE_EDGE_PX || t.clientX > window.innerWidth - SWIPE_EDGE_PX) return; // Randzone
@@ -8294,14 +8284,61 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     }
 
-    // Dauer = ceil((Runden × Σ(Wdh × 3s) + (Runden − 1) × Pause) / 60) Minuten
+    // Dauer je Übung: mode 'time' → holdSec, mode 'reps' → wdh × 3s. Wechselpause (pro Übung, pauseSec)
+    // zählt nach jeder Übung AUSSER der letzten einer Runde (dort gilt stattdessen die Rundenpause).
+    // Gesamt = Vorbereitung + Runden × ΣÜbung je Runde + (Runden − 1) × Rundenpause.
     function calcZirkelDauerMin(z) {
       const runden = Math.max(0, parseInt(z.runden) || 0);
-      const pauseSec = Math.max(0, Number(z.pauseSec) || 0);
-      const wdhSum = (z.uebungen || []).reduce((sum, x) => sum + Math.max(0, parseInt(x.wdh) || 0), 0);
-      if (runden === 0 || wdhSum === 0) return 0;
-      const sec = runden * wdhSum * ZIRKEL_SEC_PER_WDH + (runden - 1) * pauseSec;
+      const pauseSec = Math.max(0, Number(z.pauseSec) || 0); // Rundenpause
+      const prepSec = Math.max(0, Number(z.prepSec) || 0);
+      const uebungen = z.uebungen || [];
+      if (runden === 0 || !uebungen.length) return 0;
+      let perRoundSec = 0;
+      uebungen.forEach((x, i) => {
+        perRoundSec += x.mode === 'time' ? Math.max(0, parseInt(x.holdSec) || 0) : Math.max(0, parseInt(x.wdh) || 0) * ZIRKEL_SEC_PER_WDH;
+        if (i < uebungen.length - 1) perRoundSec += Math.max(0, parseInt(x.pauseSec) || 0); // Wechselpause (nicht nach der letzten Übung)
+      });
+      if (perRoundSec === 0) return 0;
+      const sec = prepSec + runden * perRoundSec + (runden - 1) * pauseSec;
       return Math.ceil(Math.round(sec) / 60);
+    }
+
+    // Eine Zirkel-Übung normalisieren: { typ, variant, mode:'time'|'reps', holdSec, wdh, pauseSec }.
+    // legacyModeFallback greift nur, wenn kein mode gespeichert ist (alte Daten): Plan-Zirkel kannte nur
+    // Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time').
+    function normalizeZirkelUebung(x, legacyModeFallback) {
+      const mode = x.mode === 'time' || x.mode === 'reps' ? x.mode : legacyModeFallback;
+      return {
+        typ: x.typ || '',
+        variant: String(x.variant || '').trim(),
+        mode,
+        holdSec: Math.max(0, parseInt(x.holdSec) || 0),
+        wdh: Math.max(0, parseInt(x.wdh) || 0),
+        pauseSec: Math.max(0, Math.round(Number(x.pauseSec) || 0))
+      };
+    }
+
+    // Segmentliste für den Live-Timer (ein Eintrag pro Übung/Pause, in Ablaufreihenfolge).
+    // dur ist in Sekunden, bei mode 'reps' null (kein automatisches Ende, siehe Live-Timer).
+    // Nach der letzten Übung einer Runde: keine Wechselpause, ggf. Rundenpause; nach der letzten Runde: keine Pause.
+    function buildZirkelSegments(cfg) {
+      const segs = [];
+      const uebungen = cfg.uebungen || [];
+      const runden = Math.max(0, parseInt(cfg.runden) || 0);
+      if (cfg.prepSec > 0) segs.push({ phase: 'prep', dur: cfg.prepSec, round: 1, exIdx: -1 });
+      for (let r = 1; r <= runden; r++) {
+        uebungen.forEach((ex, i) => {
+          segs.push({ phase: ex.mode, dur: ex.mode === 'time' ? ex.holdSec : null, round: r, exIdx: i });
+          const lastEx = i === uebungen.length - 1;
+          if (lastEx && r === runden) return; // nach der letzten Übung der letzten Runde: nichts mehr
+          if (lastEx) {
+            if (cfg.pauseSec > 0) segs.push({ phase: 'roundpause', dur: cfg.pauseSec, round: r, exIdx: i });
+          } else if (ex.pauseSec > 0) {
+            segs.push({ phase: 'pause', dur: ex.pauseSec, round: r, exIdx: i });
+          }
+        });
+      }
+      return segs;
     }
 
     function normalizePlanUnit(u) {
@@ -8315,11 +8352,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           pauseSec: u.pauseSec != null && u.pauseSec !== '' && !isNaN(Number(u.pauseSec))
             ? Math.max(0, Math.round(Number(u.pauseSec)))
             : Math.max(0, Math.round((parseFloat(String(u.pauseMin ?? 0).replace(',', '.')) || 0) * 60)),
-          uebungen: (Array.isArray(u.uebungen) ? u.uebungen : []).map(x => ({
-            typ: x.typ || '',
-            variant: String(x.variant || '').trim(),
-            wdh: Math.max(0, parseInt(x.wdh) || 0)
-          })),
+          prepSec: Math.max(0, Math.round(Number(u.prepSec) || 0)),
+          // Alte Plan-Zirkel kannten nur Wiederholungen (kein mode-Feld) → Fallback 'reps'
+          uebungen: (Array.isArray(u.uebungen) ? u.uebungen : []).map(x => normalizeZirkelUebung(x, 'reps')),
           notiz: u.notiz || ''
         };
         z.dauerMin = calcZirkelDauerMin(z);
@@ -8470,6 +8505,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return planTypLabel(x.typ) + (x.variant ? ' · ' + x.variant : '');
     }
 
+    // Zielwert einer Zirkel-Übung: "45 s" (Halten) oder "12×" (Wiederholungen)
+    function planUebungValueLabel(x) {
+      return x.mode === 'time' ? `${x.holdSec} s` : `${x.wdh}×`;
+    }
+
     // Kurzbeschreibung für die auto-generierte Notiz, z.B. "Push-ups Weit"
     const ZIRKEL_SHORT_NAMES = { terraband_knie: 'Terraband' };
     function planUebungShort(x) {
@@ -8545,16 +8585,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return { result, extra };
     }
 
-    // Ad-hoc-Zirkel-Button im Loggen-Tab nur zeigen, wenn der Plan mind. einen Zirkel enthält
-    function updateZirkelAdhocVisibility() {
-      const btn = document.getElementById('zirkel-adhoc-log-btn');
-      if (!btn) return;
-      const hasZirkel = PLAN_DAYS.some(({ key }) => (trainingPlan[key] || []).some(u => u.typ === 'zirkel'));
-      btn.style.display = hasZirkel ? '' : 'none';
-    }
-
     function renderTrainingPlan(force) {
-      updateZirkelAdhocVisibility();
       const container = document.getElementById('training-plan-container');
       if (!container) return;
       // Nur rendern wenn sichtbar; Editor nicht durch Hintergrund-Sync zurücksetzen
@@ -8622,7 +8653,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
             : planTarget(u);
           const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
               <summary style="cursor:pointer;font-size:12px;color:var(--fo-text-3);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
-              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('')}
+              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;">${planUebungValueLabel(x)} ${planEsc(planUebungLabel(x))}</div>`).join('')}
             </details>` : '';
           const deviated = matchStatus === 'deviated';
           let left, status = '';
@@ -8782,12 +8813,116 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function planZirkelSummaryText(z) {
       const dauer = calcZirkelDauerMin(z);
-      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Wiederholungen eintragen`;
+      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
     }
 
     function updatePlanZirkelSummary(key, idx) {
       const el = document.getElementById(`zsum-${key}-${idx}`);
       if (el) el.textContent = planZirkelSummaryText(planDraft[key][idx]);
+    }
+
+    // ── Gemeinsamer Zirkel-Editor (Plan-Einheit UND Vorlage) ───────────────────
+    // ctx: 'plan' (key/idx = Tag/Index in planDraft) oder 'template' (key/idx ungenutzt, '' / 0),
+    // mutiert direkt das Zirkel-Objekt (planDraft[key][idx] bzw. zirkelTemplateDraft).
+    function zirkelCtxUnit(ctx, key, idx) {
+      return ctx === 'plan' ? planDraft[key][idx] : zirkelTemplateDraft;
+    }
+    function zirkelCtxRerender(ctx, key, idx) {
+      if (ctx === 'plan') renderTrainingPlan(true); else renderZirkelTemplateEditor();
+    }
+    function zirkelCtxSummary(ctx, key, idx) {
+      if (ctx === 'plan') updatePlanZirkelSummary(key, idx); else updateZirkelTemplateSummary();
+    }
+
+    function defaultZirkelModeForTyp(typ) {
+      return isHoldType(typ) ? 'time' : 'reps';
+    }
+
+    // Runden/Rundenpause/Vorbereitung/Notiz (bzw. Name einer Vorlage): kein Re-render, nur Zusammenfassung aktualisieren
+    window.zirkelField = function(ctx, key, idx, field, value) {
+      const z = zirkelCtxUnit(ctx, key, idx);
+      if (field === 'runden') z.runden = parseInt(value) || 0;
+      else if (field === 'pauseSec' || field === 'prepSec') z[field] = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
+      else z[field] = value;
+      zirkelCtxSummary(ctx, key, idx);
+    };
+
+    window.zirkelAddUebung = function(ctx, key, idx) {
+      const list = zirkelCtxUnit(ctx, key, idx).uebungen;
+      const prev = list[list.length - 1];
+      const typ = prev?.typ || 'kraft';
+      const mode = prev?.mode || defaultZirkelModeForTyp(typ);
+      list.push({
+        typ, variant: '', mode,
+        holdSec: mode === 'time' ? (prev?.holdSec || 30) : 0,
+        wdh: mode === 'reps' ? (prev?.wdh || 10) : 0,
+        pauseSec: prev?.pauseSec ?? 0
+      });
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    window.zirkelRemoveUebung = function(ctx, key, idx, j) {
+      zirkelCtxUnit(ctx, key, idx).uebungen.splice(j, 1);
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    window.zirkelUebungType = function(ctx, key, idx, j, value) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      x.typ = value;
+      x.variant = '';
+      x._variantCustom = false;
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    window.zirkelUebungVariant = function(ctx, key, idx, j, value) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      x._variantCustom = value === PLAN_CUSTOM_OPTION;
+      x.variant = x._variantCustom ? '' : value;
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    // mode umschaltet das Zielfeld (Sek./Wdh.) → neu zeichnen
+    window.zirkelUebungMode = function(ctx, key, idx, j, mode) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      if (!x || x.mode === mode) return;
+      x.mode = mode;
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    window.zirkelUebungField = function(ctx, key, idx, j, field, value) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      if (field === 'holdSec' || field === 'wdh') x[field] = parseInt(value) || 0;
+      else if (field === 'pauseSec') x.pauseSec = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
+      else x[field] = value;
+      zirkelCtxSummary(ctx, key, idx);
+    };
+
+    // Eine Übungs-Zeile: Typ, Variante, Umschalter Halten/Wdh., Zielwert (Sek. bzw. Wdh.), Wechselpause danach
+    function zirkelUebungRowHtml(ctx, key, idx, x, j, inp) {
+      const args = `'${ctx}','${key}',${idx},${j}`;
+      return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <select onchange="zirkelUebungType(${args},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
+            <button onclick="zirkelRemoveUebung('${ctx}','${key}',${idx},${j})" title="Übung entfernen" aria-label="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
+          </div>
+          <select onchange="zirkelUebungVariant(${args},this.value)" style="${inp}margin-bottom:6px;">${planVariantOptions(x)}</select>
+          ${x._variantCustom ? `<input type="text" value="${planEsc(x.variant)}" placeholder="Eigene Variante, z.B. Bulgarian Split Squat" oninput="zirkelUebungField(${args},'variant',this.value)" style="${inp}margin-bottom:6px;">` : ''}
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div style="flex:none;display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              <button type="button" onclick="zirkelUebungMode(${args},'time')" style="padding:7px 12px;border:none;background:${x.mode === 'time' ? 'var(--primary)' : 'none'};color:${x.mode === 'time' ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:600;">Halten</button>
+              <button type="button" onclick="zirkelUebungMode(${args},'reps')" style="padding:7px 12px;border:none;background:${x.mode === 'reps' ? 'var(--primary)' : 'none'};color:${x.mode === 'reps' ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:600;">Wdh.</button>
+            </div>
+            ${x.mode === 'time'
+              ? `<input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.holdSec || ''}" placeholder="Sek." title="Haltezeit (Sek.)" oninput="zirkelUebungField(${args},'holdSec',this.value)" style="${inp}width:76px;flex:none;">`
+              : `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="zirkelUebungField(${args},'wdh',this.value)" style="${inp}width:76px;flex:none;">`}
+            <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.pauseSec || ''}" placeholder="0" title="Wechselpause danach (Sek.), nicht nach der letzten Übung einer Runde" oninput="zirkelUebungField(${args},'pauseSec',this.value)" style="${inp}width:70px;flex:none;">
+          </div>
+        </div>`;
+    }
+
+    function renderZirkelUebungenListHtml(ctx, key, idx, uebungen, inp) {
+      return uebungen.map((x, j) => zirkelUebungRowHtml(ctx, key, idx, x, j, inp)).join('')
+        + `<button onclick="zirkelAddUebung('${ctx}','${key}',${idx})" style="width:100%;margin-bottom:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Übung</button>`;
     }
 
     function renderPlanZirkelEditor(key, idx, z, inp, lbl) {
@@ -8798,28 +8933,17 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         </div>
         <div class="plan-row" style="gap:8px;margin-bottom:8px;">
           <div><label style="${lbl}">Runden</label>
-            <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${z.runden ?? ''}" oninput="planZirkelField('${key}',${idx},'runden',this.value)" style="${inp}"></div>
-          <div><label style="${lbl}">Pause zw. Runden (Sek)</label>
-            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.pauseSec ?? ''}" oninput="planZirkelField('${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
+            <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${z.runden ?? ''}" oninput="zirkelField('plan','${key}',${idx},'runden',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Rundenpause (Sek)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.pauseSec ?? ''}" oninput="zirkelField('plan','${key}',${idx},'pauseSec',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Vorbereitung (Sek)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${z.prepSec ?? ''}" oninput="zirkelField('plan','${key}',${idx},'prepSec',this.value)" style="${inp}"></div>
         </div>
-        <label style="${lbl}">Übungen</label>`;
-      z.uebungen.forEach((x, j) => {
-        html += `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
-          <div style="display:flex;gap:8px;margin-bottom:6px;">
-            <select onchange="planZirkelUebungType('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
-            <button onclick="planZirkelRemoveUebung('${key}',${idx},${j})" title="Übung entfernen" aria-label="Übung entfernen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <select onchange="planZirkelUebungVariant('${key}',${idx},${j},this.value)" style="${inp}flex:1;">${planVariantOptions(x)}</select>
-            <input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" value="${x.wdh || ''}" placeholder="Wdh" title="Wiederholungen pro Runde" oninput="planZirkelUebungField('${key}',${idx},${j},'wdh',this.value)" style="${inp}width:80px;">
-          </div>
-          ${x._variantCustom ? `<input type="text" value="${planEsc(x.variant)}" placeholder="Eigene Variante, z.B. Bulgarian Split Squat" oninput="planZirkelUebungField('${key}',${idx},${j},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}
-        </div>`;
-      });
-      html += `<button onclick="planZirkelAddUebung('${key}',${idx})" style="width:100%;margin-bottom:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Übung</button>
+        <label style="${lbl}">Übungen</label>
+        ${renderZirkelUebungenListHtml('plan', key, idx, z.uebungen, inp)}
         <div id="zsum-${key}-${idx}" style="font-size:13px;color:var(--fo-text);margin-bottom:8px;">${planZirkelSummaryText(z)}</div>
         <div><label style="${lbl}">Notiz (optional)</label>
-          <input type="text" value="${planEsc(z.notiz)}" oninput="planZirkelField('${key}',${idx},'notiz',this.value)" style="${inp}"></div>
+          <input type="text" value="${planEsc(z.notiz)}" oninput="zirkelField('plan','${key}',${idx},'notiz',this.value)" style="${inp}"></div>
       </div>`;
       return html;
     }
@@ -8932,50 +9056,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     window.planAddZirkel = function(key) {
       planDraft[key].push({
-        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150,
-        uebungen: [{ typ: 'kraft', variant: '', wdh: 10 }], notiz: ''
+        id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150, prepSec: 0,
+        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 0 }], notiz: ''
       });
       renderTrainingPlan(true);
-    };
-
-    // Runden/Pause/Notiz: kein Re-render (Fokus behalten), nur Dauer-Anzeige aktualisieren
-    window.planZirkelField = function(key, idx, field, value) {
-      const z = planDraft[key][idx];
-      if (field === 'runden') z.runden = parseInt(value) || 0;
-      else if (field === 'pauseSec') z.pauseSec = Math.max(0, Math.round(parseFloat(String(value).replace(',', '.')) || 0));
-      else z[field] = value;
-      updatePlanZirkelSummary(key, idx);
-    };
-
-    window.planZirkelAddUebung = function(key, idx) {
-      planDraft[key][idx].uebungen.push({ typ: 'kraft', variant: '', wdh: 10 });
-      renderTrainingPlan(true);
-    };
-
-    window.planZirkelRemoveUebung = function(key, idx, j) {
-      planDraft[key][idx].uebungen.splice(j, 1);
-      renderTrainingPlan(true);
-    };
-
-    window.planZirkelUebungType = function(key, idx, j, value) {
-      const x = planDraft[key][idx].uebungen[j];
-      x.typ = value;
-      x.variant = '';
-      x._variantCustom = false;
-      renderTrainingPlan(true);
-    };
-
-    window.planZirkelUebungVariant = function(key, idx, j, value) {
-      const x = planDraft[key][idx].uebungen[j];
-      x._variantCustom = value === PLAN_CUSTOM_OPTION;
-      x.variant = x._variantCustom ? '' : value;
-      renderTrainingPlan(true);
-    };
-
-    window.planZirkelUebungField = function(key, idx, j, field, value) {
-      const x = planDraft[key][idx].uebungen[j];
-      x[field] = field === 'wdh' ? (parseInt(value) || 0) : value;
-      updatePlanZirkelSummary(key, idx);
     };
 
     window.planAddUnit = function(key) {
@@ -9056,7 +9140,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         for (const u of planDraft[key]) {
           if (u.typ === 'zirkel') {
             if (!(parseInt(u.runden) >= 1)) { showToast(`${label}: Zirkel braucht mind. 1 Runde`, 'bad'); return; }
-            if (!u.uebungen.some(x => parseInt(x.wdh) > 0)) { showToast(`${label}: Zirkel braucht Übungen mit Wiederholungen`, 'bad'); return; }
+            if (!u.uebungen.some(x => (x.mode === 'time' ? parseInt(x.holdSec) : parseInt(x.wdh)) > 0)) { showToast(`${label}: Zirkel braucht Übungen mit Haltezeit oder Wiederholungen`, 'bad'); return; }
             continue;
           }
           if (u.typ !== PLAN_CUSTOM_OPTION) continue;
@@ -9118,7 +9202,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (unit.typ === 'zirkel') {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
         const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
-        const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, wdh: x.wdh }));
+        const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec }));
+        // Manuell ohne Live-Timer: mode 'time' nimmt die Zielzeit (holdSec), mode 'reps' schätzt 3s/Wdh
+        const details = [];
+        for (let r = 1; r <= runden; r++) {
+          uebungen.forEach(x => details.push({
+            round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh,
+            sec: x.mode === 'time' ? x.holdSec : x.wdh * ZIRKEL_SEC_PER_WDH
+          }));
+        }
         // Vorbelegt mit berechneter Dauer, vom User überschreibbar (längere Pausen etc.)
         const dauerMin = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
         const userNotiz = document.getElementById('plan-complete-notiz').value.trim();
@@ -9133,7 +9225,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           planUnitId: unit.id,
           runden,
           pauseSec,
-          uebungen
+          prepSec: unit.prepSec,
+          uebungen,
+          details
         };
       }
       const dauer = parseFloat(String(document.getElementById('plan-complete-dauer').value).replace(',', '.')) || 0;
@@ -9173,7 +9267,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       planCompleteCtx.dauerManual = false;
       if (isZirkel) {
         document.getElementById('plan-complete-zirkel-list').innerHTML = unit.uebungen
-          .map(x => `<div style="padding:2px 0;">${x.wdh}× ${planEsc(planUebungLabel(x))}</div>`).join('');
+          .map(x => `<div style="padding:2px 0;">${planUebungValueLabel(x)} ${planEsc(planUebungLabel(x))}</div>`).join('');
         document.getElementById('plan-complete-runden').value = unit.runden;
         document.getElementById('plan-complete-pause').value = unit.pauseSec;
       }
@@ -9201,7 +9295,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       if (!planCompleteCtx.dauerManual) {
         const runden = Math.max(1, parseInt(document.getElementById('plan-complete-runden').value) || 1);
         const pauseSec = Math.max(0, Math.round(parseFloat(String(document.getElementById('plan-complete-pause').value).replace(',', '.')) || 0));
-        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseSec, uebungen: planCompleteCtx.unit.uebungen });
+        document.getElementById('plan-complete-dauer').value = calcZirkelDauerMin({ runden, pauseSec, prepSec: planCompleteCtx.unit.prepSec, uebungen: planCompleteCtx.unit.uebungen });
       }
       updatePlanCompletePreview();
     };
@@ -9341,34 +9435,66 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       startZirkelTimerModal(unit, ds, unitId);
     };
 
-    window.openZirkelAdhocPicker = function() {
+    // Einheitlicher Einstieg "Zirkel starten": Plan-Zirkel (alle Tage) + gespeicherte Vorlagen in einer
+    // Liste. Plan-Einheiten starten wie bisher ad-hoc (ds/planUnitId null, siehe startZirkelTimerModal) –
+    // sie haken keinen bestimmten Kalendertag ab, sie liefern nur die Übungsdefinition.
+    window.openZirkelPicker = function() {
       const options = [];
       PLAN_DAYS.forEach(({ key, label }) => {
         (trainingPlan[key] || []).forEach(u => {
-          if (u.typ === 'zirkel') options.push({ unit: u, label: `${label}: ${planZirkelAdhocLabel(u)}` });
+          if (u.typ === 'zirkel') options.push({ type: 'plan', unit: u, label: `${label}: ${planZirkelAdhocLabel(u)}` });
         });
       });
-      if (!options.length) { showToast('Kein Zirkel im Trainingsplan angelegt', 'bad'); return; }
-      window._zirkelAdhocOptions = options;
-      document.getElementById('zirkel-adhoc-select').innerHTML = options.map((o, i) => `<option value="${i}">${planEsc(o.label)}</option>`).join('');
+      const planCount = options.length;
+      intervalTemplates.forEach(t => options.push({ type: 'tpl', id: t.id, label: t.name || 'Ohne Namen' }));
+      if (!options.length) { openZirkelTemplateEditor(null); return; }
+      window._zirkelPickerOptions = options;
+      let html = '';
+      if (planCount) html += `<optgroup label="Aus deinem Plan">` + options.slice(0, planCount).map((o, i) => `<option value="${i}">${planEsc(o.label)}</option>`).join('') + `</optgroup>`;
+      if (options.length > planCount) html += `<optgroup label="Vorlagen">` + options.slice(planCount).map((o, i) => `<option value="${planCount + i}">${planEsc(o.label)}</option>`).join('') + `</optgroup>`;
+      html += `<option value="new">+ Neue Vorlage anlegen</option>`;
+      document.getElementById('zirkel-adhoc-select').innerHTML = html;
+      updateZirkelPickerButtons();
       pushModalState();
       document.getElementById('zirkel-adhoc-modal').style.display = 'flex';
     };
 
-    window.startZirkelAdhoc = function() {
-      const idx = parseInt(document.getElementById('zirkel-adhoc-select').value);
-      const opt = (window._zirkelAdhocOptions || [])[idx];
-      document.getElementById('zirkel-adhoc-modal').style.display = 'none';
-      if (!opt) return;
-      startZirkelTimerModal(opt.unit, null, null);
+    // Zeigt "Bearbeiten" nur für eine ausgewählte Vorlage (Plan-Zirkel wird im Plan-Editor bearbeitet)
+    window.updateZirkelPickerButtons = function() {
+      const val = document.getElementById('zirkel-adhoc-select').value;
+      const opt = val !== 'new' ? (window._zirkelPickerOptions || [])[parseInt(val)] : null;
+      document.getElementById('zirkel-picker-edit-btn').style.display = opt?.type === 'tpl' ? '' : 'none';
     };
+
+    window.editZirkelFromPicker = function() {
+      const val = document.getElementById('zirkel-adhoc-select').value;
+      const opt = (window._zirkelPickerOptions || [])[parseInt(val)];
+      if (!opt || opt.type !== 'tpl') return;
+      document.getElementById('zirkel-adhoc-modal').style.display = 'none';
+      openZirkelTemplateEditor(opt.id);
+    };
+
+    window.startZirkelFromPicker = function() {
+      const val = document.getElementById('zirkel-adhoc-select').value;
+      document.getElementById('zirkel-adhoc-modal').style.display = 'none';
+      if (val === 'new') { openZirkelTemplateEditor(null); return; }
+      const opt = (window._zirkelPickerOptions || [])[parseInt(val)];
+      if (!opt) return;
+      if (opt.type === 'plan') { startZirkelTimerModal(opt.unit, null, null); return; }
+      const tpl = intervalTemplates.find(t => t.id === opt.id);
+      if (!tpl) return;
+      startZirkelTimerModal({ ...tpl, notiz: tpl.name || '' }, null, null);
+    };
+
+    const ZIRKEL_REP_TAP_LOCK_MS = 500; // Doppeltipp-Schutz für "Fertig" (mode 'reps')
 
     function startZirkelTimerModal(unit, ds, planUnitId) {
       zirkelTimerState = {
         unit, ds: ds || null, planUnitId: planUnitId || null,
-        phase: 'intro', currentRound: 0, elapsedSec: 0,
-        startMs: null, roundStartMs: null, roundMs: [], pauseEndMs: null,
-        wakeTimeoutId: null, lastTickKey: null, wakeLock: null, audioCtx: null, activeTones: []
+        segs: buildZirkelSegments(unit), segIdx: -1, segStartMs: null, pausedAtMs: null,
+        done: [], startMs: null, elapsedSec: 0,
+        wakeTimeoutId: null, lastTickKey: null, wakeLock: null, audioCtx: null, activeTones: [],
+        repLockUntil: 0, finished: false
       };
       zirkelTimerReturnFocus = document.activeElement;
       renderZirkelTimerIntro();
@@ -9388,38 +9514,33 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       setTimerBody('zirkel-timer-modal', 'zirkel-timer-body', html);
     }
 
-    // Laufende Rundenzeit, Summe der Rundenzeiten ("Gesamt", ohne Pausen) und Pausen-Restzeit – alles aus Zeitstempeln
-    function zirkelRoundSec(now = Date.now()) {
-      const t = zirkelTimerState;
-      return t.roundStartMs == null ? 0 : Math.floor(Math.max(0, now - t.roundStartMs) / 1000);
+    // Phasenwechsel einmal ansagen (eigene, unsichtbare Live-Region; die Restzeit selbst ist nicht live)
+    function announceZirkelPhase(text) {
+      const live = document.getElementById('zk-phase-live');
+      if (live && live.textContent !== text) live.textContent = text;
     }
 
-    function zirkelTotalSec(withLive, now = Date.now()) {
-      const t = zirkelTimerState;
-      return t.roundMs.reduce((sum, ms) => sum + Math.floor(ms / 1000), 0) + (withLive ? zirkelRoundSec(now) : 0);
+    function zirkelPhaseInfo(seg) {
+      return INTERVAL_PHASES[seg.phase] || { label: '', cls: seg.phase };
     }
 
-    function zirkelPauseRemainingSec(now = Date.now()) {
-      return Math.max(0, Math.ceil((zirkelTimerState.pauseEndMs - now) / 1000));
-    }
-
-    function zirkelExerciseListHtml(unit) {
-      return `<ul class="fo-card fo-list zk-exercises">${unit.uebungen.map(x => `
-            <li class="fo-row zk-exercise"><span class="fo-row__icon">${foIcon('strength', 'fo-i--sm')}</span><div class="fo-row__main"><div class="fo-row__title">${planEsc(planUebungLabel(x))} · ${x.wdh} Wdh</div></div></li>`).join('')}
+    // Übungsliste (Intro/Ablauf): Zielwert mode-aware ("45 s" bzw. "12×"), aktuelle/kommende Übung hervorgehoben
+    function zirkelExerciseListHtml(unit, highlightIdx) {
+      return `<ul class="fo-card fo-list zk-exercises">${unit.uebungen.map((x, i) => `
+            <li class="fo-row zk-exercise"${i === highlightIdx ? ' style="font-weight:700;"' : ''}><span class="fo-row__icon">${foIcon(x.mode === 'time' ? 'clock' : 'strength', 'fo-i--sm')}</span><div class="fo-row__main"><div class="fo-row__title">${planEsc(planUebungLabel(x))} · ${planUebungValueLabel(x)}</div></div></li>`).join('')}
           </ul>`;
     }
 
-    // Rundenliste: fertige Runden, ggf. die laufende Runde (zählt live), darunter "Gesamt"
-    function zirkelRoundListHtml(withLive) {
-      const t = zirkelTimerState;
-      const row = (label, value, cls = '', id = '') =>
-        `<li class="fo-row zk-round${cls}"><div class="fo-row__main"><div class="fo-row__title">${label}</div></div><div${id ? ` id="${id}"` : ''} class="fo-row__end fo-num">${value}</div></li>`;
-      const done = t.roundMs.map((ms, i) => row(`Runde ${i + 1}`, fmtZirkelTime(Math.floor(ms / 1000)))).join('');
-      const live = withLive ? row(`Runde ${t.currentRound}`, fmtZirkelTime(zirkelRoundSec()), ' zk-round--live', 'zirkel-round-live') : '';
-      return `<ol class="fo-card fo-list zk-rounds">${done}${live}${row('Gesamt', fmtZirkelTime(zirkelTotalSec(withLive)), ' zk-round--total', 'zirkel-total')}</ol>`;
+    // Protokoll der in diesem Lauf abgeschlossenen Übungen (eine Zeile je Übung-Vorkommen)
+    function zirkelDoneListHtml(t) {
+      if (!t.done.length) return '';
+      const row = (label, value) => `<li class="fo-row zk-round"><div class="fo-row__main"><div class="fo-row__title">${label}</div></div><div class="fo-row__end fo-num">${value}</div></li>`;
+      return `<ol class="fo-card fo-list zk-rounds">${t.done.map(h =>
+        row(`Runde ${h.round} · ${planEsc(planTypLabel(h.typ))}${h.variant ? ' · ' + planEsc(h.variant) : ''}`, fmtZirkelTime(h.sec))
+      ).join('')}</ol>`;
     }
 
-    // Neueste Zeile der Rundenliste im sichtbaren Bereich halten
+    // Neueste Zeile des Protokolls im sichtbaren Bereich halten
     function zirkelScrollRoundsToEnd() {
       const wrap = document.querySelector('#zirkel-timer-body .zk-rounds-wrap');
       if (wrap) wrap.scrollTop = wrap.scrollHeight;
@@ -9427,51 +9548,73 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function renderZirkelTimerIntro() {
       const { unit } = zirkelTimerState;
+      const meta = [`${unit.runden} Runde${unit.runden === 1 ? '' : 'n'}`];
+      if (unit.pauseSec > 0) meta.push(`${planFmtPause(unit.pauseSec)} Rundenpause`);
+      if (unit.prepSec > 0) meta.push(`${unit.prepSec}s Vorbereitung`);
       setZirkelTimerBody(`
         <div class="iv-timer-page">
           <div class="iv-page__head">
             <div class="iv-page__badge">${foIcon('circuit', 'fo-i--xl')}</div>
             <h1 class="iv-page__title">${planEsc(unit.notiz || 'Zirkel')}</h1>
-            <p class="iv-page__meta fo-num">${unit.runden} Runde${unit.runden === 1 ? '' : 'n'} · ${planFmtPause(unit.pauseSec)} Pause</p>
+            <p class="iv-page__meta fo-num">${meta.join(' · ')}</p>
           </div>
-          ${zirkelExerciseListHtml(unit)}
+          ${zirkelExerciseListHtml(unit, -1)}
           <button class="fo-btn fo-btn--primary fo-btn--block iv-start" type="button" onclick="zirkelTimerBegin()">${foIcon('play', 'fo-i--lg', true)}Start</button>
         </div>`);
     }
 
-    function renderZirkelTimerExercise() {
-      const { unit, currentRound } = zirkelTimerState;
-      const isLast = currentRound >= unit.runden;
-      setZirkelTimerBody(`
-        <div class="fo-timer fo-timer--hold zk-run">
-          <div class="fo-timer__top"><div class="fo-timer__count"><span>Runde ${currentRound} von ${unit.runden}</span></div></div>
-          <div class="fo-timer__center zk-center">
-            <div id="zirkel-round-time" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelRoundSec())}</div>
-          </div>
-          ${zirkelExerciseListHtml(unit)}
-          <div class="zk-rounds-wrap">${zirkelRoundListHtml(true)}</div>
-          <div class="zk-controls">
-            <button id="zirkel-round-done-btn" class="fo-btn fo-btn--primary fo-btn--block zk-done-btn" type="button" onclick="zirkelTimerRoundDone()">${foIcon('check')}${isLast ? 'Letzte Runde fertig' : 'Runde fertig'}</button>
-          </div>
-        </div>`);
-      zirkelScrollRoundsToEnd();
-    }
+    // Laufender Ablauf: pro Segment (Vorbereitung/Halten/Wiederholungen/Wechselpause/Rundenpause) dieselbe
+    // Vollbild-Ansicht, Mitte je nach mode Countdown (time/pause/roundpause/prep) oder Stoppuhr + Zielwert (reps).
+    function renderZirkelTimerRunning() {
+      const t = zirkelTimerState;
+      if (!t || t.finished || t.segIdx < 0) return;
+      const seg = t.segs[t.segIdx];
+      const unit = t.unit;
+      const ph = zirkelPhaseInfo(seg);
+      const isReps = seg.phase === 'reps';
+      const isExercise = seg.phase === 'time' || seg.phase === 'reps';
+      const exLabel = seg.exIdx >= 0 ? planUebungLabel(unit.uebungen[seg.exIdx]) : '';
+      // Während einer Übung: Vorschau der NÄCHSTEN Übung. Während Pause/Vorbereitung: die KOMMENDE Übung selbst.
+      const upcoming = isExercise
+        ? t.segs.slice(t.segIdx + 1).find(s => s.phase === 'time' || s.phase === 'reps')
+        : t.segs.slice(t.segIdx).find(s => s.phase === 'time' || s.phase === 'reps');
+      const highlightIdx = isExercise ? seg.exIdx : (upcoming ? upcoming.exIdx : -1);
+      const current = isExercise ? exLabel : (upcoming ? `Gleich: ${planEsc(planUebungLabel(unit.uebungen[upcoming.exIdx]))}` : '');
+      const nextText = isExercise ? (upcoming ? `Danach: ${planEsc(planUebungLabel(unit.uebungen[upcoming.exIdx]))}` : 'Letzte Übung') : '';
+      const paused = !!t.pausedAtMs;
 
-    function renderZirkelTimerPause() {
-      const { unit, currentRound } = zirkelTimerState;
-      const nextIsLast = currentRound + 1 >= unit.runden;
+      const centerBlock = isReps
+        ? `<div class="fo-timer__now" style="margin:0;">${unit.uebungen[seg.exIdx].wdh} Wdh.</div>
+           <div id="zirkel-remaining" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelElapsedInSegSec(t))}</div>`
+        : `<div id="zirkel-remaining" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelRemainingSec(t))}</div>`;
+
+      const controls = isReps
+        ? `<div class="zk-controls">
+             <div style="display:flex;gap:16px;justify-content:center;">
+               <button class="fo-roundbtn fo-roundbtn--danger" type="button" onclick="requestCloseZirkelTimer()"><span class="fo-roundbtn__c">${foIcon('close', 'fo-i--lg')}</span>Abbrechen</button>
+               <button class="fo-roundbtn" type="button" onclick="zirkelTimerTogglePause()"><span class="fo-roundbtn__c">${paused ? foIcon('play', 'fo-i--lg', true) : foIcon('pause', 'fo-i--lg')}</span>${paused ? 'Weiter' : 'Pause'}</button>
+             </div>
+             <button id="zirkel-rep-done-btn" class="fo-btn fo-btn--primary fo-btn--block zk-done-btn" type="button" onclick="zirkelTimerRepDone()" ${paused ? 'disabled' : ''}>${foIcon('check')}Fertig</button>
+           </div>`
+        : `<div class="fo-timer__controls">
+             <button class="fo-roundbtn fo-roundbtn--danger" type="button" onclick="requestCloseZirkelTimer()"><span class="fo-roundbtn__c">${foIcon('close', 'fo-i--lg')}</span>Abbrechen</button>
+             <button class="fo-roundbtn fo-roundbtn--main" type="button" onclick="zirkelTimerTogglePause()"><span class="fo-roundbtn__c">${paused ? foIcon('play', 'fo-i--xl', true) : foIcon('pause', 'fo-i--xl')}</span>${paused ? 'Weiter' : 'Pause'}</button>
+             <button class="fo-roundbtn" type="button" onclick="zirkelTimerSkip()"><span class="fo-roundbtn__c">${foIcon('skip', 'fo-i--lg')}</span>Überspringen</button>
+           </div>`;
+
+      announceZirkelPhase((paused ? 'Pausiert · ' : '') + ph.label);
       setZirkelTimerBody(`
-        <div class="fo-timer fo-timer--pause zk-run">
-          <div class="fo-timer__top"><div class="fo-timer__count"><span>Pause · Runde ${currentRound} fertig</span></div></div>
+        <div class="fo-timer fo-timer--${ph.cls} iv-timer zk-run">
+          <div class="fo-timer__top"><div class="fo-timer__count"><span>Runde ${seg.round} von ${unit.runden}</span></div></div>
           <div class="fo-timer__center zk-center">
-            <div id="zirkel-pause-countdown" class="fo-timer__time" role="timer" aria-live="off">${fmtZirkelTime(zirkelPauseRemainingSec())}</div>
+            <span class="fo-phase fo-phase--${ph.cls}">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</span>
+            ${centerBlock}
+            <p class="fo-timer__now">${current ? planEsc(current) : ''}</p>
           </div>
-          ${zirkelExerciseListHtml(unit)}
-          <div class="zk-rounds-wrap">${zirkelRoundListHtml(false)}</div>
-          <div class="zk-controls">
-            <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="zirkelTimerSkipPause()">Pause überspringen</button>
-            <button id="zirkel-round-done-btn" class="fo-btn fo-btn--primary fo-btn--block zk-done-btn" type="button" disabled>${foIcon('check')}${nextIsLast ? 'Letzte Runde fertig' : 'Runde fertig'}</button>
-          </div>
+          ${nextText ? `<div class="fo-timer__next"><div class="fo-timer__nextname">${nextText}</div></div>` : ''}
+          ${zirkelExerciseListHtml(unit, highlightIdx)}
+          <div class="zk-rounds-wrap">${zirkelDoneListHtml(t)}</div>
+          ${controls}
         </div>`);
       zirkelScrollRoundsToEnd();
     }
@@ -9479,11 +9622,10 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function renderZirkelTimerDone() {
       const { unit, elapsedSec } = zirkelTimerState;
       const kcal = calcActivityKcal({ typ: 'zirkel', source: 'plan', zeit: planMinToZeit(elapsedSec / 60) });
-      // Rundenliste mit "Gesamt" (ohne Pausen); darunter wie bisher "Gesamtzeit" (mit Pausen) = gespeicherter Wert samt kcal
       setZirkelTimerBody(`
         <div class="iv-timer-page">
           <h1 class="iv-page__title iv-page__head">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</h1>
-          ${zirkelRoundListHtml(false)}
+          ${zirkelDoneListHtml(zirkelTimerState) || '<p class="fo-help">Keine Übung absolviert</p>'}
           <div class="zk-done-summary">
             <div class="zk-done-label">Gesamtzeit</div>
             <div id="zirkel-elapsed" class="zk-done-value fo-num">${fmtZirkelTime(elapsedSec)}</div>
@@ -9497,51 +9639,89 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         </div>`);
     }
 
+    // Restzeit (automatische Segmente) bzw. verstrichene Zeit (mode 'reps', keine feste Dauer) aus Zeitstempeln
+    function zirkelRemainingSec(t, now = Date.now()) {
+      const seg = t.segs[t.segIdx];
+      const ref = t.pausedAtMs || now;
+      return Math.max(0, (t.segStartMs + seg.dur * 1000 - ref) / 1000);
+    }
+
+    function zirkelElapsedInSegSec(t, now = Date.now()) {
+      return Math.max(0, ((t.pausedAtMs || now) - t.segStartMs) / 1000);
+    }
+
     function zirkelClearWake() {
       const t = zirkelTimerState;
       if (t?.wakeTimeoutId != null) { clearTimeout(t.wakeTimeoutId); t.wakeTimeoutId = null; }
     }
 
-    // Zielt auf die nächste Sekundengrenze: in der Runde die der Rundenzeit, in der Pause die der Restzeit
+    // Zielt auf die nächste volle Sekunde: bei automatischen Segmenten die Restzeit, bei 'reps' nur für die
+    // live mitlaufende Stoppuhr-Anzeige (kein automatischer Wechsel, siehe zirkelWake/zirkelSync)
     function zirkelScheduleNextWake() {
       zirkelClearWake();
       const t = zirkelTimerState;
-      if (!t || (t.phase !== 'exercise' && t.phase !== 'pause')) return;
+      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0 || t.segIdx >= t.segs.length) return;
+      const seg = t.segs[t.segIdx];
       const now = Date.now();
       let delay;
-      if (t.phase === 'pause') {
-        const remainingMs = t.pauseEndMs - now;
-        delay = remainingMs <= 0 ? 0 : ((remainingMs - 1) % 1000) + 1;
+      if (seg.dur == null) {
+        delay = 1000 - ((now - t.segStartMs) % 1000);
       } else {
-        delay = 1000 - ((now - t.roundStartMs) % 1000);
+        const remainingMs = t.segStartMs + seg.dur * 1000 - now;
+        delay = remainingMs <= 0 ? 0 : ((remainingMs - 1) % 1000) + 1;
       }
       t.wakeTimeoutId = setTimeout(zirkelWake, Math.max(0, delay));
     }
 
-    function zirkelWake() {
+    // Abschluss eines Segments festhalten: bei Übungen (time/reps) Ergebnis in done[] eintragen, Pausen zählen nicht
+    function zirkelFinishSegment(measuredSec) {
       const t = zirkelTimerState;
-      if (!t || (t.phase !== 'exercise' && t.phase !== 'pause')) return;
-      const now = Date.now();
-      if (t.phase === 'pause' && now >= t.pauseEndMs) {
-        // Pausenende: nächste Runde beginnt exakt am Pausenende (auch nach einer Hintergrundphase), mit Start-Ton
-        playTimerTone(t, 'start');
-        zirkelStartNextRound(t.pauseEndMs);
-      } else {
-        if (t.phase === 'pause') zirkelMaybePlayCountdownTick(now);
-        zirkelUpdateLive(now);
-      }
-      zirkelScheduleNextWake();
+      const seg = t.segs[t.segIdx];
+      if (seg.phase !== 'time' && seg.phase !== 'reps') return;
+      const ex = t.unit.uebungen[seg.exIdx];
+      t.done.push({ round: seg.round, exIdx: seg.exIdx, typ: ex.typ, variant: ex.variant, mode: ex.mode, wdh: ex.wdh, sec: Math.max(0, Math.round(measuredSec)) });
     }
 
-    // Zählton 5-4-3-2-1 nur beim Erreichen der jeweiligen Restsekunde (höchstens 250 ms verspätet), nie doppelt,
-    // nie nachgeholt. Ist die Pause kürzer als COUNTDOWN_BEEP_SECONDS, kommen nur die Töne, die hineinpassen.
+    // Reine Zustandsänderung (kein Ton/Vibration) – Aufrufer entscheiden je nach Übergang selbst darüber
+    function zirkelEnterSegment(idx, atMs) {
+      const t = zirkelTimerState;
+      if (idx >= t.segs.length) { zirkelTimerFinish(atMs); return; }
+      t.segIdx = idx;
+      t.segStartMs = atMs;
+      t.lastTickKey = null;
+      renderZirkelTimerRunning();
+    }
+
+    // Zeitstempel-Abgleich: holt übersprungene automatische Segmentwechsel nach (Hintergrundphase). 'reps'-
+    // Segmente haben keine feste Dauer und werden nie automatisch verlassen (nur über "Fertig")
+    function zirkelSync(nowMs) {
+      const t = zirkelTimerState;
+      let crossedCount = 0;
+      while (t.segIdx < t.segs.length) {
+        const seg = t.segs[t.segIdx];
+        if (seg.dur == null) break;
+        const endMs = t.segStartMs + seg.dur * 1000;
+        if (nowMs < endMs) break;
+        zirkelFinishSegment(seg.dur);
+        t.segIdx++;
+        t.segStartMs = endMs; // exakt anschließen, keine aufsummierte Drift
+        t.lastTickKey = null;
+        crossedCount++;
+      }
+      if (!crossedCount) return { outcome: 'none', crossedCount };
+      if (t.segIdx >= t.segs.length) return { outcome: 'finished', crossedCount };
+      return { outcome: t.segs[t.segIdx].phase, crossedCount };
+    }
+
+    // Nur in Pause/Rundenpause/Vorbereitung: Zählton 5-4-3-2-1 nur wenn das NÄCHSTE Segment eine Haltezeit ist
     function zirkelMaybePlayCountdownTick(now) {
       const t = zirkelTimerState;
-      const remainingMs = t.pauseEndMs - now;
-      const remainingSec = Math.ceil(remainingMs / 1000);
+      const seg = t.segs[t.segIdx];
+      if (seg.dur == null || t.segs[t.segIdx + 1]?.phase !== 'time') return;
+      const endMs = t.segStartMs + seg.dur * 1000;
+      const remainingSec = Math.ceil((endMs - now) / 1000);
       if (remainingSec < 1 || remainingSec > COUNTDOWN_BEEP_SECONDS) return;
-      if (remainingSec * 1000 - remainingMs > 250) return;
-      const key = t.currentRound + ':' + remainingSec;
+      const key = t.segIdx + ':' + remainingSec;
       if (t.lastTickKey === key) return;
       t.lastTickKey = key;
       playTimerTone(t, 'tick');
@@ -9549,81 +9729,139 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     function zirkelUpdateLive(now = Date.now()) {
       const t = zirkelTimerState;
-      if (!t) return;
-      const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-      if (t.phase === 'pause') set('zirkel-pause-countdown', fmtZirkelTime(zirkelPauseRemainingSec(now)));
-      if (t.phase === 'exercise') {
-        const round = fmtZirkelTime(zirkelRoundSec(now));
-        set('zirkel-round-time', round);
-        set('zirkel-round-live', round);
-        set('zirkel-total', fmtZirkelTime(zirkelTotalSec(true, now)));
-      }
+      if (!t || t.segIdx < 0 || t.segIdx >= t.segs.length) return;
+      const seg = t.segs[t.segIdx];
+      const el = document.getElementById('zirkel-remaining');
+      if (el) el.textContent = fmtZirkelTime(seg.dur == null ? zirkelElapsedInSegSec(t, now) : zirkelRemainingSec(t, now));
     }
 
-    function zirkelStartNextRound(atMs) {
+    function zirkelWake() {
       const t = zirkelTimerState;
-      t.currentRound++;
-      t.phase = 'exercise';
-      t.roundStartMs = atMs;
-      t.pauseEndMs = null;
-      renderZirkelTimerExercise();
+      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0 || t.segIdx >= t.segs.length) return;
+      const now = Date.now();
+      const seg = t.segs[t.segIdx];
+      if (seg.dur == null) {
+        // 'reps': nur Stoppuhr live aktualisieren, kein automatischer Wechsel
+        zirkelUpdateLive(now);
+        zirkelScheduleNextWake();
+        return;
+      }
+      const prevPhase = seg.phase;
+      const { outcome, crossedCount } = zirkelSync(now);
+      if (outcome === 'finished') {
+        playTimerTone(t, 'finish');
+        zirkelTimerFinish(now);
+        return;
+      }
+      if (outcome !== 'none') {
+        const singleStep = crossedCount === 1;
+        const leftTime = singleStep && prevPhase === 'time';
+        const enteredTime = outcome === 'time';
+        const enteredReps = outcome === 'reps';
+        if (leftTime) {
+          playTimerTone(t, 'end');
+          if (enteredTime) setTimeout(() => { if (zirkelTimerState === t && !t.pausedAtMs && !t.finished) playTimerTone(t, 'start'); }, 700);
+        } else if (enteredTime) {
+          playTimerTone(t, 'start');
+        }
+        const lagMs = now - t.segStartMs;
+        if (lagMs < 1500) intervalVibrate(enteredTime || enteredReps ? 250 : [120, 80, 120]);
+      }
+      zirkelMaybePlayCountdownTick(now);
+      renderZirkelTimerRunning();
+      zirkelScheduleNextWake();
     }
 
     window.zirkelTimerBegin = async function() {
       const t = zirkelTimerState;
-      if (!t || t.phase !== 'intro') return;
+      if (!t || t.segIdx !== -1) return;
       t.audioCtx = intervalUnlockAudio(); // muss synchron im Tap passieren
-      t.phase = 'exercise';
-      t.currentRound = 1;
-      t.elapsedSec = 0;
       t.startMs = Date.now();
-      t.roundStartMs = t.startMs;
       try { t.wakeLock = await navigator.wakeLock?.request('screen'); }
       catch (err) { console.warn('WakeLock nicht verfügbar:', err); }
       if (zirkelTimerState !== t) return; // währenddessen geschlossen
-      renderZirkelTimerExercise();
+      if (!t.segs.length) { zirkelTimerFinish(t.startMs); return; }
+      const first = t.segs[0];
+      zirkelEnterSegment(0, t.startMs);
+      if (zirkelTimerState !== t || t.finished) return;
+      if (first.phase === 'time') playTimerTone(t, 'start');
+      intervalVibrate(first.phase === 'time' || first.phase === 'reps' ? 250 : [120, 80, 120]);
       zirkelScheduleNextWake();
     };
 
-    // "Runde fertig": Rundenzeit festhalten, Pause starten (letzte Runde: Abschluss ohne Pause und ohne Töne).
-    // Nur in der laufenden Runde wirksam – ein Doppeltipp oder ein Tipp in der Pause erzeugt keine zweite Runde.
-    window.zirkelTimerRoundDone = function() {
+    // "Fertig" (nur mode 'reps'): gemessene Zeit seit Beginn der Übung festhalten, danach automatisch die
+    // Wechselpause (falls gesetzt) bzw. direkt die nächste Übung/Rundenpause/der Abschluss.
+    window.zirkelTimerRepDone = function() {
       const t = zirkelTimerState;
-      if (!t || t.phase !== 'exercise' || t.roundStartMs == null) return;
+      if (!t || t.finished || t.segIdx < 0) return;
+      const seg = t.segs[t.segIdx];
+      if (seg.phase !== 'reps' || t.pausedAtMs) return;
       const now = Date.now();
+      if (now < t.repLockUntil) return; // Doppeltipp-Schutz
+      t.repLockUntil = now + ZIRKEL_REP_TAP_LOCK_MS;
       zirkelClearWake();
-      t.roundMs.push(Math.max(0, now - t.roundStartMs));
-      t.roundStartMs = null;
-      if (t.currentRound >= t.unit.runden) {
-        zirkelTimerFinish(now);
-      } else {
-        t.phase = 'pause';
-        t.pauseEndMs = now + t.unit.pauseSec * 1000;
-        t.lastTickKey = null;
-        renderZirkelTimerPause();
-        zirkelMaybePlayCountdownTick(now); // sehr kurze Pause: ihr erster Zählton fällt auf den Pausenbeginn
-        zirkelScheduleNextWake();
-      }
+      zirkelFinishSegment(zirkelElapsedInSegSec(t, now));
+      const nextIdx = t.segIdx + 1;
+      const enteredPhase = t.segs[nextIdx]?.phase;
+      zirkelEnterSegment(nextIdx, now);
+      if (zirkelTimerState !== t || t.finished) return;
+      if (enteredPhase === 'time') playTimerTone(t, 'start');
+      intervalVibrate(enteredPhase === 'time' || enteredPhase === 'reps' ? 250 : [120, 80, 120]);
+      zirkelScheduleNextWake();
     };
 
-    window.zirkelTimerSkipPause = function() {
+    // Aktuelles Segment vorzeitig beenden (automatische Segmente; 'reps' hat keinen Skip, nur "Fertig").
+    // Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit.
+    window.zirkelTimerSkip = function() {
       const t = zirkelTimerState;
-      if (!t || t.phase !== 'pause') return;
+      if (!t || t.finished || t.segIdx < 0) return;
+      const seg = t.segs[t.segIdx];
+      if (seg.dur == null) return;
       zirkelClearWake();
       cancelTimerTones(t);
-      zirkelStartNextRound(Date.now());
-      zirkelScheduleNextWake();
+      const now = Date.now();
+      zirkelFinishSegment(Math.min(seg.dur, zirkelElapsedInSegSec(t, now)));
+      const nextIdx = t.segIdx + 1;
+      if (t.pausedAtMs) t.pausedAtMs = now; // bleibt pausiert, am Anfang des nächsten Segments
+      const enteredPhase = t.segs[nextIdx]?.phase;
+      zirkelEnterSegment(nextIdx, now);
+      if (zirkelTimerState !== t || t.finished) return;
+      if (enteredPhase === 'time') playTimerTone(t, 'start');
+      intervalVibrate(enteredPhase === 'time' || enteredPhase === 'reps' ? 250 : [120, 80, 120]);
+      if (!t.pausedAtMs) zirkelScheduleNextWake();
     };
+
+    window.zirkelTimerTogglePause = function() {
+      const t = zirkelTimerState;
+      if (!t || t.segIdx < 0 || t.finished) return;
+      if (t.pausedAtMs) {
+        t.segStartMs += Date.now() - t.pausedAtMs;
+        t.pausedAtMs = null;
+        zirkelTimerResumeAudio();
+        zirkelScheduleNextWake();
+      } else {
+        t.pausedAtMs = Date.now();
+        zirkelClearWake();
+        cancelTimerTones(t);
+      }
+      renderZirkelTimerRunning();
+    };
+
+    async function zirkelTimerResumeAudio() {
+      const t = zirkelTimerState;
+      try { if (t?.audioCtx?.state === 'suspended') await t.audioCtx.resume(); } catch (e) { /* optional */ }
+    }
 
     function zirkelTimerFinish(now = Date.now()) {
       const t = zirkelTimerState;
       zirkelClearWake();
       cancelTimerTones(t);
-      // Gespeicherte Dauer wie bisher: volle Sekunden von Start bis "Letzte Runde fertig", Pausen eingeschlossen
+      // Gespeicherte Dauer wie bisher: volle Sekunden von Start bis zur letzten Übung, Pausen eingeschlossen
       t.elapsedSec = Math.floor((now - t.startMs) / 1000);
       t.wakeLock?.release?.().catch(() => {});
       t.wakeLock = null;
-      t.phase = 'done';
+      t.finished = true;
+      t.pausedAtMs = null;
       renderZirkelTimerDone();
     }
 
@@ -9637,17 +9875,17 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       }
       document.getElementById('zirkel-timer-modal').style.display = 'none';
       zirkelTimerState = null;
-      // Nur Darstellung: Fokus zurück an den Auslöser (sonst an den Ad-hoc-Einstieg im Loggen-Tab)
+      // Nur Darstellung: Fokus zurück an den Auslöser (sonst an den Einstieg im Loggen-Tab)
       const back = zirkelTimerReturnFocus;
       zirkelTimerReturnFocus = null;
-      const target = back?.isConnected && back.offsetParent !== null ? back : document.getElementById('zirkel-adhoc-log-btn');
+      const target = back?.isConnected && back.offsetParent !== null ? back : document.getElementById('zirkel-start-btn');
       target?.focus?.({ preventScroll: true });
     }
 
-    // Rückkehr in den Vordergrund: Anzeige sofort aus den Zeitstempeln nachziehen (Pausenende ggf. nachholen)
+    // Rückkehr in den Vordergrund: Anzeige sofort aus den Zeitstempeln nachziehen (verpasste Wechsel nachholen)
     document.addEventListener('visibilitychange', () => {
       const t = zirkelTimerState;
-      if (!t || document.visibilityState !== 'visible' || (t.phase !== 'exercise' && t.phase !== 'pause')) return;
+      if (!t || document.visibilityState !== 'visible' || t.finished || t.segIdx < 0 || t.pausedAtMs) return;
       zirkelWake();
     });
 
@@ -9657,17 +9895,20 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     window.requestCloseZirkelTimer = async function() {
       if (!zirkelTimerState) return;
-      const submsg = zirkelTimerState.phase === 'done' ? 'Das Ergebnis wird nicht gespeichert.' : 'Dein Fortschritt geht verloren.';
+      const submsg = zirkelTimerState.finished ? 'Das Ergebnis wird nicht gespeichert.' : 'Dein Fortschritt geht verloren.';
       const ok = await showConfirm('Zirkel abbrechen?', submsg, 'alertCircle', 'Zirkel abbrechen', true, 'Weiter trainieren');
       if (ok) closeZirkelTimerModal();
     };
 
     window.saveZirkelTimer = async function() {
-      if (!zirkelTimerState || zirkelTimerState.phase !== 'done') return;
-      const { unit, ds, planUnitId, elapsedSec } = zirkelTimerState;
+      if (!zirkelTimerState || !zirkelTimerState.finished) return;
+      const { unit, ds, planUnitId, elapsedSec, done } = zirkelTimerState;
       const zeit = planMinToZeit(elapsedSec / 60);
       const datum = ds || planYmd(new Date());
-      const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, wdh: x.wdh }));
+      const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec }));
+      // details: eine Zeile je abgeschlossener Übung (Runde, Typ, Variante, mode, Zielwert, gemessene Dauer) –
+      // damit bleibt die Auswertung je Übung (z.B. Plank-Haltezeit über die Zeit) möglich.
+      const details = done.map(h => ({ round: h.round, typ: h.typ, variant: h.variant, mode: h.mode, wdh: h.wdh, sec: h.sec }));
       const autoNotiz = `${unit.runden}× ` + uebungen.map(planUebungShort).join(' / ');
       const timeNow = new Date().toTimeString().slice(0, 8);
       const entry = {
@@ -9676,7 +9917,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         notiz: autoNotiz,
         source: 'plan',
         ...(planUnitId ? { planUnitId } : {}),
-        runden: unit.runden, pauseSec: unit.pauseSec, uebungen,
+        runden: unit.runden, pauseSec: unit.pauseSec, prepSec: unit.prepSec, uebungen, details,
         timestamp: datum + 'T' + timeNow
       };
       entry.act_kcal_calc = calcActivityKcal(entry);
@@ -9700,22 +9941,14 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       }
     };
 
-    // ── Intervall-Zirkel (Haltezeit) ─────────────────────────────────────────
-    // Vorlage (users/{uid}/intervalTemplates/{id}, + IndexedDB-Cache 'intervalTemplates'):
-    //   { id, name, prepSec, rounds, roundPauseSec, steps: [{ typ, typLabel, holdSec, pauseSec }], updatedAt }
-    // Ablauf = feste Segmentliste: Vorbereitung → Halten → Pause → Halten … (Rundenpause ersetzt die Pause nach
-    // dem letzten Schritt einer Runde, wenn > 0). Zeit wird nur über Zeitstempel gemessen (segStartMs + Dauer = Ende).
-    // Takt: ein selbstkorrigierender setTimeout, der exakt auf die nächste volle Restsekunde zielt (nicht ein
-    // 250-ms-Poll-Tick) und bei jedem Aufwachen Zahl und Ton aus DERSELBEN Restzeit-Berechnung ableitet – so sind
-    // Anzeige und Zählton durch Konstruktion synchron (siehe Bericht, Analyse 2: vorher liefen eine audiotaktbasierte
-    // Ton-Vorausplanung und ein 250-ms-Anzeige-Poll als zwei unabhängige Uhren, die bis zu ~250ms auseinanderlaufen
-    // konnten). Nach einer Hintergrundphase (gedrosselte Timer) holt intervalSync übersprungene Segmentwechsel aus
-    // den Zeitstempeln nach, OHNE die dabei verpassten Zähltöne nachzuholen; der Start-Ton der neuen Aktivität wird
-    // beim Nachholen trotzdem gespielt.
-    // Logging: je Übung ein Eintrag im Format der manuellen Haltezeit-Eingabe (holdSec, source 'manual', ohne Kalorien).
-    // Unabhängig vom Kraft-Zirkel (zirkelTimerState), der unverändert bleibt.
-    const INTERVAL_DEFAULTS = { prepSec: 10, rounds: 1, roundPauseSec: 0, holdSec: 30, pauseSec: 5 };
-    // Countdown-Pieptöne vor jedem Aktivitätsstart: COUNTDOWN_BEEP_SECONDS Zähltöne (gleiche Tonhöhe/Dauer),
+    // ── Zirkel-Vorlagen (ad-hoc, unabhängig vom Trainingsplan) ───────────────
+    // Gemeinsame Infrastruktur für den Zirkel-Live-Timer (Takt, Töne, Vibration): ein selbstkorrigierender
+    // setTimeout, der exakt auf die nächste volle Restsekunde zielt (nicht ein 250-ms-Poll-Tick) und bei jedem
+    // Aufwachen Zahl und Ton aus DERSELBEN Restzeit-Berechnung ableitet – so sind Anzeige und Zählton durch
+    // Konstruktion synchron. Nach einer Hintergrundphase (gedrosselte Timer) holt zirkelSync übersprungene
+    // automatische Segmentwechsel aus den Zeitstempeln nach, OHNE die dabei verpassten Zähltöne nachzuholen;
+    // der Start-Ton der neuen Übung wird beim Nachholen trotzdem gespielt.
+    // Countdown-Pieptöne vor jedem Haltezeit-Start: COUNTDOWN_BEEP_SECONDS Zähltöne (gleiche Tonhöhe/Dauer),
     // danach der höhere, längere Start-Ton. Leicht nachstellbar: COUNTDOWN_BEEP_SECONDS z.B. auf 3 oder 4 setzen.
     const COUNTDOWN_BEEP_SECONDS = 5;
     const BEEP_COUNT_HZ = 880;   // Zählton 5-4-3-2-1 (unverändert aus dem bisherigen "tick")
@@ -9725,237 +9958,134 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     // cls: Phasen-Variante des Designsystems (.fo-timer--<cls> am Timer, .fo-phase--<cls> am Phasen-Label)
     const INTERVAL_PHASES = {
       prep:       { label: 'Vorbereitung', cls: 'prep' },
-      hold:       { label: 'Halten',       cls: 'hold' },
+      time:       { label: 'Halten',       cls: 'hold' }, // Zirkel-Live-Timer: mode 'time' (siehe buildZirkelSegments)
+      reps:       { label: 'Wiederholungen', cls: 'reps' }, // Zirkel-Live-Timer: mode 'reps'
       pause:      { label: 'Pause',        cls: 'pause' },
       roundpause: { label: 'Rundenpause',  cls: 'pause' }
     };
-    let intervalDraft = null;  // Konfiguration im Modal (Arbeitskopie, Werte ggf. noch als Text aus den Feldern)
-    let intervalTimer = null;  // laufender Ablauf
-    let intervalTimerReturnFocus = null; // nur Darstellung: Fokus vor dem Öffnen des Timers (Rückgabe beim Schließen)
+
+    // Alte Vorlage (vor dem Zirkel-Umbau): { rounds, roundPauseSec, steps:[{typ, holdSec, pauseSec}] }, reine
+    // Haltezeit. Neue Vorlage: wie eine Plan-Zirkel-Einheit { runden, pauseSec, prepSec, uebungen:[...] } mit
+    // mode pro Übung. Normalisierung nur beim Lesen – die Firestore-Dokumente bleiben unverändert, bis die
+    // Vorlage über den neuen Editor erneut gespeichert wird.
+    function normalizeZirkelTemplate(raw) {
+      const isOld = Array.isArray(raw.steps) && !Array.isArray(raw.uebungen);
+      const srcUebungen = isOld ? raw.steps : raw.uebungen;
+      return {
+        id: raw.id || null,
+        name: String(raw.name || '').trim(),
+        runden: Math.max(1, parseInt(isOld ? raw.rounds : raw.runden) || 1),
+        pauseSec: Math.max(0, Math.round(Number(isOld ? raw.roundPauseSec : raw.pauseSec) || 0)),
+        prepSec: Math.max(0, Math.round(Number(raw.prepSec) || 0)),
+        uebungen: (Array.isArray(srcUebungen) ? srcUebungen : []).map(x => normalizeZirkelUebung(x, isOld ? 'time' : 'reps')),
+        updatedAt: raw.updatedAt || null
+      };
+    }
 
     async function loadIntervalTemplates() {
       const snap = await getDocs(userIntervalTemplateCol());
       const list = [];
-      snap.forEach(d => list.push({ ...d.data(), id: d.id }));
+      snap.forEach(d => list.push(normalizeZirkelTemplate({ ...d.data(), id: d.id })));
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       intervalTemplates = list;
     }
 
-    function intervalInt(v, min, max, def) {
-      const n = parseInt(v);
-      return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def;
-    }
+    // ── Zirkel-Vorlage bearbeiten (ad-hoc, unabhängig vom Trainingsplan) ───────
+    // Nutzt denselben Editor wie der Plan-Zirkel (zirkelField/zirkelUebung*, ctx 'template').
+    // Firestore weiterhin users/{uid}/intervalTemplates (Collection-Name bewusst unverändert).
+    let zirkelTemplateDraft = null; // Arbeitskopie im Editor-Modal
 
-    // Übungsauswahl wie im Loggen-Formular: eingebaute Optionen + Custom-Übungen (ohne "Neue Übung anlegen")
-    function getIntervalExerciseOptions() {
-      const select = document.getElementById('training-type');
-      const builtIn = select
-        ? Array.from(select.options).filter(o => !o.dataset.custom && !o.dataset.newExercise).map(o => ({ id: o.value, label: o.textContent }))
-        : [];
-      return [...builtIn, ...getCustomExerciseOptions()];
-    }
-
-    function intervalExerciseLabel(typ, fallback) {
-      return getIntervalExerciseOptions().find(o => o.id === typ)?.label || fallback || customTypeLabel(typ) || typ;
-    }
-
-    function newIntervalStep(prev) {
-      const opts = getIntervalExerciseOptions();
-      const typ = prev?.typ || customTrainingTypes.find(t => t.kind === 'hold')?.id || opts[0]?.id || '';
+    function newZirkelTemplateDraft() {
       return {
-        typ, typLabel: intervalExerciseLabel(typ),
-        holdSec: prev?.holdSec ?? INTERVAL_DEFAULTS.holdSec,
-        pauseSec: prev?.pauseSec ?? INTERVAL_DEFAULTS.pauseSec
+        id: null, name: '', runden: 3, pauseSec: 60, prepSec: 10,
+        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 10 }]
       };
     }
 
-    function newIntervalDraft() {
-      return {
-        id: null, name: '',
-        prepSec: INTERVAL_DEFAULTS.prepSec, rounds: INTERVAL_DEFAULTS.rounds, roundPauseSec: INTERVAL_DEFAULTS.roundPauseSec,
-        steps: [newIntervalStep()]
-      };
-    }
-
-    // Bereinigte Konfiguration (Zahlen geklemmt, Schritte ohne Übung/Haltezeit entfernt, Anzeigenamen gesetzt)
-    function normalizeIntervalConfig(d) {
-      return {
-        id: d.id || null,
-        name: String(d.name || '').trim(),
-        prepSec: intervalInt(d.prepSec, 0, 600, INTERVAL_DEFAULTS.prepSec),
-        rounds: intervalInt(d.rounds, 1, 50, INTERVAL_DEFAULTS.rounds),
-        roundPauseSec: intervalInt(d.roundPauseSec, 0, 1800, INTERVAL_DEFAULTS.roundPauseSec),
-        steps: (d.steps || [])
-          .map(st => ({
-            typ: st.typ,
-            typLabel: intervalExerciseLabel(st.typ, st.typLabel),
-            holdSec: intervalInt(st.holdSec, 0, 3600, 0),
-            pauseSec: intervalInt(st.pauseSec, 0, 1800, INTERVAL_DEFAULTS.pauseSec)
-          }))
-          .filter(st => st.typ && st.holdSec > 0)
-      };
-    }
-
-    function buildIntervalSegments(cfg) {
-      const segs = [];
-      if (cfg.prepSec > 0) segs.push({ phase: 'prep', dur: cfg.prepSec, round: 1, stepIdx: -1 });
-      for (let r = 1; r <= cfg.rounds; r++) {
-        cfg.steps.forEach((st, i) => {
-          segs.push({ phase: 'hold', dur: st.holdSec, round: r, stepIdx: i });
-          const lastStep = i === cfg.steps.length - 1;
-          if (lastStep && r === cfg.rounds) return; // nach dem allerletzten Halten keine Pause
-          const isRoundPause = lastStep && cfg.roundPauseSec > 0;
-          const pause = isRoundPause ? cfg.roundPauseSec : st.pauseSec;
-          if (pause > 0) segs.push({ phase: isRoundPause ? 'roundpause' : 'pause', dur: pause, round: r, stepIdx: i });
-        });
-      }
-      return segs;
-    }
-
-    function intervalTotalSec(segs) {
-      return segs.reduce((sum, s) => sum + s.dur, 0);
-    }
-
-    // ── Konfiguration ──
-    window.openIntervalConfig = function() {
-      if (!intervalDraft) intervalDraft = newIntervalDraft();
-      renderIntervalConfig();
+    window.openZirkelTemplateEditor = function(templateId) {
+      const existing = templateId ? intervalTemplates.find(t => t.id === templateId) : null;
+      zirkelTemplateDraft = existing ? JSON.parse(JSON.stringify(existing)) : newZirkelTemplateDraft();
+      renderZirkelTemplateEditor();
       pushModalState();
-      document.getElementById('interval-config-modal').style.display = 'flex';
+      document.getElementById('zirkel-template-modal').style.display = 'flex';
     };
 
-    window.closeIntervalConfig = function() {
-      document.getElementById('interval-config-modal').style.display = 'none';
+    window.closeZirkelTemplateEditor = function() {
+      document.getElementById('zirkel-template-modal').style.display = 'none';
+      zirkelTemplateDraft = null;
     };
 
-    function intervalConfigSummaryText() {
-      const cfg = normalizeIntervalConfig(intervalDraft);
-      if (!cfg.steps.length) return 'Mindestens ein Schritt mit Haltezeit nötig';
-      const holds = cfg.steps.length * cfg.rounds;
-      return `${holds} Haltezeit${holds === 1 ? '' : 'en'} · Gesamtdauer ${fmtZirkelTime(intervalTotalSec(buildIntervalSegments(cfg)))}`;
+    function zirkelTemplateSummaryText() {
+      const dauer = calcZirkelDauerMin(zirkelTemplateDraft);
+      return dauer > 0 ? `${foIcon('clock', 'fo-i--sm')} ${dauer} min · ≈ ${fmt(planZirkelKcal(dauer))} kcal` : `${foIcon('clock', 'fo-i--sm')} Übungen mit Halten/Wdh. eintragen`;
     }
 
-    function updateIntervalConfigSummary() {
-      const el = document.getElementById('interval-config-summary');
-      if (el) el.textContent = intervalConfigSummaryText();
+    function updateZirkelTemplateSummary() {
+      const el = document.getElementById('zirkel-template-summary');
+      if (el) el.textContent = zirkelTemplateSummaryText();
     }
 
-    function renderIntervalConfig() {
-      const d = intervalDraft;
-      const num = (value, handler, min, placeholder, idAttr) =>
-        `<input class="fo-input" type="number" ${idAttr ? `id="${idAttr}"` : ''} min="${min}" step="1" inputmode="numeric" pattern="[0-9]*" value="${value ?? ''}" placeholder="${placeholder}" onfocus="this.select()" oninput="${handler}">`;
-      const opts = getIntervalExerciseOptions();
-
-      let html = `
-        <div class="fo-sheet__body" style="padding-top:4px;flex:1;min-height:0;">
-        <div class="fo-select"><select onchange="loadIntervalTemplate(this.value)" aria-label="Vorlage">
-            <option value="">Neuer Zirkel</option>
+    function renderZirkelTemplateEditor() {
+      const d = zirkelTemplateDraft;
+      const inp = PLAN_INP_STYLE, lbl = PLAN_LBL_STYLE;
+      const html = `
+        <div class="fo-sheet__body" style="padding-top:4px;flex:1;min-height:0;overflow-y:auto;">
+        <div class="fo-select"><select onchange="loadZirkelTemplateIntoEditor(this.value)" aria-label="Vorlage">
+            <option value="">Neue Vorlage</option>
             ${intervalTemplates.map(t => `<option value="${planEsc(t.id)}" ${t.id === d.id ? 'selected' : ''}>${planEsc(t.name || 'Ohne Namen')}</option>`).join('')}
           </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
-        <div class="fo-field"><label class="fo-label" for="interval-name">Name der Vorlage</label>
-          <input class="fo-input" id="interval-name" type="text" value="${planEsc(d.name)}" placeholder="z. B. Core Planks" oninput="intervalField('name', this.value)"></div>
-        <div class="fo-grid3">
-          <div class="fo-field"><label class="fo-label" for="interval-prep">Vorbereitung (s)</label>${num(d.prepSec, "intervalField('prepSec', this.value)", 0, '10', 'interval-prep')}</div>
-          <div class="fo-field"><label class="fo-label" for="interval-rounds">Runden</label>${num(d.rounds, "intervalField('rounds', this.value)", 1, '1', 'interval-rounds')}</div>
-          <div class="fo-field"><label class="fo-label" for="interval-roundpause">Rundenpause (s)</label>${num(d.roundPauseSec, "intervalField('roundPauseSec', this.value)", 0, '0', 'interval-roundpause')}</div>
-        </div>`;
-
-      d.steps.forEach((st, i) => {
-        const options = opts.some(o => o.id === st.typ) ? opts : [...opts, { id: st.typ, label: st.typLabel || st.typ }];
-        html += `
-        <div style="border:1px solid var(--fo-line);border-radius:var(--fo-r-lg);padding:4px 10px 10px;display:flex;flex-direction:column;gap:8px;">
-          <div style="display:flex;align-items:center;gap:0;">
-            <span style="flex:1;font-weight:650;">Schritt ${i + 1}</span>
-            <button class="fo-iconbtn" type="button" onclick="intervalMoveStep(${i}, -1)" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben"><svg class="fo-i" aria-hidden="true"><use href="#i-arrowUp"/></svg></button>
-            <button class="fo-iconbtn" type="button" onclick="intervalMoveStep(${i}, 1)" ${i === d.steps.length - 1 ? 'disabled' : ''} aria-label="Nach unten"><svg class="fo-i" aria-hidden="true"><use href="#i-arrowDown"/></svg></button>
-            <button class="fo-iconbtn" type="button" onclick="intervalRemoveStep(${i})" ${d.steps.length === 1 ? 'disabled' : ''} aria-label="Schritt entfernen" style="margin-right:-6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
-          </div>
-          <div class="fo-select"><select onchange="intervalStepField(${i}, 'typ', this.value)" aria-label="Übung Schritt ${i + 1}">
-            ${options.map(o => `<option value="${planEsc(o.id)}" ${o.id === st.typ ? 'selected' : ''}>${planEsc(o.label)}</option>`).join('')}
-          </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
-          <div class="fo-grid2">
-            <div class="fo-field"><span class="fo-label">Halten (s)</span>${num(st.holdSec, `intervalStepField(${i}, 'holdSec', this.value)`, 1, '30')}</div>
-            <div class="fo-field"><span class="fo-label">Pause danach (s)</span>${num(st.pauseSec, `intervalStepField(${i}, 'pauseSec', this.value)`, 0, '5')}</div>
-          </div>
-        </div>`;
-      });
-
-      html += `
-        <button class="fo-btn fo-btn--dashed fo-btn--block" type="button" onclick="intervalAddStep()"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg>Schritt</button>
-        <p class="fo-help" style="margin:0;">Ist eine Rundenpause gesetzt, ersetzt sie die Pause nach dem letzten Schritt einer Runde.</p>
-        <span id="interval-config-summary" class="fo-num" style="font-weight:650;color:var(--fo-primary);">${intervalConfigSummaryText()}</span>
-        <div class="fo-btnrow">
-          <button class="fo-btn fo-btn--secondary" type="button" onclick="saveIntervalTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Vorlage speichern</button>
-          ${d.id ? `<button class="fo-btn fo-btn--danger" type="button" onclick="deleteIntervalTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg>Löschen</button>` : ''}
+        <div style="margin:8px 0;"><label style="${lbl}">Name der Vorlage</label>
+          <input type="text" value="${planEsc(d.name)}" placeholder="z. B. Core Zirkel" oninput="zirkelField('template','',0,'name',this.value)" style="${inp}"></div>
+        <div class="plan-row" style="gap:8px;margin-bottom:8px;">
+          <div><label style="${lbl}">Runden</label>
+            <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" value="${d.runden ?? ''}" oninput="zirkelField('template','',0,'runden',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Rundenpause (s)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${d.pauseSec ?? ''}" oninput="zirkelField('template','',0,'pauseSec',this.value)" style="${inp}"></div>
+          <div><label style="${lbl}">Vorbereitung (s)</label>
+            <input type="number" min="0" step="5" inputmode="numeric" pattern="[0-9]*" value="${d.prepSec ?? ''}" oninput="zirkelField('template','',0,'prepSec',this.value)" style="${inp}"></div>
+        </div>
+        <label style="${lbl}">Übungen</label>
+        ${renderZirkelUebungenListHtml('template', '', 0, d.uebungen, inp)}
+        <span id="zirkel-template-summary" class="fo-num" style="font-weight:650;color:var(--fo-primary);display:block;margin-bottom:8px;">${zirkelTemplateSummaryText()}</span>
+        <div style="display:flex;gap:8px;">
+          <button class="fo-btn fo-btn--secondary" type="button" onclick="saveZirkelTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Vorlage speichern</button>
+          ${d.id ? `<button class="fo-btn fo-btn--danger" type="button" onclick="deleteZirkelTemplate()"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg>Löschen</button>` : ''}
         </div>
         </div>
         <div class="fo-sheet__foot" style="padding-bottom:max(var(--fo-s3), env(safe-area-inset-bottom, var(--fo-s3)));">
-          <button class="fo-btn fo-btn--secondary" type="button" onclick="closeIntervalConfig()">Schließen</button>
-          <button class="fo-btn fo-btn--primary" type="button" onclick="openIntervalTimer()">Weiter<svg class="fo-i" aria-hidden="true"><use href="#i-chevR"/></svg></button>
+          <button class="fo-btn fo-btn--secondary" type="button" onclick="closeZirkelTemplateEditor()">Schließen</button>
+          <button class="fo-btn fo-btn--primary" type="button" onclick="startZirkelFromTemplateEditor()">Starten<svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg></button>
         </div>`;
-      document.getElementById('interval-config-body').innerHTML = html;
+      document.getElementById('zirkel-template-body').innerHTML = html;
     }
 
-    window.intervalField = function(field, value) {
-      if (!intervalDraft) return;
-      intervalDraft[field] = value;
-      updateIntervalConfigSummary();
-    };
-
-    window.intervalStepField = function(i, field, value) {
-      const st = intervalDraft?.steps[i];
-      if (!st) return;
-      st[field] = value;
-      if (field === 'typ') st.typLabel = intervalExerciseLabel(value);
-      updateIntervalConfigSummary();
-    };
-
-    window.intervalAddStep = function() {
-      intervalDraft.steps.push(newIntervalStep(intervalDraft.steps[intervalDraft.steps.length - 1]));
-      renderIntervalConfig();
-    };
-
-    window.intervalRemoveStep = function(i) {
-      if (intervalDraft.steps.length <= 1) return;
-      intervalDraft.steps.splice(i, 1);
-      renderIntervalConfig();
-    };
-
-    window.intervalMoveStep = function(i, dir) {
-      const j = i + dir, steps = intervalDraft.steps;
-      if (j < 0 || j >= steps.length) return;
-      [steps[i], steps[j]] = [steps[j], steps[i]];
-      renderIntervalConfig();
-    };
-
-    window.loadIntervalTemplate = function(id) {
+    window.loadZirkelTemplateIntoEditor = function(id) {
       const t = intervalTemplates.find(x => x.id === id);
-      intervalDraft = t ? JSON.parse(JSON.stringify(t)) : newIntervalDraft();
-      if (!intervalDraft.steps?.length) intervalDraft.steps = [newIntervalStep()];
-      renderIntervalConfig();
+      zirkelTemplateDraft = t ? JSON.parse(JSON.stringify(t)) : newZirkelTemplateDraft();
+      renderZirkelTemplateEditor();
     };
 
-    window.saveIntervalTemplate = async function() {
-      const cfg = normalizeIntervalConfig(intervalDraft);
+    window.saveZirkelTemplate = async function() {
+      const cfg = normalizeZirkelTemplate(zirkelTemplateDraft);
       if (!cfg.name) { showToast('Bitte einen Namen für die Vorlage eingeben'); return; }
-      if (!cfg.steps.length) { showToast('Mindestens ein Schritt mit Haltezeit nötig', 'bad'); return; }
-      const id = cfg.id || ('iv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      if (!cfg.uebungen.length) { showToast('Mindestens eine Übung nötig', 'bad'); return; }
+      const id = cfg.id || ('zt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
       const data = { ...cfg, id, updatedAt: new Date().toISOString() };
       try {
         await setDoc(doc(userIntervalTemplateCol(), id), data);
         intervalTemplates = [...intervalTemplates.filter(t => t.id !== id), data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         cachePut('intervalTemplates', intervalTemplates);
-        intervalDraft = JSON.parse(JSON.stringify(data));
-        renderIntervalConfig();
+        zirkelTemplateDraft = JSON.parse(JSON.stringify(data));
+        renderZirkelTemplateEditor();
         showToast('Vorlage gespeichert', 'ok');
-      } catch (e) {
-        console.error('Interval template save error:', e);
+      } catch (err) {
+        console.error('Zirkel-Vorlage speichern Fehler:', err);
         showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
 
-    window.deleteIntervalTemplate = async function() {
-      const id = intervalDraft?.id;
+    window.deleteZirkelTemplate = async function() {
+      const id = zirkelTemplateDraft?.id;
       if (!id) return;
       const name = intervalTemplates.find(t => t.id === id)?.name || '';
       if (!await showConfirm('Vorlage löschen?', name)) return;
@@ -9963,41 +10093,21 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         await deleteDoc(doc(userIntervalTemplateCol(), id));
         intervalTemplates = intervalTemplates.filter(t => t.id !== id);
         cachePut('intervalTemplates', intervalTemplates);
-        intervalDraft = newIntervalDraft();
-        renderIntervalConfig();
+        zirkelTemplateDraft = newZirkelTemplateDraft();
+        renderZirkelTemplateEditor();
         showToast('Vorlage gelöscht', 'ok');
-      } catch (e) {
-        console.error('Interval template delete error:', e);
+      } catch (err) {
+        console.error('Zirkel-Vorlage löschen Fehler:', err);
         showToast('Löschen fehlgeschlagen', 'bad');
       }
     };
 
-    // ── Ablauf ──
-    window.openIntervalTimer = function() {
-      const cfg = normalizeIntervalConfig(intervalDraft);
-      if (!cfg.steps.length) { showToast('Mindestens ein Schritt mit Haltezeit nötig', 'bad'); return; }
-      document.getElementById('interval-config-modal').style.display = 'none';
-      intervalTimer = {
-        cfg, segs: buildIntervalSegments(cfg),
-        segIdx: -1, segStartMs: 0, pausedAtMs: null, startedAt: null,
-        done: [], finished: false, savedTyps: new Set(), savedEntryIds: [], saving: false, saveError: false,
-        wakeTimeoutId: null, wakeLock: null, wakeLockUnsupported: false, audioCtx: null, activeTones: [],
-        roundStartMs: null, lastRoundDurationMs: null, lastTickKey: null
-      };
-      intervalTimerReturnFocus = document.activeElement;
-      renderIntervalIntro();
-      pushModalState();
-      document.getElementById('interval-timer-modal').style.display = 'flex';
-      // Fokus in den Dialog: auf "Start", sonst auf den Dialog selbst
-      (document.querySelector('#interval-timer-body .iv-start') || document.getElementById('interval-timer-modal')).focus({ preventScroll: true });
+    window.startZirkelFromTemplateEditor = function() {
+      const cfg = normalizeZirkelTemplate(zirkelTemplateDraft);
+      if (!cfg.uebungen.length) { showToast('Mindestens eine Übung nötig', 'bad'); return; }
+      document.getElementById('zirkel-template-modal').style.display = 'none';
+      startZirkelTimerModal({ ...cfg, notiz: cfg.name || '' }, null, null);
     };
-
-    // Schreibt den Timer-Inhalt neu. Hatte eine Schaltfläche im Timer den Fokus, bekommt die gleichwertige
-    // Schaltfläche (gleicher onclick) ihn danach zurück, sonst der Dialog – der Fokus fällt nie aus dem Dialog.
-    // Gemeinsam für Intervall- und Kraft-Zirkel (jeweils eigenes Overlay).
-    function setIntervalTimerBody(html) {
-      setTimerBody('interval-timer-modal', 'interval-timer-body', html);
-    }
 
     function setTimerBody(modalId, bodyId, html) {
       const body = document.getElementById(bodyId);
@@ -10012,37 +10122,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     }
 
     // Phasenwechsel einmal ansagen (eigene, unsichtbare Live-Region; die Restzeit selbst ist nicht live)
-    function announceIntervalPhase(text) {
-      const live = document.getElementById('iv-phase-live');
-      if (live && live.textContent !== text) live.textContent = text;
-    }
-
-    function intervalStepLabel(stepIdx) {
-      return intervalTimer?.cfg.steps[stepIdx]?.typLabel || '';
-    }
-
-    function renderIntervalIntro() {
-      const { cfg, segs } = intervalTimer;
-      const list = cfg.steps.map((st, i) => `
-            <li class="fo-row iv-step">
-              <span class="fo-num iv-step__no">${i + 1}.</span>
-              <div class="fo-row__main"><div class="fo-row__title">${planEsc(st.typLabel)}</div></div>
-              <div class="fo-row__end iv-step__end">${st.holdSec} s${st.pauseSec > 0 ? ` · ${st.pauseSec} s Pause` : ''}</div>
-            </li>`).join('');
-      announceIntervalPhase('');
-      setIntervalTimerBody(`
-        <div class="iv-timer-page">
-          <div class="iv-page__head">
-            <div class="iv-page__badge">${foIcon('clock', 'fo-i--xl')}</div>
-            <h1 class="iv-page__title">${planEsc(cfg.name || 'Intervall-Zirkel')}</h1>
-            <p class="iv-page__meta fo-num">${cfg.rounds} Runde${cfg.rounds === 1 ? '' : 'n'} · ${cfg.prepSec} s Vorbereitung · ${fmtZirkelTime(intervalTotalSec(segs))} gesamt</p>
-          </div>
-          <ol class="fo-card fo-list iv-steps">${list}
-          </ol>
-          <button class="fo-btn fo-btn--primary fo-btn--block iv-start" type="button" onclick="intervalTimerBegin()">${foIcon('play', 'fo-i--lg', true)}Start</button>
-        </div>`);
-    }
-
     // AudioContext im Tap-Handler erzeugen und mit einem stillen Puffer freischalten
     function intervalUnlockAudio() {
       try {
@@ -10070,12 +10149,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       finish: [[523, 0, 0.18, 'sine', 0.35], [659, 0.18, 0.18, 'sine', 0.35], [784, 0.36, 0.18, 'sine', 0.35], [1047, 0.54, 0.7, 'sine', 0.35]]
     };
 
-    // Spielt einen Ton SOFORT (synchron im selben Aufruf wie die zugehörige Zahlen-Anzeige), statt ihn für
-    // einen künftigen Zeitpunkt vorzuplanen – das ist der Kern der Synchronisations-Korrektur (Analyse 2).
-    function intervalPlayTone(kind) {
-      playTimerTone(intervalTimer, kind);
-    }
-
     // Gemeinsam für Intervall- und Kraft-Zirkel: state braucht audioCtx und activeTones
     function playTimerTone(state, kind) {
       const t = state, ctx = t?.audioCtx;
@@ -10101,11 +10174,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       });
     }
 
-    // Noch klingende Töne hart abschneiden: Abbruch/Pause/Überspringen/Phasenende dürfen keine Nachzügler lassen
-    function intervalCancelTones() {
-      cancelTimerTones(intervalTimer);
-    }
-
     function cancelTimerTones(state) {
       const t = state;
       if (!t) return;
@@ -10119,469 +10187,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function intervalVibrate(pattern) {
       try { navigator.vibrate?.(pattern); } catch (e) { /* Vibration optional */ }
     }
-
-    async function intervalRequestWakeLock() {
-      const t = intervalTimer;
-      if (!t) return;
-      // Vorbereitet für eine native Lösung im Android-Wrapper (existiert dort derzeit nicht)
-      try { window.AndroidTokenBridge?.setKeepScreenOn?.(true); } catch (e) { /* optional */ }
-      if (!('wakeLock' in navigator)) { t.wakeLockUnsupported = true; updateIntervalWakeHint(); return; }
-      if (t.wakeLock && !t.wakeLock.released) return;
-      try {
-        t.wakeLock = await navigator.wakeLock.request('screen');
-        t.wakeLockUnsupported = false;
-      } catch (e) {
-        console.warn('WakeLock nicht verfügbar:', e);
-        t.wakeLockUnsupported = true;
-      }
-      updateIntervalWakeHint();
-    }
-
-    function intervalReleaseWakeLock() {
-      const t = intervalTimer;
-      if (!t) return;
-      t.wakeLock?.release?.().catch(() => {});
-      t.wakeLock = null;
-      try { window.AndroidTokenBridge?.setKeepScreenOn?.(false); } catch (e) { /* optional */ }
-    }
-
-    function updateIntervalWakeHint() {
-      const el = document.getElementById('iv-wake-hint');
-      if (el) el.style.display = intervalTimer?.wakeLockUnsupported ? '' : 'none';
-    }
-
-    window.intervalTimerBegin = function() {
-      const t = intervalTimer;
-      if (!t || t.segIdx >= 0) return;
-      t.audioCtx = intervalUnlockAudio(); // muss synchron im Tap passieren
-      t.startedAt = new Date();
-      t.segIdx = 0;
-      t.segStartMs = Date.now();
-      intervalMarkRoundStartIfNeeded();
-      intervalRequestWakeLock();
-      if (t.segs[0].phase === 'hold') intervalVibrate(250);
-      renderIntervalRunning();
-      intervalScheduleNextWake();
-    };
-
-    function intervalSegEndMs() {
-      const t = intervalTimer;
-      return t.segStartMs + t.segs[t.segIdx].dur * 1000;
-    }
-
-    function intervalRemainingSec() {
-      const t = intervalTimer;
-      const ref = t.pausedAtMs || Date.now();
-      return Math.max(0, Math.ceil((intervalSegEndMs() - ref) / 1000));
-    }
-
-    function intervalRecordHold(seg, sec) {
-      const t = intervalTimer;
-      const s = Math.floor(sec);
-      if (seg.phase !== 'hold' || s < 1) return;
-      const st = t.cfg.steps[seg.stepIdx];
-      t.done.push({ round: seg.round, stepIdx: seg.stepIdx, typ: st.typ, typLabel: st.typLabel, sec: s });
-    }
-
-    // Rundenbeginn merken (Zeitstempel), sobald der erste Schritt einer Runde (stepIdx 0, Phase 'hold') beginnt.
-    function intervalMarkRoundStartIfNeeded() {
-      const t = intervalTimer;
-      const seg = t.segs[t.segIdx];
-      if (seg && seg.phase === 'hold' && seg.stepIdx === 0) t.roundStartMs = t.segStartMs;
-    }
-
-    // Zeitstempel-Abgleich: holt übersprungene Segmentwechsel nach (Hintergrundphase), spielt dabei aber
-    // keine Zwischen-Töne nach – nur das Ergebnis des letzten Wechsels wird unten vertont. Gibt zurück, in
-    // welche Art Segment zuletzt gewechselt wurde ('none' | 'entered-hold' | 'entered-rest' | 'finished').
-    function intervalSync(nowMs) {
-      const t = intervalTimer;
-      let crossedCount = 0;
-      while (t.segIdx < t.segs.length) {
-        const seg = t.segs[t.segIdx];
-        const endMs = t.segStartMs + seg.dur * 1000;
-        if (nowMs < endMs) break;
-        intervalRecordHold(seg, seg.dur);
-        t.segIdx++;
-        t.segStartMs = endMs; // exakt anschließen, keine aufsummierte Drift
-        // Rundenzeit-Zeitstempel innerhalb jedes einzelnen Schritts der Nachhol-Schleife pflegen (nicht nur
-        // einmal am Ende) – sonst geht bei einem großen Sprung über mehrere Segmente hinweg (z.B. nach einer
-        // langen Hintergrundphase, die gleich eine ganze Runde überspringt) der Rundenbeginn verloren.
-        if (t.segs[t.segIdx]?.phase === 'roundpause') t.lastRoundDurationMs = endMs - t.roundStartMs;
-        intervalMarkRoundStartIfNeeded();
-        crossedCount++;
-      }
-      if (!crossedCount) return { outcome: 'none', crossedCount };
-      if (t.segIdx >= t.segs.length) return { outcome: 'finished', crossedCount };
-      return { outcome: t.segs[t.segIdx].phase === 'hold' ? 'entered-hold' : 'entered-rest', crossedCount };
-    }
-
-    // Ist das auf das aktuelle Segment folgende Segment eine Aktivität? Nur dann zählt das aktuelle Segment
-    // (Vorbereitung, Pause oder Rundenpause – oder eine direkt vorangehende Haltezeit ohne Pause) herunter.
-    function intervalNextIsHold() {
-      const t = intervalTimer;
-      return t.segs[t.segIdx + 1]?.phase === 'hold';
-    }
-
-    // Zählton 5-4-3-2-1 nur exakt beim Erreichen der jeweiligen Restsekunde, nie doppelt, nie nachgeholt.
-    function intervalMaybePlayCountdownTick(nowMs) {
-      const t = intervalTimer;
-      if (!intervalNextIsHold()) return;
-      const seg = t.segs[t.segIdx];
-      const endMs = t.segStartMs + seg.dur * 1000;
-      const remainingSec = Math.ceil((endMs - nowMs) / 1000);
-      if (remainingSec < 1 || remainingSec > COUNTDOWN_BEEP_SECONDS) return;
-      const key = t.segIdx + ':' + remainingSec;
-      if (t.lastTickKey === key) return;
-      t.lastTickKey = key;
-      intervalPlayTone('tick');
-    }
-
-    function intervalClearWake() {
-      const t = intervalTimer;
-      if (t?.wakeTimeoutId != null) { clearTimeout(t.wakeTimeoutId); t.wakeTimeoutId = null; }
-    }
-
-    // Zielt exakt auf die nächste volle Restsekunde der aktuellen Phase (nie auf einen festen 250-ms-Takt) –
-    // dadurch wachen Anzeige-Update und Zählton im selben Callback auf und können nicht auseinanderlaufen.
-    function intervalScheduleNextWake() {
-      intervalClearWake();
-      const t = intervalTimer;
-      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0) return;
-      const remainingMs = intervalSegEndMs() - Date.now();
-      const delay = remainingMs <= 0 ? 0 : Math.min(remainingMs, ((remainingMs - 1) % 1000) + 1);
-      t.wakeTimeoutId = setTimeout(intervalWake, Math.max(0, delay));
-    }
-
-    function intervalWake() {
-      const t = intervalTimer;
-      if (!t || t.finished || t.pausedAtMs || t.segIdx < 0) return;
-      const now = Date.now();
-      const prevIdx = t.segIdx;
-      const prevPhase = t.segs[prevIdx]?.phase;
-      const { outcome, crossedCount } = intervalSync(now);
-      if (outcome === 'finished') {
-        // Letztes Segment war Halten → Schlusston ersetzt den sonst üblichen Ende-Ton (wie bisher).
-        intervalPlayTone('finish');
-        intervalFinish(0);
-        return;
-      }
-      if (outcome !== 'none') {
-        // Nur beim normalen Einzelschritt (kein Nachholen nach Hintergrundphase) wissen wir genau, welche
-        // Phase verlassen wurde, und können Ende-/Start-Ton wie bisher an die jeweilige Flanke hängen.
-        const singleStep = crossedCount === 1;
-        const leftHold = singleStep && prevPhase === 'hold';
-        const enteredHold = outcome === 'entered-hold';
-        if (leftHold) {
-          intervalPlayTone('end');
-          // Folgt Halten direkt auf Halten (Pause 0), kommt der Startton kurz nach dem Endton (wie bisher)
-          if (enteredHold) setTimeout(() => { if (intervalTimer === t && !t.pausedAtMs && !t.finished) intervalPlayTone('start'); }, 700);
-        } else if (enteredHold) {
-          intervalPlayTone('start');
-        }
-        // Vibration nur bei pünktlichem Wechsel, nicht beim Nachholen nach einer Hintergrundphase
-        const lagMs = now - t.segStartMs;
-        if (lagMs < 1500) intervalVibrate(enteredHold ? 250 : [120, 80, 120]);
-      }
-      // Auch nach einem Segmentwechsel prüfen: eine sehr kurze Pause/Vorbereitung kann sofort bei ihrem Beginn
-      // schon in ihrem eigenen 5-4-3-2-1-Fenster liegen (z.B. eine 3-Sekunden-Pause → Ton "3" direkt beim Eintritt).
-      intervalMaybePlayCountdownTick(now);
-      renderIntervalRunning();
-      intervalScheduleNextWake();
-    }
-
-    function intervalProgress() {
-      const t = intervalTimer;
-      const total = intervalTotalSec(t.segs);
-      const before = t.segs.slice(0, t.segIdx).reduce((sum, s) => sum + s.dur, 0);
-      const cur = t.segs[t.segIdx];
-      const inSeg = cur ? Math.min(cur.dur, Math.max(0, ((t.pausedAtMs || Date.now()) - t.segStartMs) / 1000)) : 0;
-      return { total, elapsed: Math.min(total, before + inSeg) };
-    }
-
-    function renderIntervalRunning() {
-      const t = intervalTimer;
-      if (!t || t.finished) return;
-      const seg = t.segs[t.segIdx];
-      const ph = INTERVAL_PHASES[seg.phase];
-      const nextHold = t.segs.slice(seg.phase === 'hold' ? t.segIdx + 1 : t.segIdx).find(s => s.phase === 'hold');
-      const holdsTotal = t.segs.filter(s => s.phase === 'hold').length;
-      const holdNo = t.segs.slice(0, t.segIdx + 1).filter(s => s.phase === 'hold').length + (seg.phase === 'hold' ? 0 : 1);
-      const current = seg.phase === 'hold' ? intervalStepLabel(seg.stepIdx) : (nextHold ? intervalStepLabel(nextHold.stepIdx) : '');
-      const currentPrefix = seg.phase === 'hold' ? '' : 'Gleich: ';
-      const after = seg.phase === 'hold' ? nextHold : t.segs.slice(t.segIdx).filter(s => s.phase === 'hold')[1];
-      const paused = !!t.pausedAtMs;
-      const nextText = after ? `Danach: ${planEsc(intervalStepLabel(after.stepIdx))} · ${after.dur} s` : (seg.phase === 'hold' ? 'Letzte Haltezeit' : '');
-      // Rundenpause: Rundenzeit (eingefroren) + Gesamtzeit (läuft weiter) + Pause-Countdown (dominant) statt
-      // der sonst einzelnen großen Restzeit-Zahl. Keine aria-live auf den Zahlen (keine Ansage jede Sekunde).
-      const remainingBlock = seg.phase === 'roundpause'
-        ? `<div class="iv-roundpause-row">
-              <div class="iv-roundpause-col"><div class="iv-roundpause-label">Runde</div><div class="iv-roundpause-val">${fmtZirkelTime((t.lastRoundDurationMs || 0) / 1000)}</div></div>
-              <div class="iv-roundpause-col"><div class="iv-roundpause-label">Gesamt</div><div id="iv-total-time" class="iv-roundpause-val">${fmtZirkelTime(intervalProgress().elapsed)}</div></div>
-              <div class="iv-roundpause-col iv-roundpause-col--pause"><div class="iv-roundpause-label">Pause</div><div id="iv-remaining" class="iv-roundpause-val iv-roundpause-val--pause" role="timer" aria-live="off">${intervalRemainingSec()}</div></div>
-            </div>`
-        : `<div id="iv-remaining" class="fo-timer__time" role="timer" aria-live="off">${intervalRemainingSec()}</div>`;
-      announceIntervalPhase((paused ? 'Pausiert · ' : '') + ph.label);
-      setIntervalTimerBody(`
-        <div class="fo-timer fo-timer--${ph.cls} iv-timer">
-          <div class="fo-timer__top">
-            <div class="fo-timer__count"><span>Runde ${seg.round} von ${t.cfg.rounds}</span><span>Haltezeit ${Math.min(holdNo, holdsTotal)} / ${holdsTotal}</span></div>
-          </div>
-          <div class="fo-timer__total">
-            <div class="fo-bar fo-bar--thick" aria-hidden="true"><span id="iv-progress-bar" style="width:0%"></span></div>
-            <div class="fo-timer__totalmeta"><span id="iv-progress-text"></span></div>
-          </div>
-          <div class="fo-timer__center">
-            <span class="fo-phase fo-phase--${ph.cls}">${paused ? foIcon('pause') + ' Pausiert · ' : ''}${ph.label}</span>
-            ${remainingBlock}
-            <p class="fo-timer__now">${current ? currentPrefix + planEsc(current) : ''}</p>
-          </div>
-          ${nextText ? `<div class="fo-timer__next"><div class="fo-timer__nextname">${nextText}</div></div>` : ''}
-          <div class="fo-timer__controls">
-            <button class="fo-roundbtn fo-roundbtn--danger" type="button" onclick="requestCloseIntervalTimer()"><span class="fo-roundbtn__c">${foIcon('close', 'fo-i--lg')}</span>Abbrechen</button>
-            <button class="fo-roundbtn fo-roundbtn--main" type="button" onclick="intervalTogglePause()"><span class="fo-roundbtn__c">${paused ? foIcon('play', 'fo-i--xl', true) : foIcon('pause', 'fo-i--xl')}</span>${paused ? 'Weiter' : 'Pause'}</button>
-            <button class="fo-roundbtn" type="button" onclick="intervalSkip()"><span class="fo-roundbtn__c">${foIcon('skip', 'fo-i--lg')}</span>Überspringen</button>
-          </div>
-          <div id="iv-wake-hint" class="iv-wake-hint" style="display:${t.wakeLockUnsupported ? '' : 'none'};">${foIcon('alertCircle', 'fo-i--sm')} Bildschirm-Wachhalten wird hier nicht unterstützt – ggf. Display-Timeout verlängern.</div>
-        </div>`);
-      updateIntervalRunningLive();
-    }
-
-    function updateIntervalRunningLive() {
-      const t = intervalTimer;
-      if (!t || t.finished || t.segIdx < 0) return;
-      const rem = document.getElementById('iv-remaining');
-      if (rem) rem.textContent = intervalRemainingSec();
-      const { total, elapsed } = intervalProgress();
-      const bar = document.getElementById('iv-progress-bar');
-      if (bar) bar.style.width = (total > 0 ? Math.round(elapsed / total * 100) : 0) + '%';
-      const txt = document.getElementById('iv-progress-text');
-      if (txt) txt.textContent = `${fmtZirkelTime(elapsed)} / ${fmtZirkelTime(total)}`;
-      const totalTime = document.getElementById('iv-total-time');
-      if (totalTime) totalTime.textContent = fmtZirkelTime(elapsed);
-    }
-
-    window.intervalTogglePause = function() {
-      const t = intervalTimer;
-      if (!t || t.segIdx < 0 || t.finished) return;
-      if (t.pausedAtMs) {
-        t.segStartMs += Date.now() - t.pausedAtMs;
-        t.pausedAtMs = null;
-        intervalTimerResumeAudio();
-        intervalScheduleNextWake();
-      } else {
-        t.pausedAtMs = Date.now();
-        intervalClearWake();
-        intervalCancelTones();
-      }
-      renderIntervalRunning();
-    };
-
-    async function intervalTimerResumeAudio() {
-      const t = intervalTimer;
-      try { if (t?.audioCtx?.state === 'suspended') await t.audioCtx.resume(); } catch (e) { /* optional */ }
-    }
-
-    // Aktuelles Segment beenden. Bei einer abgebrochenen Haltezeit zählt die tatsächlich gehaltene Zeit.
-    window.intervalSkip = function() {
-      const t = intervalTimer;
-      if (!t || t.segIdx < 0 || t.finished) return;
-      intervalClearWake();
-      const now = Date.now();
-      const seg = t.segs[t.segIdx];
-      intervalRecordHold(seg, Math.min(seg.dur, ((t.pausedAtMs || now) - t.segStartMs) / 1000));
-      t.segIdx++;
-      t.segStartMs = now;
-      if (t.pausedAtMs) t.pausedAtMs = now; // bleibt pausiert, am Anfang des nächsten Segments
-      if (t.segIdx >= t.segs.length) {
-        intervalPlayTone('finish');
-        intervalFinish(0);
-        return;
-      }
-      intervalMarkRoundStartIfNeeded();
-      const enteredHold = t.segs[t.segIdx].phase === 'hold';
-      if (enteredHold) intervalPlayTone('start');
-      intervalVibrate(enteredHold ? 250 : [120, 80, 120]);
-      renderIntervalRunning();
-      if (!t.pausedAtMs) intervalScheduleNextWake();
-    };
-
-    function intervalFinish(lagMs) {
-      const t = intervalTimer;
-      intervalClearWake();
-      t.finished = true;
-      t.pausedAtMs = null;
-      intervalReleaseWakeLock();
-      if (lagMs < 1500) intervalVibrate([400, 150, 400]);
-      renderIntervalDone();
-      window.saveIntervalResults();
-    }
-
-    // Absolvierte Haltezeiten je Übung zusammenfassen (Reihenfolge des ersten Auftretens)
-    function intervalResultsByType() {
-      const byTyp = new Map();
-      intervalTimer.done.forEach(h => {
-        if (!byTyp.has(h.typ)) byTyp.set(h.typ, { typ: h.typ, typLabel: h.typLabel, holdSec: [] });
-        byTyp.get(h.typ).holdSec.push(h.sec);
-      });
-      return [...byTyp.values()];
-    }
-
-    function renderIntervalDone() {
-      const t = intervalTimer;
-      const groups = intervalResultsByType();
-      const list = groups.map(g => `<div class="iv-done__item">${planEsc(g.typLabel)}: ${fmtHoldSets(g.holdSec)}</div>`).join('')
-        || '<div class="iv-done__empty">Keine Haltezeit absolviert</div>';
-      const status = t.saving ? foIcon('clock', 'fo-i--sm') + ' Speichere…'
-        : t.saveError ? foIcon('alertCircle', 'fo-i--sm fo-status-bad') + ' Speichern fehlgeschlagen'
-        : groups.length && groups.every(g => t.savedTyps.has(g.typ)) ? foIcon('okCircle', 'fo-i--sm fo-status-ok') + ' Im Trainingslog gespeichert' : '';
-      // "Verwerfen" nur, solange es etwas zu löschen gibt und kein Speichervorgang gerade läuft – entspricht
-      // der Bedienung, die der Kraft-Zirkel (Plan- und Ad-hoc-Start, gleicher Abschlussbildschirm) schon hat.
-      const canDiscard = (t.savedEntryIds || []).length > 0 && !t.saving;
-      announceIntervalPhase('');
-      setIntervalTimerBody(`
-        <div class="iv-timer-page">
-          <h1 class="iv-page__title iv-page__head">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</h1>
-          <div class="fo-card iv-done__list">${list}</div>
-          <div class="iv-done__status">${status}</div>
-          <div class="iv-done__actions">
-            ${t.saveError ? `<button class="fo-btn fo-btn--primary" type="button" onclick="saveIntervalResults()">Erneut speichern</button>` : ''}
-            ${canDiscard ? `<button class="fo-btn fo-btn--secondary" type="button" onclick="discardIntervalResults()">Verwerfen</button>` : ''}
-            <button class="fo-btn ${t.saveError ? 'fo-btn--secondary' : 'fo-btn--primary'}${canDiscard ? ' iv-done__close--wide' : ''}" type="button" onclick="closeIntervalTimer()">Schließen</button>
-          </div>
-        </div>`);
-    }
-
-    // Ein Eintrag je Übung im Format der manuellen Haltezeit-Eingabe (kein sets, kein zeit, kein act_kcal_calc)
-    window.saveIntervalResults = async function() {
-      const t = intervalTimer;
-      if (!t || t.saving) return;
-      const groups = intervalResultsByType().filter(g => !t.savedTyps.has(g.typ));
-      if (!groups.length) return;
-      t.saving = true; t.saveError = false;
-      if (t.finished) renderIntervalDone();
-      const started = t.startedAt || new Date();
-      const datum = planYmd(started);
-      const time = started.toTimeString().slice(0, 8);
-      const notiz = t.cfg.name ? `Intervall-Zirkel: ${t.cfg.name}` : 'Intervall-Zirkel';
-      try {
-        for (const g of groups) {
-          const entry = {
-            id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            datum, typ: g.typ,
-            variant: '', variantLabel: '',
-            holdSec: g.holdSec,
-            notiz,
-            garminTime: time,
-            timestamp: datum + 'T' + time,
-            source: 'manual',
-            ...(String(g.typ).startsWith('custom_') ? { typLabel: g.typLabel } : {})
-          };
-          await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
-          trainingEntries.push(entry);
-          t.savedTyps.add(g.typ);
-          t.savedEntryIds.push(entry.id);
-        }
-        window.trainingEntries = trainingEntries;
-        showToast('Zirkel gespeichert', 'ok');
-      } catch (err) {
-        console.error('Intervall-Zirkel Speichern Fehler:', err);
-        t.saveError = true;
-        showToast('Speichern fehlgeschlagen', 'bad');
-      }
-      t.saving = false;
-      saveToCache();
-      renderFoodLog();
-      renderTrainingHistory();
-      renderDataStats();
-      if (intervalTimer === t && t.finished) renderIntervalDone();
-    };
-
-    // Löscht ausschließlich die Einträge, die DIESER Zirkel-Lauf geschrieben hat (t.savedEntryIds), nicht
-    // andere Einträge gleichen Typs/Datums. Anders als beim Kraft-Zirkel ("Verwerfen" vor dem Speichern)
-    // existieren die Dokumente hier schon in Firestore – deshalb mit Rückfrage, wie bei undoPlanUnit.
-    window.discardIntervalResults = async function() {
-      const t = intervalTimer;
-      if (!t || t.saving || !(t.savedEntryIds || []).length) return;
-      if (!await showConfirm('Zirkel verwerfen?', 'Die gespeicherten Einträge dieses Laufs werden gelöscht.', 'alertCircle', 'Verwerfen', true)) return;
-      const ids = t.savedEntryIds.slice();
-      try {
-        for (const id of ids) {
-          await deleteDoc(doc(userTrainingCol(), String(id)));
-        }
-        trainingEntries = trainingEntries.filter(e => !ids.includes(e.id));
-        window.trainingEntries = trainingEntries;
-        t.savedEntryIds = [];
-        t.savedTyps = new Set();
-        saveToCache();
-        renderFoodLog();
-        renderTrainingHistory();
-        renderDataStats();
-        showToast('Zirkel verworfen', 'ok');
-      } catch (err) {
-        console.error('Intervall-Zirkel Verwerfen Fehler:', err);
-        showToast('Verwerfen fehlgeschlagen', 'bad');
-        return;
-      }
-      window.closeIntervalTimer();
-    };
-
-    window.closeIntervalTimer = function() {
-      const t = intervalTimer;
-      if (t) {
-        intervalClearWake();
-        intervalCancelTones();
-        intervalReleaseWakeLock();
-        try { t.audioCtx?.close?.().catch(() => {}); } catch (e) { /* optional */ }
-      }
-      document.getElementById('interval-timer-modal').style.display = 'none';
-      intervalTimer = null;
-      // Nur Darstellung: Live-Region leeren, Fokus zurück an den Auslöser (oder an den Einstieg "Intervall-Zirkel")
-      announceIntervalPhase('');
-      const back = intervalTimerReturnFocus;
-      intervalTimerReturnFocus = null;
-      const target = back?.isConnected && back.offsetParent !== null ? back : document.querySelector('button[onclick="openIntervalConfig()"]');
-      target?.focus?.({ preventScroll: true });
-    };
-
-    window.requestCloseIntervalTimer = async function() {
-      const t = intervalTimer;
-      if (!t) return;
-      if (t.segIdx < 0) { window.closeIntervalTimer(); return; } // noch nicht gestartet
-      if (t.finished) {
-        const unsaved = intervalResultsByType().some(g => !t.savedTyps.has(g.typ));
-        if (unsaved && !await showConfirm('Nicht gespeichert', 'Das Ergebnis wurde noch nicht gespeichert. Trotzdem schließen?', 'alertCircle', 'Schließen', true)) return;
-        window.closeIntervalTimer();
-        return;
-      }
-      // Während der Rückfrage anhalten, damit keine Haltezeit unbemerkt weiterläuft
-      const wasPaused = !!t.pausedAtMs;
-      if (!wasPaused) window.intervalTogglePause();
-      const ok = await showConfirm('Zirkel abbrechen?', 'Der Ablauf wird beendet.', 'alertCircle', 'Zirkel abbrechen', true, 'Weiter trainieren');
-      if (intervalTimer !== t) return;
-      if (!ok) { if (!wasPaused) window.intervalTogglePause(); return; }
-      // Laufende Haltezeit mit der tatsächlich gehaltenen Zeit übernehmen
-      const seg = t.segs[t.segIdx];
-      intervalRecordHold(seg, Math.min(seg.dur, (t.pausedAtMs - t.segStartMs) / 1000));
-      intervalClearWake();
-      intervalCancelTones();
-      intervalReleaseWakeLock();
-      if (t.done.length && await showConfirm('Teilleistung speichern?', intervalResultsByType().map(g => `${g.typLabel}: ${fmtHoldSets(g.holdSec)}`).join(' · '), 'save', 'Speichern', false)) {
-        await window.saveIntervalResults();
-        if (t.saveError) { t.finished = true; renderIntervalDone(); return; } // Erneut-speichern-Option anbieten
-      }
-      window.closeIntervalTimer();
-    };
-
-    // Rückkehr in den Vordergrund: Stand über Zeitstempel nachholen (intervalWake synchronisiert, rendert und
-    // plant den nächsten Wake-Timeout neu), Wake Lock und AudioContext erneuern
-    document.addEventListener('visibilitychange', async () => {
-      const t = intervalTimer;
-      if (!t || t.segIdx < 0 || t.finished || document.visibilityState !== 'visible') return;
-      intervalWake();
-      if (intervalTimer !== t || t.finished) return;
-      intervalRequestWakeLock();
-      if (!t.pausedAtMs) await intervalTimerResumeAudio();
-    });
 
     // ── Eigene Trainingsarten ─────────────────────────────────────────────────
     let customTrainingTypes = [];

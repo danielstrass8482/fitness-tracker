@@ -1241,14 +1241,24 @@
           </div>
         </div>
 
-        <!-- Eigene Trainingsarten -->
+        <!-- Übungen verwalten: feste + eigene Kraft-/Übungsarten, je mit Intensität und "je Seite" (für den Zirkel) -->
         <div class="fo-card" style="margin-top:20px;">
-          <div class="fo-card__head"><h3 class="fo-card__title">Eigene Trainingsarten</h3></div>
+          <div class="fo-card__head"><h3 class="fo-card__title">Übungen verwalten</h3></div>
           <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
             <div id="custom-types-list"></div>
             <div class="fo-field">
-              <label class="fo-label" for="custom-type-name" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">Name der eigenen Trainingsart</label>
+              <label class="fo-label" for="custom-type-name" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">Name der neuen Übung</label>
               <input class="fo-input" type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div class="fo-select" style="flex:1;min-width:120px;"><select id="custom-type-metclass" aria-label="Intensität">
+                  <option value="leicht">Leicht</option>
+                  <option value="mittel" selected>Mittel</option>
+                  <option value="intensiv">Intensiv</option>
+                </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;">
+                <input type="checkbox" id="custom-type-perside" style="width:20px;height:20px;"> je Seite
+              </label>
             </div>
             <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="addCustomType()"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg>Hinzufügen</button>
             <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="migrateCustomTypes()"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Fehlende Arten anlegen</button>
@@ -2418,10 +2428,11 @@
           cacheGet('ouraStatus'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
-        const [cachedCustomTypes, cachedIntervalTemplates] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates')]);
+        const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings')]);
         // Typ-Dokumente (inkl. Haltezeit-Markierung) vor dem Trainings-Block setzen, damit das Formular gleich passt
         if (Array.isArray(cachedCustomTypes)) { customTrainingTypes = cachedCustomTypes; renderCustomTypes(); }
         if (Array.isArray(cachedIntervalTemplates)) intervalTemplates = cachedIntervalTemplates;
+        if (cachedExerciseSettings && typeof cachedExerciseSettings === 'object') { exerciseSettings = cachedExerciseSettings; renderCustomTypes(); }
         let hasCache = false;
         if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
         if (cachedRecipes?.length) { recipes = cachedRecipes; window.recipes = recipes; hasCache = true; }
@@ -2478,6 +2489,7 @@
         cachePut('ouraStatus', ouraStatus),
         cachePut('customTrainingTypes', customTrainingTypes),
         cachePut('intervalTemplates', intervalTemplates),
+        cachePut('exerciseSettings', exerciseSettings),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -2609,6 +2621,10 @@
 
         // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden
         await loadCustomTypes();
+        // Pflicht-Übungen für den Zirkel ergänzen (nur fehlende, siehe ensureZirkelExerciseCatalog),
+        // dann die zentralen Übungseinstellungen laden/erstmalig vorbelegen
+        try { await ensureZirkelExerciseCatalog(); } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
+        await loadExerciseSettings();
 
         // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
         try {
@@ -4564,11 +4580,22 @@
       return 0;
     }
 
+    // Zuletzt erfasstes Gewicht am oder vor datum (aus Tageslogs), sonst das aktuelle Einstellungs-Gewicht,
+    // sonst 75 kg. Gleiche Quelle/Reihenfolge wie calcHistoricalKcalGoal (BMR), damit Trainings- und
+    // Kalorienziel-Berechnung dasselbe Gewicht verwenden. Ohne datum (z.B. Vorschau ohne konkretes Datum):
+    // aktuelles Einstellungs-Gewicht.
+    function weightForDate(date) {
+      if (!date) return settings.weight || 75;
+      const logsWithWeight = trainingEntries.filter(e => e.typ === 'tageslog' && e.weight && e.datum <= date)
+        .sort((a, b) => b.datum.localeCompare(a.datum));
+      return logsWithWeight[0]?.weight || settings.weight || 75;
+    }
+
     function calcActivityKcal(entry) {
       // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
       if (entry.source === 'plan') return calcPlanActivityKcal(entry);
 
-      const weight = settings.weight || 75;
+      const weight = weightForDate(entry.datum);
       const hours = parseHours(entry.zeit || '');
       const distanz = parseFloat(entry.distanz) || 0;
 
@@ -4611,19 +4638,21 @@
     }
 
     // MET-Werte für abgehakte Plan-Einheiten (MET × kg × h)
+    // Kraft-/Übungsarten (pullups, pushups, kraft, lunges, terraband_knie, alle custom_-Typen) nutzen nicht
+    // mehr diese feste Tabelle, sondern die zentralen Übungseinstellungen (exerciseSettings, "Übungen
+    // verwalten") über zirkelDefaultMetClass – siehe calcPlanActivityKcal. Ausdauer-/Mobility-Sportarten
+    // (Garmin-Match, Distanz/Zeit-basiert) bleiben hier unverändert.
     const PLAN_MET = {
-      pullups: 4.5, pushups: 4.5,
-      kraft: 3.5, lunges: 3.5, terraband_knie: 3.5,
       yoga: 2.5, mobility: 2.5, dehnen: 2.5,
       gehen: 3.5, wandern: 3.5,
       cardio: 6.0, crosstraining: 6.0,
       laufen: 9.0, rad: 6.0,
-      zirkel: 4.0 // Zirkeltraining: kaum Pause zwischen den Übungen einer Runde
+      zirkel: 4.0 // Zirkeltraining ohne Intensitätsklassen (sehr alte Einträge, siehe calcPlanActivityKcal)
     };
-    const PLAN_MET_DEFAULT = 3.5; // unbekannte/eigene Typen → wie Kraft
+    const PLAN_MET_DEFAULT = 3.5; // unbekannte Typen ohne eigenen Eintrag
 
     function calcPlanActivityKcal(entry) {
-      const weight = settings.weight || 75;
+      const weight = weightForDate(entry.datum);
       const hours = parseHours(entry.zeit || '');
       const distanz = parseFloat(entry.distanz) || 0;
       // Für die bestehenden Formeln: Kopie ohne source (sonst Rekursion),
@@ -4647,7 +4676,10 @@
           if (entry.uebungen?.some(x => x.metClass)) return calcZirkelEntryKcal(entry, weight);
           break;
       }
-      const met = PLAN_MET[entry.typ] ?? PLAN_MET_DEFAULT;
+      // Kraft-/Übungsarten: MET aus den zentralen Übungseinstellungen (zirkelDefaultMetClass), Fallback
+      // mittel – ersetzt die frühere feste MET-Tabelle für diese Typen (Teil 2.3).
+      const isStrengthTyp = ZIRKEL_STRENGTH_PLAN_TYPES.includes(entry.typ) || String(entry.typ).startsWith('custom_');
+      const met = isStrengthTyp ? zirkelMetForClass(zirkelDefaultMetClass(entry.typ, entry.variant)) : (PLAN_MET[entry.typ] ?? PLAN_MET_DEFAULT);
       return hours > 0 ? Math.round(met * weight * hours) : 0;
     }
 
@@ -7180,8 +7212,13 @@
         // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
         const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
         const timeDisplay = e.garminTime ? `<span style="color:var(--fo-text-3);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
+        // Zirkel-Einträge mit details sind aufklappbar (Runden wie im Abschluss-Screen, Teil 3.1);
+        // ältere Zirkel-Einträge ohne details zeigen nur die normale Zeile, ohne Fehler.
+        const isZirkelEntry = typ === 'zirkel' && Array.isArray(e.details) && e.details.length > 0;
+        const zirkelOpen = isZirkelEntry && getHistoryZirkelState(e.id).open;
         return `
-        <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+        <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}${isZirkelEntry ? 'cursor:pointer;' : ''}"${isZirkelEntry ? ` onclick="toggleHistoryZirkel('${e.id}')"` : ''}>
+          ${isZirkelEntry ? `<span class="fo-row__icon">${foIcon(zirkelOpen ? 'chevD' : 'chevR', 'fo-i--sm')}</span>` : ''}
           <div class="fo-row__main">
             <div class="fo-row__title">${timeDisplay}${title}${sourceBadge}</div>
             <div class="fo-row__sub fo-row__sub--wrap">
@@ -7190,8 +7227,9 @@
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
             </div>
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
+            ${zirkelOpen ? historyZirkelRoundsHtml(e) : ''}
           </div>
-          <div class="fo-row__actions">
+          <div class="fo-row__actions" onclick="event.stopPropagation()">
             ${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
             <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>
           </div>
@@ -7556,6 +7594,30 @@
           return [e.datum, e.typ, distanz || '-', zeit || '-', pace, Math.round(kcal), notiz].join('|');
         });
 
+      // Zirkel-/Halte-Übungen pro Trainingsart, letzte 365 Tage (aggregiert je Eintrag, KEINE Einzelzeilen
+      // pro Runde – hält den Kontext klein). Normalisiert über zirkelNormalizedExerciseLabel, damit z.B.
+      // "Plank" aus Zirkel-Details und aus manuellen Halte-Einträgen zusammen auswertbar sind (Teil 3.2).
+      const exerciseRows = [];
+      trainingEntries
+        .filter(e => e.typ === 'zirkel' && Array.isArray(e.details) && e.details.length && e.datum >= cutoffTrainingStr)
+        .forEach(e => {
+          zirkelExerciseSummaryRows(e.details).forEach(r => {
+            exerciseRows.push([
+              e.datum, r.label, r.mode, r.perSide ? 'ja' : 'nein',
+              r.mode === 'time' ? r.avgSec : r.avgWdh, r.mode === 'time' ? 's' : 'Wdh', r.rounds
+            ].join('|'));
+          });
+        });
+      trainingEntries
+        .filter(e => isHoldEntry(e) && e.datum >= cutoffTrainingStr)
+        .forEach(e => {
+          const secs = (e.holdSec || []).map(s => parseInt(s) || 0).filter(s => s > 0);
+          if (!secs.length) return;
+          const avg = Math.round(secs.reduce((a, b) => a + b, 0) / secs.length);
+          exerciseRows.push([e.datum, zirkelNormalizedExerciseLabel(e.typ, e.variant), 'manual-hold', '-', avg, 's', secs.length].join('|'));
+        });
+      exerciseRows.sort((a, b) => a.localeCompare(b));
+
       // Tägliche Ernährungsbilanz, letzte analysisWindowDays Tage (aggregiert pro Tag, keine Einzel-Lebensmittel)
       const dayMap = {};
       Object.keys(foodLog).forEach(d => {
@@ -7624,7 +7686,7 @@
       const ouraBaselineHrv = ouraConnected ? ouraBaselineAvg('hrvAvg') : { avg: null, count: 0 };
       const ouraBaselineRhr = ouraConnected ? ouraBaselineAvg('restingHr') : { avg: null, count: 0 };
 
-      return { profile, trainingRows, nutritionRows, dayLogRows, ouraConnected, ouraRows, ouraBaselineHrv, ouraBaselineRhr, OURA_BASELINE_MIN_DAYS };
+      return { profile, trainingRows, exerciseRows, nutritionRows, dayLogRows, ouraConnected, ouraRows, ouraBaselineHrv, ouraBaselineRhr, OURA_BASELINE_MIN_DAYS };
     }
 
     function buildAnalysisSystemPrompt() {
@@ -7645,6 +7707,11 @@ Ziele: ${p.ziel_protein_g ?? '?'}g Protein, ${p.ziel_carbs_g ?? '?'}g Kohlenhydr
 === Trainingseinträge (letzte 365 Tage, ohne Tageslogs) ===
 Format: Datum|Typ|Distanz(km)|Zeit|Pace(min/km)|Kcal|Notiz
 ${ctx.trainingRows.join('\n') || '(keine Einträge)'}
+
+=== Zirkel-/Halte-Übungen pro Trainingsart (letzte 365 Tage, je Eintrag aggregiert) ===
+Format: Datum|Trainingsart|Modus|jeSeite|Ø Wert|Einheit|Runden/Sätze
+Modus 'time'/'reps' = aus einem Zirkel, 'manual-hold' = einzeln geloggte Haltezeit (kein Zirkel).
+${ctx.exerciseRows.join('\n') || '(keine Einträge)'}
 
 === Tägliche Ernährungsbilanz (letzte ${analysisWindowDays} Tage, aggregiert) ===
 Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|AnzahlMahlzeiten|KcalZiel|Differenz
@@ -8315,28 +8382,75 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function zirkelMetForClass(cls) {
       return ZIRKEL_MET_CLASSES[cls] || ZIRKEL_MET_CLASSES[ZIRKEL_MET_DEFAULT_CLASS];
     }
-    // Eingebaute Typen mit fester Klasse (unabhängig von der Variante). 'kraft' hat keinen Fix-Wert hier,
-    // weil dort die Variante (Freitext) entscheidet, siehe ZIRKEL_LEICHT_RE/ZIRKEL_INTENSIV_RE unten.
-    const ZIRKEL_TYP_MET_CLASS = { pullups: 'intensiv', pushups: 'intensiv', lunges: 'intensiv', terraband_knie: 'mittel' };
-    // Label-Abgleich (case-insensitiv) für 'kraft'+Variante UND custom_-Typen ohne eigene Katalog-Klasse –
-    // wirkt auf den Anzeigenamen, damit es unabhängig davon funktioniert, ob eine Übung als typ:'kraft' mit
-    // Variantentext oder als eigener custom_-Typ angelegt wurde (siehe Grep-Ergebnis zu Übungsbezeichnern).
+    // Label-Abgleich (case-insensitiv) NUR noch als Fallback für alte Daten ohne Trainingsart-ID (typ:'kraft'
+    // + Freitext-Variante, die sich nicht über zirkelLegacyVariantTyp zuordnen lässt). Für alles mit einer ID
+    // (feste Typen, custom_-Typen) kommen Klasse/perSide ausschließlich aus den zentralen Übungseinstellungen
+    // (exerciseSettings, siehe "Übungen verwalten") – siehe Teil 2.3.
     const ZIRKEL_LEICHT_RE = /bird\s*dog|glute\s*bridge|mobili|dehn/i;
     const ZIRKEL_INTENSIV_RE = /split\s*squat|squat|pull-?up|push-?up|liegestütz/i;
-    // perSide-Standard: an für Seitplank, Bird Dog, Split Squats, einbeinige Übungen (danach pro Übung änderbar)
     const ZIRKEL_PERSIDE_RE = /seit.?plank|side.?plank|bird\s*dog|split\s*squat|einbeinig|single.?leg/i;
 
     function zirkelExerciseLabelFor(typ, variant) {
       return (planTypLabel(typ) + ' ' + (variant || '')).trim();
     }
 
-    // Katalog-Standardklasse für eine Übung: fester Typ → eigenes Feld am custom_-Typ-Dokument → Label-Abgleich
-    // → 'mittel'. Wird nur als Vorbelegung genutzt (beim Hinzufügen/Typwechsel); danach frei editierbar und
-    // am jeweiligen Zirkel-Übungsobjekt gespeichert (bleibt beim Verschieben erhalten).
+    // Alte Zirkel-Übungen mit typ:'kraft' + Freitext-Variante der passenden Trainingsart zuordnen (Abgleich
+    // über den normalisierten Namen: klein, getrimmt, einfache Singular/Plural-Toleranz durch optionales "s").
+    // Nur beim Lesen (normalizeZirkelUebung) – Firestore-Daten bleiben unverändert, bis neu gespeichert wird.
+    // Reihenfolge wichtig: "Bulgarian Split Squat(s)" vor "Split Squat(s)" prüfen (sonst falscher Treffer).
+    const ZIRKEL_VARIANT_TYP_MAP = [
+      [/^bulgarian\s*split\s*squats?$/i, 'custom_bulgarian_split_squats'],
+      [/^split\s*squats?$/i, 'custom_split_squats'],
+      [/^(gerade\s*)?planks?$/i, 'custom_plank'],
+      [/^(seitliche\s*planks?|seit\s*planks?|seitplanks?|side\s*planks?)$/i, 'custom_seitplank'],
+      [/^glute\s*bridges?$/i, 'custom_glute_bridge'],
+      [/^bird\s*dogs?$/i, 'custom_bird_dog']
+    ];
+    function zirkelLegacyVariantTyp(variant) {
+      const norm = String(variant || '').trim();
+      if (!norm) return null;
+      const hit = ZIRKEL_VARIANT_TYP_MAP.find(([re]) => re.test(norm));
+      return hit ? hit[1] : null;
+    }
+
+    // Anzeigename einer Übung, normalisiert über alle Quellen hinweg (Zirkel-details, manuelle Halte-
+    // Einträge, alte typ:'kraft'+Freitext-Varianten) – für die Analyse-Tab-Auswertung pro Übung (Teil 3.2).
+    function zirkelNormalizedExerciseLabel(typ, variant) {
+      let t = typ, v = String(variant || '').trim();
+      if (t === 'kraft') {
+        const mapped = zirkelLegacyVariantTyp(v);
+        if (mapped) { t = mapped; v = ''; }
+      }
+      return planTypLabel(t) + (v ? ' · ' + v : '');
+    }
+
+    // Detail-Zeilen (eines Zirkel-Eintrags) zu einer Zeile je Übung zusammenfassen: Ø Wert pro Runde
+    // (Sekunden bei mode 'time', Wdh. bei 'reps'; bei perSide+time werden beide Seiten je Runde addiert),
+    // Anzahl Runden, je Seite ja/nein. Gruppiert über den normalisierten Namen, nicht über typ/variant
+    // direkt, damit alte typ:'kraft'-Varianten mit derselben Trainingsart zusammenfallen.
+    function zirkelExerciseSummaryRows(details) {
+      const groups = new Map();
+      details.forEach(h => {
+        const label = zirkelNormalizedExerciseLabel(h.typ, h.variant);
+        const key = label + '|' + h.mode;
+        if (!groups.has(key)) groups.set(key, { label, mode: h.mode, perSide: false, roundSec: new Map(), wdhs: [] });
+        const g = groups.get(key);
+        if (h.perSide || h.side) g.perSide = true;
+        g.roundSec.set(h.round, (g.roundSec.get(h.round) || 0) + h.sec);
+        if (h.mode === 'reps') g.wdhs.push(h.wdh);
+      });
+      return [...groups.values()].map(g => {
+        const roundSecs = [...g.roundSec.values()];
+        const avgSec = roundSecs.length ? Math.round(roundSecs.reduce((a, b) => a + b, 0) / roundSecs.length) : 0;
+        const avgWdh = g.wdhs.length ? Math.round(g.wdhs.reduce((a, b) => a + b, 0) / g.wdhs.length) : 0;
+        return { label: g.label, mode: g.mode, perSide: g.perSide, avgSec, avgWdh, rounds: g.roundSec.size };
+      });
+    }
+
+    // Klasse/perSide einer Trainingsart: zentrale Übungseinstellungen (exerciseSettings), sonst (nur für
+    // typ:'kraft'+Freitext ohne zuordenbare ID) Label-Abgleich, sonst 'mittel'/aus.
     function zirkelDefaultMetClass(typ, variant) {
-      if (ZIRKEL_TYP_MET_CLASS[typ]) return ZIRKEL_TYP_MET_CLASS[typ];
-      const custom = String(typ).startsWith('custom_') ? customTrainingTypes.find(t => t.id === typ) : null;
-      if (custom?.metClass) return custom.metClass;
+      if (exerciseSettings[typ]?.metClass) return exerciseSettings[typ].metClass;
       const label = zirkelExerciseLabelFor(typ, variant);
       if (ZIRKEL_LEICHT_RE.test(label)) return 'leicht';
       if (ZIRKEL_INTENSIV_RE.test(label)) return 'intensiv';
@@ -8344,8 +8458,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     }
 
     function zirkelDefaultPerSide(typ, variant) {
-      const custom = String(typ).startsWith('custom_') ? customTrainingTypes.find(t => t.id === typ) : null;
-      if (custom && 'perSideDefault' in custom) return !!custom.perSideDefault;
+      if (exerciseSettings[typ]) return !!exerciseSettings[typ].perSideDefault;
       return ZIRKEL_PERSIDE_RE.test(zirkelExerciseLabelFor(typ, variant));
     }
 
@@ -8410,20 +8523,26 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     // Eine Zirkel-Übung normalisieren: { typ, variant, mode:'time'|'reps', holdSec, wdh, pauseSec, perSide,
     // metClass }. legacyModeFallback greift nur, wenn kein mode gespeichert ist (alte Daten): Plan-Zirkel
-    // kannte nur Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time'). perSide/
-    // metClass fehlen bei alten Daten ebenfalls → Katalog-Standard (perSide: false, siehe 3.1 "alte Übungen
-    // ohne perSide gelten als false"; metClass: zirkelDefaultMetClass).
+    // kannte nur Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time'). Alte
+    // typ:'kraft'+Freitext-Varianten werden, wenn zuordenbar, auf die passende Trainingsart-ID umgelegt
+    // (zirkelLegacyVariantTyp, nur beim Lesen). perSide fehlt bei alten Daten → false (3.1). metClass kommt
+    // für Plan-/Vorlagen-Übungen IMMER aus den aktuellen Übungseinstellungen (nicht mehr pro Übung
+    // überschreibbar, Teil 2.3) – ein evtl. gespeichertes altes metClass-Feld wird hier bewusst ignoriert.
     function normalizeZirkelUebung(x, legacyModeFallback) {
       const mode = x.mode === 'time' || x.mode === 'reps' ? x.mode : legacyModeFallback;
-      const typ = x.typ || '';
-      const variant = String(x.variant || '').trim();
+      let typ = x.typ || '';
+      let variant = String(x.variant || '').trim();
+      if (typ === 'kraft') {
+        const mapped = zirkelLegacyVariantTyp(variant);
+        if (mapped) { typ = mapped; variant = ''; }
+      }
       return {
         typ, variant, mode,
         holdSec: Math.max(0, parseInt(x.holdSec) || 0),
         wdh: Math.max(0, parseInt(x.wdh) || 0),
         pauseSec: Math.max(0, Math.round(Number(x.pauseSec) || 0)),
         perSide: !!x.perSide,
-        metClass: x.metClass === 'leicht' || x.metClass === 'mittel' || x.metClass === 'intensiv' ? x.metClass : zirkelDefaultMetClass(typ, variant)
+        metClass: zirkelDefaultMetClass(typ, variant)
       };
     }
 
@@ -8643,7 +8762,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     // Geschätzte Kalorien einer Zirkel-Einheit/Vorlage (Vorschau, nicht gemessen): calcZirkelKcal mit der
     // Arbeitszeit-Schätzung je Übung (zirkelEstimateWorkSec), gleiche Funktion wie beim Live-Timer/manuellen Nachtragen.
     function planZirkelKcal(z) {
-      return calcZirkelKcal(z, settings.weight || 75, x => zirkelEstimateWorkSec(x));
+      return calcZirkelKcal(z, weightForDate(), x => zirkelEstimateWorkSec(x));
     }
 
     // "3 × 12 Wdh" bei gleichen Sets, sonst "12-11-10 Wdh"; plus Pause
@@ -8928,11 +9047,16 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>Eigene…</option>`;
     }
 
+    // 'kraft' (Freitext-Katchall) ist im Zirkel-Editor nicht mehr wählbar (Teil 2.3) – nur noch Trainingsarten
+    // mit fester ID. Eine alte Zirkel-Übung mit typ:'kraft' bleibt über den Fallback unten weiter anzeigbar,
+    // bis sie (über zirkelLegacyVariantTyp beim Lesen oder manuell) einer Trainingsart zugeordnet ist.
+    const ZIRKEL_NEW_EXERCISE_OPTION = '__zirkel_new_exercise__';
     function planZirkelTypeOptions(selected) {
-      const opts = ZIRKEL_BASE_TYPES.map(t => ({ id: t, label: TYP_LABELS[t] || t }));
+      const opts = ZIRKEL_BASE_TYPES.filter(t => t !== 'kraft').map(t => ({ id: t, label: TYP_LABELS[t] || t }));
       getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: t.label }); });
       if (selected && !opts.find(o => o.id === selected)) opts.push({ id: selected, label: planTypLabel(selected) });
-      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
+      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
+        + `<option value="${ZIRKEL_NEW_EXERCISE_OPTION}">+ Neue Übung anlegen</option>`;
     }
 
     function planZirkelSummaryText(z) {
@@ -8975,7 +9099,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.zirkelAddUebung = function(ctx, key, idx) {
       const list = zirkelCtxUnit(ctx, key, idx).uebungen;
       const prev = list[list.length - 1];
-      const typ = prev?.typ || 'kraft';
+      const typ = prev?.typ || 'custom_plank';
       const mode = prev?.mode || defaultZirkelModeForTyp(typ);
       list.push({
         typ, variant: '', mode,
@@ -9005,12 +9129,59 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     window.zirkelUebungType = function(ctx, key, idx, j, value) {
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      if (value === ZIRKEL_NEW_EXERCISE_OPTION) {
+        x._newExercise = true;
+        zirkelCtxRerender(ctx, key, idx);
+        return;
+      }
+      x._newExercise = false;
       x.typ = value;
       x.variant = '';
       x._variantCustom = false;
       x.perSide = zirkelDefaultPerSide(value, '');
       x.metClass = zirkelDefaultMetClass(value, '');
       zirkelCtxRerender(ctx, key, idx);
+    };
+
+    window.zirkelCancelNewUebung = function(ctx, key, idx, j) {
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      x._newExercise = false;
+      zirkelCtxRerender(ctx, key, idx);
+    };
+
+    // Neue Übung direkt aus dem Zirkel-Editor anlegen (Name, Intensität, je Seite) – gespeichert als
+    // eigene Trainingsart (globalTrainingTypesCol) + zentrale Übungseinstellung (setExerciseSetting),
+    // dieselben Daten wie über "Übungen verwalten" (Teil 2.2/2.3).
+    window.zirkelCreateUebungType = async function(ctx, key, idx, j) {
+      const fieldId = `${ctx}-${key}-${idx}-${j}`;
+      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
+      const nameInput = document.getElementById(`znew-name-${fieldId}`);
+      const name = (nameInput?.value || '').trim();
+      if (!name) { showToast('Bitte einen Namen eingeben', 'bad'); return; }
+      const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const metClass = document.getElementById(`znew-met-${fieldId}`)?.value || ZIRKEL_MET_DEFAULT_CLASS;
+      const perSideDefault = !!document.getElementById(`znew-side-${fieldId}`)?.checked;
+      try {
+        if (!customTrainingTypes.find(t => t.id === id)) {
+          await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
+          customTrainingTypes.push({ id, label: name });
+          customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+          cachePut('customTrainingTypes', customTrainingTypes);
+          updateTrainingTypeSelect();
+        }
+        await setExerciseSetting(id, { metClass, perSideDefault });
+        x._newExercise = false;
+        x.typ = id;
+        x.variant = '';
+        x._variantCustom = false;
+        x.perSide = perSideDefault;
+        x.metClass = metClass;
+        zirkelCtxRerender(ctx, key, idx);
+        showToast(name + ' angelegt', 'ok');
+      } catch (e) {
+        console.error('Neue Übung anlegen fehlgeschlagen:', e);
+        showToast('Anlegen fehlgeschlagen', 'bad');
+      }
     };
 
     window.zirkelUebungVariant = function(ctx, key, idx, j, value) {
@@ -9040,12 +9211,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       zirkelCtxRerender(ctx, key, idx); // Feldbeschriftungen (Sek./Wdh. "je Seite") ändern sich
     };
 
-    window.zirkelUebungMetClass = function(ctx, key, idx, j, value) {
-      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
-      if (value === 'leicht' || value === 'mittel' || value === 'intensiv') x.metClass = value;
-      zirkelCtxSummary(ctx, key, idx);
-    };
-
     window.zirkelUebungField = function(ctx, key, idx, j, field, value) {
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
       if (field === 'holdSec' || field === 'wdh') x[field] = parseInt(value) || 0;
@@ -9054,10 +9219,38 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       zirkelCtxSummary(ctx, key, idx);
     };
 
+    function zirkelMetClassBadgeHtml(x) {
+      const label = { leicht: 'Leicht', mittel: 'Mittel', intensiv: 'Intensiv' }[x.metClass] || 'Mittel';
+      return `<span class="fo-tag" title="Intensität, aus Übungen verwalten (Trainings-Tab)" style="padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-size:12px;color:var(--muted);">${planEsc(label)}</span>`;
+    }
+
     // Eine Übungs-Zeile: Typ, Verschieben (Pfeile), Variante, Umschalter Halten/Wdh., Zielwert
-    // (Sek. bzw. Wdh., "je Seite" wenn perSide), Wechselpause danach, perSide-Schalter, Intensitätsklasse
+    // (Sek. bzw. Wdh., "je Seite" wenn perSide), Wechselpause danach, perSide-Schalter, Intensität (nur
+    // Anzeige – kommt aus den zentralen Übungseinstellungen, siehe Teil 2.3). Bei "+ Neue Übung anlegen"
+    // (x._newExercise) stattdessen ein Mini-Formular: Name, Intensität, je Seite.
     function zirkelUebungRowHtml(ctx, key, idx, x, j, total, inp) {
       const args = `'${ctx}','${key}',${idx},${j}`;
+      if (x._newExercise) {
+        const fieldId = `${ctx}-${key}-${idx}-${j}`;
+        return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
+            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+              <span style="flex:1;font-weight:600;font-size:13px;">Neue Übung</span>
+              <button onclick="zirkelCancelNewUebung(${args})" title="Abbrechen" aria-label="Abbrechen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
+            </div>
+            <input type="text" id="znew-name-${fieldId}" placeholder="Name, z.B. Dips" style="${inp}margin-bottom:6px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+              <select id="znew-met-${fieldId}" aria-label="Intensität" style="${inp}width:auto;flex:none;padding:6px 8px;">
+                <option value="leicht">Leicht</option>
+                <option value="mittel" selected>Mittel</option>
+                <option value="intensiv">Intensiv</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="checkbox" id="znew-side-${fieldId}" style="width:18px;height:18px;flex:none;">je Seite
+              </label>
+            </div>
+            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="zirkelCreateUebungType(${args})">Anlegen</button>
+          </div>`;
+      }
       return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
           <div style="display:flex;gap:6px;margin-bottom:6px;">
             <select onchange="zirkelUebungType(${args},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
@@ -9082,11 +9275,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
               <input type="checkbox" ${x.perSide ? 'checked' : ''} onchange="zirkelUebungPerSide(${args},this.checked)" style="width:18px;height:18px;flex:none;">
               je Seite
             </label>
-            <select onchange="zirkelUebungMetClass(${args},this.value)" title="Intensitätsklasse für die Kalorienberechnung" style="${inp}width:auto;flex:none;padding:6px 8px;">
-              <option value="leicht"${x.metClass === 'leicht' ? ' selected' : ''}>Leicht</option>
-              <option value="mittel"${x.metClass === 'mittel' ? ' selected' : ''}>Mittel</option>
-              <option value="intensiv"${x.metClass === 'intensiv' ? ' selected' : ''}>Intensiv</option>
-            </select>
+            ${zirkelMetClassBadgeHtml(x)}
           </div>
         </div>`;
     }
@@ -9233,7 +9422,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     window.planAddZirkel = function(key) {
       planDraft[key].push({
         id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150, prepSec: 0, sideSwitchSec: 5,
-        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 0, perSide: false, metClass: zirkelDefaultMetClass('kraft', '') }],
+        uebungen: [{ typ: 'custom_plank', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 0, perSide: zirkelDefaultPerSide('custom_plank', ''), metClass: zirkelDefaultMetClass('custom_plank', '') }],
         notiz: ''
       });
       renderTrainingPlan(true);
@@ -9751,10 +9940,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return h.mode === 'time' ? fmtZirkelTime(h.sec) : `${h.wdh}× · ${fmtZirkelTime(h.sec)}`;
     }
 
-    // Eine Runden-Zeile: zugeklappt "Runde N · Gesamtzeit", aufgeklappt zusätzlich jede Übung einzeln
-    function zirkelRoundRowHtml(t, r) {
-      const expanded = t.expandedRounds.has(r.round);
-      const head = `<li class="fo-row zk-round" style="cursor:pointer;" onclick="zirkelToggleRound(${r.round})">
+    // Eine Runden-Zeile: zugeklappt "Runde N · Gesamtzeit", aufgeklappt zusätzlich jede Übung einzeln.
+    // expandedRounds: Set der aufgeklappten Rundennummern (Aufrufer-spezifisch, siehe toggleCall);
+    // toggleCall: fertiger onclick-Ausdruck, der die jeweilige Runde umschaltet und neu rendert. Wird vom
+    // Live-Timer (zirkelToggleRound) UND der Trainingshistorie (toggleHistoryZirkelRound) genutzt.
+    function zirkelRoundRowHtml(expandedRounds, toggleCall, r) {
+      const expanded = expandedRounds.has(r.round);
+      const head = `<li class="fo-row zk-round" style="cursor:pointer;" onclick="${toggleCall}">
           <span class="fo-row__icon">${foIcon(expanded ? 'chevD' : 'chevR', 'fo-i--sm')}</span>
           <div class="fo-row__main"><div class="fo-row__title">Runde ${r.round}</div></div>
           <div class="fo-row__end fo-num">${fmtZirkelTime(r.totalSec)}</div>
@@ -9776,7 +9968,37 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function zirkelDoneRoundsHtml(t) {
       const rounds = zirkelRoundsFromDone(t.done);
       if (!rounds.length) return '';
-      return `<ol class="fo-card fo-list zk-rounds">${rounds.map(r => zirkelRoundRowHtml(t, r)).join('')}</ol>`;
+      return `<ol class="fo-card fo-list zk-rounds">${rounds.map(r => zirkelRoundRowHtml(t.expandedRounds, `zirkelToggleRound(${r.round})`, r)).join('')}</ol>`;
+    }
+
+    // ── Zirkel in der Trainingshistorie aufklappbar (Teil 3.1) ─────────────────
+    // Nur Darstellung (nicht gespeichert): { [entryId]: { open: bool, rounds: Set<Rundennummer> } }.
+    // Ältere Zirkel-Einträge ohne details zeigen nur die normale Zeile, kein Aufklapp-Pfeil.
+    let historyZirkelState = {};
+    function getHistoryZirkelState(id) {
+      if (!historyZirkelState[id]) historyZirkelState[id] = { open: false, rounds: new Set() };
+      return historyZirkelState[id];
+    }
+
+    window.toggleHistoryZirkel = function(id) {
+      getHistoryZirkelState(id).open = !getHistoryZirkelState(id).open;
+      renderTrainingHistory();
+    };
+
+    window.toggleHistoryZirkelRound = function(id, round) {
+      const rounds = getHistoryZirkelState(id).rounds;
+      if (rounds.has(round)) rounds.delete(round); else rounds.add(round);
+      renderTrainingHistory();
+    };
+
+    // Rundenliste eines Zirkel-Eintrags in der Historie, wiederverwendet aus zirkelRoundRowHtml
+    function historyZirkelRoundsHtml(e) {
+      const rounds = zirkelRoundsFromDone(Array.isArray(e.details) ? e.details : []);
+      if (!rounds.length) return '<p class="fo-help" style="margin:4px 0 0;">Keine Übungsdetails für diesen Eintrag.</p>';
+      const st = getHistoryZirkelState(e.id);
+      return `<ol class="fo-card fo-list zk-rounds" style="margin-top:6px;">${rounds.map(r =>
+        zirkelRoundRowHtml(st.rounds, `toggleHistoryZirkelRound('${e.id}', ${r.round})`, r)
+      ).join('')}</ol>`;
     }
 
     function renderZirkelTimerIntro() {
@@ -9839,7 +10061,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       // Rundenliste: NUR in der Rundenpause, dort ausschließlich die gerade beendete Runde (zugeklappt,
       // aufklappbar). In Übung, Wechselpause, Seitenwechsel und Vorbereitung keine Liste (Teil 1.2).
       const justFinished = seg.phase === 'roundpause' ? zirkelRoundsFromDone(t.done).find(r => r.round === seg.round) : null;
-      const roundsBlock = justFinished ? `<div class="zk-rounds-wrap"><ol class="fo-card fo-list zk-rounds">${zirkelRoundRowHtml(t, justFinished)}</ol></div>` : '';
+      const roundsBlock = justFinished ? `<div class="zk-rounds-wrap"><ol class="fo-card fo-list zk-rounds">${zirkelRoundRowHtml(t.expandedRounds, `zirkelToggleRound(${justFinished.round})`, justFinished)}</ol></div>` : '';
 
       announceZirkelPhase((paused ? 'Pausiert · ' : '') + ph.label);
       setZirkelTimerBody(`
@@ -9869,7 +10091,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function renderZirkelTimerDone() {
       const t = zirkelTimerState;
       const { unit, elapsedSec } = t;
-      const kcal = calcZirkelKcal(unit, settings.weight || 75, zirkelDoneWorkSecFor(t));
+      // Gewicht zum Datum, an dem der Eintrag gespeichert wird (wie saveZirkelTimer) – Vorschau und
+      // gespeicherter Wert zeigen dieselbe Zahl.
+      const kcal = calcZirkelKcal(unit, weightForDate(t.ds || planYmd(new Date())), zirkelDoneWorkSecFor(t));
       setZirkelTimerBody(`
         <div class="iv-timer-page">
           <h1 class="iv-page__title iv-page__head">Zirkel abgeschlossen! ${foIcon('okCircle', 'fo-i--lg fo-status-ok')}</h1>
@@ -10175,8 +10399,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         timestamp: datum + 'T' + timeNow
       };
       // Dieselbe Berechnung wie die Vorschau im Abschluss-Screen (renderZirkelTimerDone, zirkelDoneWorkSecFor) –
-      // garantiert denselben kcal-Wert wie dort angezeigt.
-      entry.act_kcal_calc = calcZirkelKcal(unit, settings.weight || 75, zirkelDoneWorkSecFor(t));
+      // garantiert denselben kcal-Wert wie dort angezeigt. Gewicht zum Eintragsdatum (weightForDate).
+      entry.act_kcal_calc = calcZirkelKcal(unit, weightForDate(datum), zirkelDoneWorkSecFor(t));
 
       const btn = document.getElementById('zirkel-timer-save-btn');
       if (btn) btn.disabled = true;
@@ -10257,7 +10481,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     function newZirkelTemplateDraft() {
       return {
         id: null, name: '', runden: 3, pauseSec: 60, prepSec: 10, sideSwitchSec: 5,
-        uebungen: [{ typ: 'kraft', variant: '', mode: 'reps', holdSec: 0, wdh: 10, pauseSec: 10, perSide: false, metClass: zirkelDefaultMetClass('kraft', '') }]
+        uebungen: [{ typ: 'custom_plank', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 10, perSide: zirkelDefaultPerSide('custom_plank', ''), metClass: zirkelDefaultMetClass('custom_plank', '') }]
       };
     }
 
@@ -10513,36 +10737,150 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       } catch(e) { console.warn('Load custom types error:', e); }
     }
 
+    // ── Übungen verwalten: Intensität + "je Seite" zentral pro Trainingsart (fest ODER eigen) ─────────
+    // users/{uid}/settings/exercises (+ IndexedDB-Cache 'exerciseSettings'): { [typ]: { metClass, perSideDefault } }.
+    // Gilt für alle Kraft-/Übungsarten; Ausdauer-Sportarten (Laufen, Rad, Gehen, Garmin-Match) sind nicht
+    // enthalten, deren Kalorienlogik bleibt unverändert. Änderungen wirken nur auf neue Einträge/Zirkel-Läufe
+    // (zirkelDefaultMetClass/zirkelDefaultPerSide lesen live von hier); bereits gespeicherte Einträge und
+    // Zirkel-uebungen/-details tragen ihre Werte als Schnappschuss und werden nie neu berechnet.
+    let exerciseSettings = {};
+    const userExerciseSettingsDoc = () => doc(db, 'users', userId, 'settings', 'exercises');
+    const ZIRKEL_FIXED_EXERCISE_TYPES = ['pullups', 'pushups', 'lunges', 'terraband_knie'];
+    // Wie ZIRKEL_FIXED_EXERCISE_TYPES, zusätzlich 'kraft' (generischer Freitext-Katchall außerhalb des
+    // Zirkels) – für calcPlanActivityKcal's Kraft-MET-Fallback (Teil 2.3).
+    const ZIRKEL_STRENGTH_PLAN_TYPES = [...ZIRKEL_FIXED_EXERCISE_TYPES, 'kraft'];
+
+    // Vorbelegung beim allerersten Laden (nur wenn noch kein Dokument existiert). Die custom_-IDs müssen
+    // dafür schon existieren – siehe ensureZirkelExerciseCatalog(), läuft vorher.
+    const ZIRKEL_EXERCISE_SETTINGS_SEED = {
+      custom_plank: { metClass: 'mittel', perSideDefault: false },
+      custom_seitplank: { metClass: 'mittel', perSideDefault: true },
+      custom_glute_bridge: { metClass: 'leicht', perSideDefault: false },
+      custom_bird_dog: { metClass: 'leicht', perSideDefault: true },
+      lunges: { metClass: 'mittel', perSideDefault: true },
+      custom_split_squats: { metClass: 'intensiv', perSideDefault: true },
+      custom_bulgarian_split_squats: { metClass: 'intensiv', perSideDefault: true },
+      pullups: { metClass: 'intensiv', perSideDefault: false },
+      pushups: { metClass: 'intensiv', perSideDefault: false },
+      terraband_knie: { metClass: 'mittel', perSideDefault: true }
+    };
+
+    async function loadExerciseSettings() {
+      try {
+        const snap = await getDoc(userExerciseSettingsDoc());
+        if (snap.exists()) {
+          exerciseSettings = snap.data() || {};
+        } else {
+          exerciseSettings = JSON.parse(JSON.stringify(ZIRKEL_EXERCISE_SETTINGS_SEED));
+          await setDoc(userExerciseSettingsDoc(), exerciseSettings);
+        }
+        cachePut('exerciseSettings', exerciseSettings);
+      } catch (e) { console.warn('Übungseinstellungen laden fehlgeschlagen:', e); }
+    }
+
+    // Übungen, die als eigenständige Trainingsart existieren müssen (nur fehlende anlegen, Abgleich über
+    // das Label, case-insensitiv – keine Duplikate, egal unter welcher ID eine gleichnamige Art schon
+    // existiert). Lunges/Pull-ups/Push-ups/Theraband Knie sind bereits feste Typen, brauchen keinen Eintrag.
+    const ZIRKEL_REQUIRED_EXERCISES = [
+      { id: 'custom_plank', label: 'Plank' },
+      { id: 'custom_seitplank', label: 'Seitplank' },
+      { id: 'custom_glute_bridge', label: 'Glute Bridge' },
+      { id: 'custom_bird_dog', label: 'Bird Dog' },
+      { id: 'custom_split_squats', label: 'Split Squats' },
+      { id: 'custom_bulgarian_split_squats', label: 'Bulgarian Split Squats' }
+    ];
+
+    async function ensureZirkelExerciseCatalog() {
+      const existingLabels = new Set(customTrainingTypes.map(t => t.label.trim().toLowerCase()));
+      const missing = ZIRKEL_REQUIRED_EXERCISES.filter(r => !existingLabels.has(r.label.toLowerCase()));
+      if (!missing.length) return;
+      try {
+        for (const r of missing) {
+          await setDoc(doc(globalTrainingTypesCol(), r.id), { id: r.id, label: r.label, addedBy: userId });
+          customTrainingTypes.push({ id: r.id, label: r.label });
+        }
+        customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+        cachePut('customTrainingTypes', customTrainingTypes);
+        renderCustomTypes();
+        updateTrainingTypeSelect();
+      } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
+    }
+
+    function getExerciseSetting(typ) {
+      return exerciseSettings[typ] || { metClass: ZIRKEL_MET_DEFAULT_CLASS, perSideDefault: false };
+    }
+
+    async function setExerciseSetting(typ, patch) {
+      exerciseSettings[typ] = { ...getExerciseSetting(typ), ...patch };
+      cachePut('exerciseSettings', exerciseSettings);
+      try {
+        await setDoc(userExerciseSettingsDoc(), { [typ]: exerciseSettings[typ] }, { merge: true });
+      } catch (e) {
+        console.error('Übungseinstellung speichern fehlgeschlagen:', e);
+        showToast('Speichern fehlgeschlagen', 'bad');
+      }
+    }
+
+    window.setExerciseMetClass = async function(typ, value) {
+      if (value !== 'leicht' && value !== 'mittel' && value !== 'intensiv') return;
+      await setExerciseSetting(typ, { metClass: value });
+    };
+
+    window.setExercisePerSideDefault = async function(typ, checked) {
+      await setExerciseSetting(typ, { perSideDefault: !!checked });
+    };
+
+    function zirkelMetClassOptionsHtml(selected) {
+      return ['leicht', 'mittel', 'intensiv'].map(c =>
+        `<option value="${c}"${c === selected ? ' selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`).join('');
+    }
+
+    // Intensität + "je Seite" einer Trainingsart (fest oder eigen) – gemeinsam für beide Zeilenarten unten
+    function zirkelExerciseSettingControlsHtml(typ) {
+      const s = getExerciseSetting(typ);
+      return `<select onchange="setExerciseMetClass('${typ}', this.value)" aria-label="Intensität" style="padding:6px 8px;border:1px solid var(--fo-line);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;">${zirkelMetClassOptionsHtml(s.metClass)}</select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" ${s.perSideDefault ? 'checked' : ''} onchange="setExercisePerSideDefault('${typ}', this.checked)" style="width:18px;height:18px;flex:none;">je Seite
+        </label>`;
+    }
+
     function renderCustomTypes() {
       const container = document.getElementById('custom-types-list');
       if (!container) return;
-      if (customTrainingTypes.length === 0) {
-        container.innerHTML = '<p class="fo-help" style="margin:0;">Noch keine eigenen Arten</p>';
-        return;
-      }
-      container.innerHTML = customTrainingTypes.map((t, i) => t.id === renamingCustomTypeId ? `
-        <div class="fo-row" style="padding-top:10px;padding-bottom:10px;${i > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
-          <div class="fo-row__main">
-            <label class="fo-sr" for="custom-type-rename-input">Name der Trainingsart</label>
-            <input class="fo-input" type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()">
-          </div>
-          <div class="fo-row__actions">
-            <button class="fo-iconbtn" type="button" onclick="saveCustomTypeRename(${i})" aria-label="Namen speichern"><svg class="fo-i" aria-hidden="true"><use href="#i-check"/></svg></button>
-            <button class="fo-iconbtn" type="button" onclick="cancelCustomTypeRename()" aria-label="Abbrechen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
-          </div>
-        </div>
-      ` : `
-        <div class="fo-row" style="padding-top:10px;padding-bottom:10px;${i > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
-          <span class="fo-row__icon">${typIcon(t.id)}</span>
-          <div class="fo-row__main"><div class="fo-row__title">${t.label}</div></div>
-          <div class="fo-row__actions">
-            <button class="fo-iconbtn" type="button" onclick="startCustomTypeRename(${i})" aria-label="Umbenennen"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg></button>
-            <button class="fo-btn fo-btn--sm ${t.kind === 'hold' ? 'fo-btn--primary' : 'fo-btn--secondary'}" type="button" onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
-            <button class="fo-btn fo-btn--sm fo-btn--secondary" type="button" onclick="cycleCustomTypeMetClass(${i})" title="Intensitätsklasse (MET) für den Zirkel wechseln: Standard für diese Übung in neuen Zirkel-Übungszeilen">${planEsc(t.metClass || ZIRKEL_MET_DEFAULT_CLASS)}</button>
-            <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="removeCustomType(${i})" aria-label="Entfernen"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg></button>
-          </div>
-        </div>
-      `).join('');
+      const rows = [];
+      ZIRKEL_FIXED_EXERCISE_TYPES.forEach(typ => {
+        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:10px;flex-wrap:wrap;gap:8px;${rows.length > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+            <span class="fo-row__icon">${typIcon(typ)}</span>
+            <div class="fo-row__main"><div class="fo-row__title">${planEsc(TYP_LABELS[typ] || typ)}</div></div>
+            <div class="fo-row__actions" style="gap:8px;flex-wrap:wrap;">${zirkelExerciseSettingControlsHtml(typ)}</div>
+          </div>`);
+      });
+      customTrainingTypes.forEach((t, i) => {
+        if (t.id === renamingCustomTypeId) {
+          rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:10px;border-top:1px solid var(--fo-line);">
+              <div class="fo-row__main">
+                <label class="fo-sr" for="custom-type-rename-input">Name der Trainingsart</label>
+                <input class="fo-input" type="text" id="custom-type-rename-input" value="${planEsc(t.label)}" onkeydown="if(event.key==='Enter')saveCustomTypeRename(${i});if(event.key==='Escape')cancelCustomTypeRename()">
+              </div>
+              <div class="fo-row__actions">
+                <button class="fo-iconbtn" type="button" onclick="saveCustomTypeRename(${i})" aria-label="Namen speichern"><svg class="fo-i" aria-hidden="true"><use href="#i-check"/></svg></button>
+                <button class="fo-iconbtn" type="button" onclick="cancelCustomTypeRename()" aria-label="Abbrechen"><svg class="fo-i" aria-hidden="true"><use href="#i-close"/></svg></button>
+              </div>
+            </div>`);
+          return;
+        }
+        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:10px;border-top:1px solid var(--fo-line);flex-wrap:wrap;gap:8px;">
+            <span class="fo-row__icon">${typIcon(t.id)}</span>
+            <div class="fo-row__main"><div class="fo-row__title">${planEsc(t.label)}</div></div>
+            <div class="fo-row__actions" style="gap:8px;flex-wrap:wrap;">
+              ${zirkelExerciseSettingControlsHtml(t.id)}
+              <button class="fo-iconbtn" type="button" onclick="startCustomTypeRename(${i})" aria-label="Umbenennen"><svg class="fo-i" aria-hidden="true"><use href="#i-edit"/></svg></button>
+              <button class="fo-btn fo-btn--sm ${t.kind === 'hold' ? 'fo-btn--primary' : 'fo-btn--secondary'}" type="button" onclick="toggleCustomTypeHold(${i})" title="Zwischen Wiederholungen und Haltezeit umschalten">${t.kind === 'hold' ? foIcon('clock', 'fo-i--sm') + ' Haltezeit' : 'Wdh.'}</button>
+              <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="removeCustomType(${i})" aria-label="Entfernen"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>`);
+      });
+      container.innerHTML = rows.join('');
     }
 
     // Umbenennen: ändert nur das Feld label im Typ-Dokument trainingTypes/{id}. ID und Einträge bleiben
@@ -10609,25 +10947,6 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       }
     };
 
-    // Intensitätsklasse (MET) als Katalog-Standard für den Zirkel: nur die Vorbelegung neuer Zirkel-
-    // Übungszeilen dieses Typs (zirkelDefaultMetClass); bereits angelegte Zirkel-Übungen bleiben unverändert.
-    window.cycleCustomTypeMetClass = async function(index) {
-      const t = customTrainingTypes[index];
-      if (!t) return;
-      const order = ['leicht', 'mittel', 'intensiv'];
-      const cur = order.includes(t.metClass) ? t.metClass : ZIRKEL_MET_DEFAULT_CLASS;
-      const metClass = order[(order.indexOf(cur) + 1) % order.length];
-      try {
-        await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, metClass }, { merge: true });
-        t.metClass = metClass;
-        cachePut('customTrainingTypes', customTrainingTypes);
-        renderCustomTypes();
-        showToast(`${t.label}: ${metClass}`, 'ok');
-      } catch (e) {
-        console.error('Toggle metClass error:', e);
-        showToast('Speichern fehlgeschlagen', 'bad');
-      }
-    };
 
     // Alle Custom-Übungen als {id, label}, alphabetisch nach Anzeigename. Enthält auch Custom-IDs, die nur
     // in Einträgen vorkommen und (noch) kein Typ-Dokument haben. Eingebaute Übungen gehören nicht dazu.
@@ -10698,10 +11017,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         if (pendingNewExerciseSelect) selectTrainingType(id);
         return;
       }
+      const metClass = document.getElementById('custom-type-metclass')?.value || ZIRKEL_MET_DEFAULT_CLASS;
+      const perSideDefault = !!document.getElementById('custom-type-perside')?.checked;
       await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
       customTrainingTypes.push({ id, label: name });
       customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+      await setExerciseSetting(id, { metClass, perSideDefault });
       input.value = '';
+      const metSel = document.getElementById('custom-type-metclass'); if (metSel) metSel.value = ZIRKEL_MET_DEFAULT_CLASS;
+      const sideChk = document.getElementById('custom-type-perside'); if (sideChk) sideChk.checked = false;
       renderCustomTypes();
       updateTrainingTypeSelect();
       if (pendingNewExerciseSelect) selectTrainingType(id);

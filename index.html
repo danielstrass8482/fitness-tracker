@@ -1299,6 +1299,9 @@
     
     <!-- Übersicht: Kacheln, Schritte & Aktivitäten, Oura-Karte (bisher im Ernährung-Tab) -->
     <div id="uebersicht-tab" class="tab-content">
+      <!-- Tagescheck: KI-Morgenkarte (siehe renderDailyCheckCard) -->
+      <div id="daily-check-card" style="display:none;"></div>
+
       <!-- Daily Summary – Kachel (.fo-kpi): Ist-Wert, Differenz zum Ziel (.fo-delta, Farbe nach KPI_RULES), Balken, Ziel -->
       <div class="fo-kpis" style="margin-bottom:12px;">
         <div class="fo-kpi">
@@ -2302,7 +2305,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-16 22:10';
+    const APP_BUILD = '2026-10-16 22:25';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2378,6 +2381,24 @@
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
     // zwischen 00:00 und 02:00 Berlin noch den Vortag.
     const berlinTodayStr = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+
+    // Mittelwert eines Oura-Feldes über `days` Tage bis UND MIT endDateStr (Berliner Zeit), aus den
+    // vorhandenen Werten – fehlende Tage werden übersprungen, nicht als 0 gezählt. Einzige Stelle für
+    // diese Mittelung: die Analyse-Tab-Erholungsbasis (7 Tage bis heute, buildAnalysisContextData)
+    // UND der Tagescheck (14-/28-Tage-Baseline bis GESTERN, damit "heute" nicht in seine eigene
+    // Baseline einfließt) rufen dieselbe Funktion mit unterschiedlichen Parametern auf.
+    function ouraWindowAvg(field, days, endDateStr) {
+      const vals = [];
+      const end = new Date((endDateStr || berlinTodayStr()) + 'T12:00:00');
+      for (let i = 0; i < days; i++) {
+        const dt = new Date(end); dt.setDate(end.getDate() - i);
+        const key = dt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+        const v = ouraDaily[key]?.[field];
+        if (v != null) vals.push(v);
+      }
+      const count = vals.length;
+      return { avg: count > 0 ? vals.reduce((a, b) => a + b, 0) / count : null, count };
+    }
 
     // Lädt die letzten 35 Tage aus oura_daily frisch aus Firestore und ersetzt damit den Stand
     // aus dem IndexedDB-Cache. Wird bei jedem Start und nach dem manuellen Sync aufgerufen, damit
@@ -2531,10 +2552,11 @@
         if (hasCachedData) {
           renderAll();
           showToast('Synchronisiere...', 'wait');
-          loadAllData(true).then(() => autoSyncGoogleFit('start')); // Hintergrund-Sync, kein await
+          loadAllData(true).then(() => { autoSyncGoogleFit('start'); initDailyCheck(); }); // Hintergrund-Sync, kein await
         } else {
           await loadAllData(false); // Erststart: blockierend laden
           autoSyncGoogleFit('start');
+          initDailyCheck(); // asynchron, blockiert den Start nicht (siehe Funktion)
         }
 
         handleOuraRedirectParams();
@@ -7720,20 +7742,8 @@
       // (Berliner Zeit) – gleiche Berechnung (Mittel der vorhandenen Werte, mindestens 3 Tage nötig)
       // wie der HRV-Trend der Oura-Karte, dort als HRV_TREND_MIN_VALUES = 3.
       const OURA_BASELINE_MIN_DAYS = 3;
-      const ouraBaselineAvg = (field) => {
-        const vals = [];
-        const end = new Date(berlinTodayStr() + 'T12:00:00');
-        for (let i = 0; i < 7; i++) {
-          const dt = new Date(end); dt.setDate(end.getDate() - i);
-          const key = dt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-          const v = ouraDaily[key]?.[field];
-          if (v != null) vals.push(v);
-        }
-        const count = vals.length;
-        return { avg: count > 0 ? vals.reduce((a, b) => a + b, 0) / count : null, count };
-      };
-      const ouraBaselineHrv = ouraConnected ? ouraBaselineAvg('hrvAvg') : { avg: null, count: 0 };
-      const ouraBaselineRhr = ouraConnected ? ouraBaselineAvg('restingHr') : { avg: null, count: 0 };
+      const ouraBaselineHrv = ouraConnected ? ouraWindowAvg('hrvAvg', 7, berlinTodayStr()) : { avg: null, count: 0 };
+      const ouraBaselineRhr = ouraConnected ? ouraWindowAvg('restingHr', 7, berlinTodayStr()) : { avg: null, count: 0 };
 
       return { profile, trainingRows, exerciseRows, nutritionRows, dayLogRows, ouraConnected, ouraRows, ouraBaselineHrv, ouraBaselineRhr, OURA_BASELINE_MIN_DAYS };
     }
@@ -7778,6 +7788,549 @@ ${ctx.ouraRows.join('\n') || '(keine Tage mit Oura-Daten)'}`}
 
 === Hinweise zu Oura-Daten ===
 Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der Mittelwert der Nacht in Millisekunden, dazu Ruhepuls, Schlaf und Temperaturabweichung. Bewerte HRV und Ruhepuls immer relativ zur eigenen Erholungs-Basis des Nutzers (7-Tage-Mittel oben), nicht anhand allgemeiner Normwerte. Einzelne Nächte schwanken natürlich; ein einzelner Wert allein beweist nichts. Stelle keine medizinischen Diagnosen; nenne bei auffälligen Werten über mehrere Tage eine ärztliche Abklärung, wenn der Nutzer Beschwerden schildert. Benenne Unsicherheit und die Grenzen der Messung. Ein Zusammenhang zu Training oder Ernährung ist eine Möglichkeit, kein bewiesener Grund. Fehlen Daten für einen Tag oder ist Oura nicht verbunden, sage das klar – behaupte nie, du hättest keinen Zugriff, wenn Daten oben im Kontext stehen.`;
+    }
+
+    // ═══ Tagescheck: KI-Morgenkarte oben in der Übersicht ═══════════════════════════════════════
+    // Einmal pro Tag generiert (dailyCheck/{YYYY-MM-DD} in Firestore + IndexedDB-Cache), nutzt
+    // denselben Anthropic-Call wie der Analyse-Tab (settings.anthropicApiKey, selbes Modell).
+
+    const DAILY_CHECK_ILLNESS_HRV_DROP_FRACTION = 0.15; // HRV ≥15% unter dem eigenen 28-Tage-Schnitt
+    const DAILY_CHECK_ILLNESS_RHR_RISE_BPM = 4;          // Ruhepuls ≥4 bpm über dem eigenen 28-Tage-Schnitt
+    const DAILY_CHECK_ILLNESS_TEMP_RISE_C = 0.3;         // Temperaturabweichung ≥0,3 °C über dem eigenen 28-Tage-Schnitt
+    const DAILY_CHECK_ILLNESS_MIN_SIGNALS = 2;           // mind. 2 von den verfügbaren Signalen (Atemfrequenz nicht verfügbar, siehe Bericht)
+
+    // Lokales Datum ± Tage (kein toISOString, sonst UTC-Versatz) – gleiche Konvention wie planYmd/berlinTodayStr.
+    function dailyCheckShiftDate(dateStr, days) {
+      const d = new Date(dateStr + 'T12:00:00');
+      d.setDate(d.getDate() + days);
+      return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    }
+
+    // Grobe Schätzung Gramm Alkohol pro 100 g/ml Getränk (ABV × Dichte 0,789 g/ml) – es gibt kein
+    // Alkohol-Feld in Lebensmitteln/FoodDB/Open-Food-Facts-Import/Rezepten, daher namensbasiert.
+    // Wortgrenzen gegen Fehltreffer (z.B. "Weizenbrötchen" darf nicht als Weizenbier zählen) – gegen
+    // die echte Lebensmittel-Historie geprüft (229 eindeutige Namen, 26 echte Treffer, 0 Fehltreffer).
+    const ALCOHOL_KEYWORDS = [
+      { re: /radler|alster/i, gPer100: 2.0 },
+      { re: /\bbier\b|\bpils\b|weizenbier|hefeweizen|weißbier|kristallweizen|\bexport\b|\blager\b|\bale\b|\bstout\b/i, gPer100: 3.9 },
+      { re: /\bsekt\b|\bsecco\b|prosecco|champagner|\bwein\b|riesling|spätburgunder|grauburgunder|rotwein|weißwein/i, gPer100: 9.5 },
+      { re: /schnaps|\bgin\b|whisky|whiskey|wodka|vodka|\brum\b|tequila|jägermeister|jaegermeister|\blikör\b/i, gPer100: 31.6 },
+      { re: /cocktail|aperol|spritz|caipirinha|mojito|\bhugo\b/i, gPer100: 7.5 }
+    ];
+    function detectAlcoholGrams(entry) {
+      const name = (entry?.name || '').toLowerCase();
+      if (!name) return 0;
+      const match = ALCOHOL_KEYWORDS.find(r => r.re.test(name));
+      if (!match) return 0;
+      const amount = Number(entry.amount) || 100;
+      return Math.round(match.gPer100 * amount / 100);
+    }
+
+    // Alkohol-Einträge im Datumsbereich (inklusive), aus foodLog. Zeitfeld ist e.time ("HH:MM").
+    function getAlcoholEntries(fromDate, toDate) {
+      const rows = [];
+      Object.keys(foodLog).forEach(d => {
+        if (d < fromDate || d > toDate) return;
+        (foodLog[d] || []).forEach(e => {
+          const grams = detectAlcoholGrams(e);
+          if (grams > 0) rows.push({ date: d, time: e.time || '', item: e.name || '', grams });
+        });
+      });
+      rows.sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+      return rows;
+    }
+
+    // Persönliches Muster: Ø-Abweichung von HRV/Ruhepuls/Temperatur/Schlaf-Score in Nächten NACH
+    // einem Alkohol-Tag (Alkohol am Vortag der jeweiligen Oura-Nacht) vs. Nächten ohne – über die im
+    // Client geladene Oura-Historie (ouraDaily, max. 35 Tage, siehe refreshOuraDaily). n = Anzahl
+    // Alkohol-Nächte mit Oura-Daten; < 3 → zu wenig Daten.
+    function getAlcoholHistoricalPattern() {
+      const withAlcohol = [], withoutAlcohol = [];
+      Object.keys(ouraDaily).sort().forEach(date => {
+        const o = ouraDaily[date];
+        if (o.hrvAvg == null && o.restingHr == null && o.tempDeviation == null && o.sleepScore == null) return;
+        const baseEnd = dailyCheckShiftDate(date, -1);
+        const grams = getAlcoholEntries(baseEnd, baseEnd).reduce((s, e) => s + e.grams, 0);
+        const hrvBase = ouraWindowAvg('hrvAvg', 28, baseEnd);
+        const rhrBase = ouraWindowAvg('restingHr', 28, baseEnd);
+        const tempBase = ouraWindowAvg('tempDeviation', 28, baseEnd);
+        const sleepBase = ouraWindowAvg('sleepScore', 28, baseEnd);
+        const dev = {
+          hrv: (o.hrvAvg != null && hrvBase.avg != null) ? o.hrvAvg - hrvBase.avg : null,
+          rhr: (o.restingHr != null && rhrBase.avg != null) ? o.restingHr - rhrBase.avg : null,
+          temp: (o.tempDeviation != null && tempBase.avg != null) ? o.tempDeviation - tempBase.avg : null,
+          sleep: (o.sleepScore != null && sleepBase.avg != null) ? o.sleepScore - sleepBase.avg : null
+        };
+        (grams > 0 ? withAlcohol : withoutAlcohol).push(dev);
+      });
+      const avgOf = (arr, key) => {
+        const vals = arr.map(d => d[key]).filter(v => v != null);
+        return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+      };
+      const n = withAlcohol.length;
+      if (n < 3) return { n, tooFewData: true };
+      return {
+        n, tooFewData: false,
+        avgDeltaHrv: avgOf(withAlcohol, 'hrv'), avgDeltaRhr: avgOf(withAlcohol, 'rhr'),
+        avgDeltaTemp: avgOf(withAlcohol, 'temp'), avgDeltaSleepScore: avgOf(withAlcohol, 'sleep')
+      };
+    }
+
+    // Eine Nacht gegen ihre eigene 28-Tage-Baseline (endet VOR der geprüften Nacht) prüfen.
+    // Atemfrequenz nicht verfügbar (kein gespeichertes Feld, siehe Bericht) – geprüft werden
+    // HRV, Ruhepuls, Temperaturabweichung.
+    function dailyCheckEvalNight(nightValues, baselineEndStr) {
+      const signals = {};
+      let count = 0;
+      const hrvBase = ouraWindowAvg('hrvAvg', 28, baselineEndStr);
+      if (nightValues.hrvAvg != null && hrvBase.avg != null) {
+        const flagged = nightValues.hrvAvg < hrvBase.avg * (1 - DAILY_CHECK_ILLNESS_HRV_DROP_FRACTION);
+        signals.hrv = { value: Math.round(nightValues.hrvAvg * 10) / 10, baseline: Math.round(hrvBase.avg * 10) / 10, flagged };
+        if (flagged) count++;
+      }
+      const rhrBase = ouraWindowAvg('restingHr', 28, baselineEndStr);
+      if (nightValues.restingHr != null && rhrBase.avg != null) {
+        const flagged = nightValues.restingHr > rhrBase.avg + DAILY_CHECK_ILLNESS_RHR_RISE_BPM;
+        signals.rhr = { value: Math.round(nightValues.restingHr * 10) / 10, baseline: Math.round(rhrBase.avg * 10) / 10, flagged };
+        if (flagged) count++;
+      }
+      const tempBase = ouraWindowAvg('tempDeviation', 28, baselineEndStr);
+      if (nightValues.tempDeviation != null && tempBase.avg != null) {
+        const flagged = nightValues.tempDeviation > tempBase.avg + DAILY_CHECK_ILLNESS_TEMP_RISE_C;
+        signals.temp = { value: Math.round(nightValues.tempDeviation * 100) / 100, baseline: Math.round(tempBase.avg * 100) / 100, flagged };
+        if (flagged) count++;
+      }
+      return { signals, count };
+    }
+
+    // Flag, wenn für die letzte Nacht ODER den Schnitt der letzten zwei Nächte mindestens
+    // DAILY_CHECK_ILLNESS_MIN_SIGNALS Signale auslösen.
+    function detectIllnessSignals(todayStr) {
+      const yesterday = dailyCheckShiftDate(todayStr, -1);
+      const twoDaysAgo = dailyCheckShiftDate(todayStr, -2);
+      const nightToday = ouraDaily[todayStr] || {};
+      const nightYesterday = ouraDaily[yesterday] || {};
+
+      const lastNight = dailyCheckEvalNight(nightToday, yesterday);
+
+      const avgField = (f) => {
+        const vals = [nightToday[f], nightYesterday[f]].filter(v => v != null);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      const twoNightAvg = dailyCheckEvalNight(
+        { hrvAvg: avgField('hrvAvg'), restingHr: avgField('restingHr'), tempDeviation: avgField('tempDeviation') },
+        twoDaysAgo
+      );
+
+      return {
+        flagged: lastNight.count >= DAILY_CHECK_ILLNESS_MIN_SIGNALS || twoNightAvg.count >= DAILY_CHECK_ILLNESS_MIN_SIGNALS,
+        lastNight: lastNight.signals,
+        twoNightAvg: twoNightAvg.signals
+      };
+    }
+
+    // Plan-Einheiten eines Tages (aus der jeweils gültigen Wochenversion, siehe planForWeek).
+    function dailyCheckPlanUnitsForDay(dateStr) {
+      const dayIdx = (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7;
+      const monday = planYmd(new Date(new Date(dateStr + 'T12:00:00').getTime() - dayIdx * 86400000));
+      const weekPlan = planForWeek(monday) || {};
+      return weekPlan[PLAN_DAYS[dayIdx].key] || [];
+    }
+    function dailyCheckPlanUnitSummary(u) {
+      return u.typ === 'zirkel'
+        ? { id: u.id, typ: 'zirkel', runden: u.runden, dauer_min: u.dauerMin,
+            uebungen: (u.uebungen || []).map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh })) }
+        : { id: u.id, typ: u.typ, variant: u.variant || null, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, notiz: u.notiz || null };
+    }
+
+    // Kompakte, aggregierte Datenbasis für den Tagescheck-Call – keine Rohdumps (siehe Bericht A.2).
+    function buildDailyCheckPayload(todayStr) {
+      const yesterday = dailyCheckShiftDate(todayStr, -1);
+      const lastNightRaw = ouraDaily[todayStr] || null;
+
+      const lastNight = lastNightRaw ? {
+        schlafdauer_std: lastNightRaw.sleepDurationSec != null ? Math.round(lastNightRaw.sleepDurationSec / 36) / 100 : null,
+        schlaf_score: lastNightRaw.sleepScore ?? null,
+        readiness_score: lastNightRaw.readinessScore ?? null,
+        hrv_ms: lastNightRaw.hrvAvg ?? null,
+        ruhepuls_bpm: lastNightRaw.restingHr ?? null,
+        temperaturabweichung_c: lastNightRaw.tempDeviation ?? null
+      } : null;
+
+      const baselineField = (field, dec) => {
+        const b14 = ouraWindowAvg(field, 14, yesterday);
+        const b28 = ouraWindowAvg(field, 28, yesterday);
+        const round = v => v == null ? null : Math.round(v * 10 ** dec) / 10 ** dec;
+        const todayVal = lastNightRaw?.[field];
+        const deviation = (todayVal != null && b28.avg != null) ? round(todayVal - b28.avg) : null;
+        return { baseline_14t: round(b14.avg), n_14t: b14.count, baseline_28t: round(b28.avg), n_28t: b28.count, abweichung_heute: deviation };
+      };
+      const sleepBaseline = (() => {
+        const b14 = ouraWindowAvg('sleepDurationSec', 14, yesterday);
+        const b28 = ouraWindowAvg('sleepDurationSec', 28, yesterday);
+        const toH = v => v == null ? null : Math.round(v / 36) / 100;
+        const todayVal = lastNightRaw?.sleepDurationSec;
+        return {
+          baseline_14t: toH(b14.avg), n_14t: b14.count, baseline_28t: toH(b28.avg), n_28t: b28.count,
+          abweichung_heute: (todayVal != null && b28.avg != null) ? Math.round((todayVal - b28.avg) / 36) / 100 : null
+        };
+      })();
+      const baselines = {
+        hrv: baselineField('hrvAvg', 1),
+        ruhepuls: baselineField('restingHr', 1),
+        schlafdauer_std: sleepBaseline,
+        temperaturabweichung: baselineField('tempDeviation', 2)
+      };
+
+      const illness = detectIllnessSignals(todayStr);
+      const alcoholRecent = getAlcoholEntries(dailyCheckShiftDate(todayStr, -3), todayStr);
+      const alcoholPattern = getAlcoholHistoricalPattern();
+
+      const trainingHistory = trainingEntries
+        .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && e.datum >= dailyCheckShiftDate(todayStr, -7) && e.datum < todayStr)
+        .sort((a, b) => a.datum.localeCompare(b.datum))
+        .map(e => ({
+          datum: e.datum, typ: e.typ, dauer: e.zeit || null,
+          distanz_km: e.distanz > 0 ? e.distanz : null,
+          kcal: Math.round(activityKcalForGoal(e) || e.act_kcal_calc || e.kalorien || 0) || null,
+          garmin_name: e.notiz || null,
+          schritte: (e.schritte || 0) > 0 ? e.schritte : null
+        }));
+
+      const planToday = dailyCheckPlanUnitsForDay(todayStr).map(dailyCheckPlanUnitSummary);
+      const planTomorrow = dailyCheckPlanUnitsForDay(dailyCheckShiftDate(todayStr, 1)).map(dailyCheckPlanUnitSummary);
+
+      const nutritionHistory = [];
+      for (let i = 1; i <= 3; i++) {
+        const d = dailyCheckShiftDate(todayStr, -i);
+        const entries = foodLog[d] || [];
+        if (!entries.length) continue;
+        const kcal = Math.round(entries.reduce((s, e) => s + (e.kcal || 0), 0));
+        const goal = Math.round(window.calcHistoricalKcalGoal(d)?.total || 0);
+        nutritionHistory.push({ datum: d, kcal_ist: kcal, kcal_ziel: goal || null });
+      }
+      const todayGoal = Math.round(window.calcHistoricalKcalGoal(todayStr)?.total || 0);
+
+      const stepsHistory = [];
+      for (let i = 1; i <= 7; i++) {
+        const d = dailyCheckShiftDate(todayStr, -i);
+        const steps = getDisplaySchritteForDate(d);
+        if (steps != null) stepsHistory.push({ datum: d, schritte: steps });
+      }
+
+      return {
+        kontext: 'Trainiert für einen Halbmarathon. HRV ist tagesweise verrauscht – Trends vertrauen, nicht Einzelwerten.',
+        letzte_nacht: lastNight,
+        baselines,
+        illness_signale: illness,
+        alkohol: { letzte_3_tage: alcoholRecent, persoenliches_muster: alcoholPattern },
+        training_letzte_7_tage: trainingHistory,
+        plan_heute: planToday,
+        plan_morgen: planTomorrow,
+        ernaehrung_letzte_3_tage: nutritionHistory,
+        kalorienziel_heute: todayGoal || null,
+        schritte_letzte_7_tage: stepsHistory
+      };
+    }
+
+    function buildDailyCheckSystemPrompt() {
+      return `Du bist ein Trainings- und Erholungs-Coach für die persönliche Fitness-App "Fuelofit". Der Nutzer trainiert für einen Halbmarathon und nutzt eine Garmin-Uhr sowie einen Oura Ring.
+
+Aufgabe: Erstelle eine kurze Tagescheck-Karte für heute Morgen – konkret, kurz, keine Aufsätze.
+
+Regeln:
+- Vergleiche NUR mit der eigenen Baseline des Nutzers (14/28-Tage-Mittel aus baselines), niemals mit Populationsnormen.
+- Priorität: 1) mögliche Krankheitssignale (illness_signale), 2) Alkohol-Effekte (alkohol), 3) Erholung/Belastung, 4) Ernährung und Schritte.
+- Bei illness_signale.flagged=true: sag es klar aber neutral ("Deine Werte deuten auf einen möglichen Infekt hin") und empfiehl, intensives Training zu reduzieren oder auszulassen. Keine Diagnose. Bei über mehrere Tage stark abnormalen Werten einen neutralen Satz zur ärztlichen Abklärung.
+- Wenn alkohol.letzte_3_tage nicht leer ist: verknüpfe es explizit mit letzte_nacht und mit alkohol.persoenliches_muster, nenne n. Bei persoenliches_muster.tooFewData=true sag klar, dass dafür noch zu wenig Daten vorliegen.
+- Begründe mit Trends/Abweichungen; fehlen Daten oder ist das Signal schwach, sag das und senke confidence.
+- Maximal 2 actions, je ein Satz, konkret für heute.
+- Wenn eine Änderung der heutigen Plan-Einheit (plan_heute) sinnvoll ist, liefere eine konkrete alternative Einheit in planSuggestion.unit – gleiche Form wie eine Plan-Einheit: Lauf/Rad/Gehen = {typ, distanz_km, dauer_min, notiz}, Zirkel = {typ:"zirkel", runden, uebungen:[{typ, variant, mode, holdSec, wdh, pauseSec, perSide}]}, Ruhetag = {typ:"ruhetag"}. Ändere NIE den Plan selbst, schlage nur vor. Ohne sinnvolle Änderung: planSuggestion = null.
+- Sprache: Deutsch, informelles "du".
+
+Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
+{
+  "status": "gruen" | "gelb" | "rot",
+  "headline": string (max. 60 Zeichen),
+  "actions": [string, string?] (1-2 Einträge, je ein Satz),
+  "reason": string (max. 250 Zeichen, welche Daten zu der Einschätzung geführt haben),
+  "confidence": "hoch" | "mittel" | "niedrig",
+  "flags": { "illness": boolean, "alcohol": boolean },
+  "planSuggestion": null | { "originalUnitId": string, "reason": string (max. 150 Zeichen), "unit": object }
+}`;
+    }
+
+    // Ruft denselben Anthropic-Call wie der Analyse-Tab auf (settings.anthropicApiKey, Modell
+    // claude-sonnet-5) – keine neue Schlüsselverwaltung. Wirft bei fehlendem Key, HTTP-Fehler oder
+    // nicht parsbarer Antwort (JSON.parse wirft von sich aus).
+    async function callDailyCheckModel(payload) {
+      const apiKey = settings.anthropicApiKey;
+      if (!apiKey) throw new Error('Kein Anthropic API Key in den Einstellungen');
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-5',
+          max_tokens: 1024,
+          system: buildDailyCheckSystemPrompt(),
+          messages: [{ role: 'user', content: JSON.stringify(payload) }]
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error?.message || ('HTTP ' + resp.status));
+      const textBlock = (data.content || []).find(b => b.type === 'text');
+      const raw = (textBlock?.text || '').trim();
+      // Markdown-Codeblock-Hülle entfernen, falls das Modell trotz Anweisung eine mitschickt
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      return JSON.parse(cleaned);
+    }
+
+    // Strenge Validierung der Modell-Antwort gegen die Form aus A.4. planSuggestion.unit wird mit
+    // derselben Normalisierung wie reguläre Plan-Einheiten geprüft (normalizePlanUnit/
+    // normalizeZirkelUebung) – bei Fehlern wird NUR der Vorschlag verworfen, die restliche Karte bleibt.
+    function validateDailyCheckResult(raw) {
+      if (!raw || typeof raw !== 'object') return { valid: false, error: 'Kein Objekt' };
+      if (!['gruen', 'gelb', 'rot'].includes(raw.status)) return { valid: false, error: 'status ungültig' };
+      if (typeof raw.headline !== 'string' || !raw.headline || raw.headline.length > 60) return { valid: false, error: 'headline ungültig' };
+      if (!Array.isArray(raw.actions) || raw.actions.length < 1 || raw.actions.length > 2 || !raw.actions.every(a => typeof a === 'string' && a)) return { valid: false, error: 'actions ungültig' };
+      if (typeof raw.reason !== 'string' || !raw.reason || raw.reason.length > 250) return { valid: false, error: 'reason ungültig' };
+      if (!['hoch', 'mittel', 'niedrig'].includes(raw.confidence)) return { valid: false, error: 'confidence ungültig' };
+      if (!raw.flags || typeof raw.flags.illness !== 'boolean' || typeof raw.flags.alcohol !== 'boolean') return { valid: false, error: 'flags ungültig' };
+
+      let planSuggestion = null;
+      if (raw.planSuggestion != null) {
+        const ps = raw.planSuggestion;
+        if (typeof ps.originalUnitId === 'string' && ps.originalUnitId && typeof ps.reason === 'string' && ps.unit && typeof ps.unit === 'object') {
+          if (ps.unit.typ === 'ruhetag') {
+            planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: { typ: 'ruhetag' } };
+          } else {
+            try {
+              const normalized = normalizePlanUnit(ps.unit);
+              planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+            } catch (e) {
+              console.warn('planSuggestion.unit ungültig, Vorschlag verworfen:', e);
+            }
+          }
+        } else {
+          console.warn('planSuggestion unvollständig, Vorschlag verworfen:', ps);
+        }
+      }
+
+      return {
+        valid: true,
+        data: {
+          status: raw.status, headline: String(raw.headline).slice(0, 60),
+          actions: raw.actions.slice(0, 2).map(a => String(a)),
+          reason: String(raw.reason).slice(0, 250), confidence: raw.confidence,
+          flags: { illness: !!raw.flags.illness, alcohol: !!raw.flags.alcohol },
+          planSuggestion
+        }
+      };
+    }
+
+    const userDailyCheckCol = () => collection(db, 'users', userId, 'dailyCheck');
+
+    let dailyCheckState = null;   // aktuell geladener/generierter Tagescheck für heute (oder null)
+    let dailyCheckExpanded = false;
+    let dailyCheckGenerating = false;
+
+    // Jeder Schritt einzeln abgesichert (A.5): ein Fehler hier darf nie loadAllData/den Rest der
+    // Übersicht mitreißen. generateDailyCheck selbst hat sein eigenes try/catch; initDailyCheck wird
+    // bewusst "fire and forget" (ohne await) aus dem App-Start aufgerufen.
+    async function generateDailyCheck(force = false) {
+      if (dailyCheckGenerating) return;
+      const todayStr = berlinTodayStr();
+      if (!force && dailyCheckState && dailyCheckState.date === todayStr && !dailyCheckState.error && !dailyCheckState.waiting) return;
+      dailyCheckGenerating = true;
+      renderDailyCheckCard();
+      try {
+        const payload = buildDailyCheckPayload(todayStr);
+        const raw = await callDailyCheckModel(payload);
+        const { valid, data, error } = validateDailyCheckResult(raw);
+        if (!valid) throw new Error('Ungültige Modell-Antwort: ' + error);
+        const toSave = { date: todayStr, ...data, createdAtMs: Date.now(), model: 'claude-sonnet-5' };
+        if (toSave.planSuggestion) toSave.suggestionStatus = 'offen';
+        await setDoc(doc(userDailyCheckCol(), todayStr), toSave);
+        dailyCheckState = toSave;
+        cachePut('dailyCheck_' + todayStr, toSave).catch(() => {});
+        renderTrainingPlan(); // falls Plan-Tab offen: neuen Vorschlag sofort zeigen (Teil B)
+      } catch (e) {
+        console.error('Tagescheck-Generierung fehlgeschlagen:', e);
+        const errState = { date: todayStr, error: true, errorMessage: e.message, atMs: Date.now() };
+        dailyCheckState = errState;
+        cachePut('dailyCheck_' + todayStr, errState).catch(() => {}); // kein Auto-Retry bei jedem App-Start
+      } finally {
+        dailyCheckGenerating = false;
+        renderDailyCheckCard();
+      }
+    }
+    window.regenerateDailyCheck = function() { generateDailyCheck(true); };
+    window.createDailyCheckNow = function() { generateDailyCheck(false); };
+
+    // Wartet (nur innerhalb der laufenden Session) darauf, dass die Oura-Daten für heute ankommen,
+    // und generiert dann einmalig automatisch. Bricht ab, wenn inzwischen ein anderer Zustand gilt
+    // (z.B. durch "Jetzt erstellen" oder einen erfolgreichen Sync) oder nach ~30 Minuten.
+    function dailyCheckWaitForOura(todayStr, attempt = 0) {
+      if (attempt > 30) return;
+      setTimeout(async () => {
+        if (!dailyCheckState?.waiting || dailyCheckState.date !== todayStr) return;
+        const o = ouraDaily[todayStr];
+        if (o && (o.hrvAvg != null || o.restingHr != null || o.sleepScore != null)) {
+          await generateDailyCheck(false);
+        } else {
+          dailyCheckWaitForOura(todayStr, attempt + 1);
+        }
+      }, 60000);
+    }
+
+    // Lebenszyklus beim App-Start: IndexedDB-Cache zuerst (schnell, zeigt sofort etwas an), dann
+    // Firestore (verbindlich). Existiert für heute noch nichts und sind die Oura-Daten schon da,
+    // wird automatisch generiert – sonst der Warte-Zustand mit "Jetzt erstellen".
+    async function initDailyCheck() {
+      try {
+        const todayStr = berlinTodayStr();
+        const cached = await cacheGet('dailyCheck_' + todayStr).catch(() => null);
+        if (cached && cached.date === todayStr) {
+          dailyCheckState = cached;
+          renderDailyCheckCard();
+          if (cached.error) return; // Fehler-Zustand zeigen, aber nicht automatisch neu versuchen
+          return;
+        }
+        const fsSnap = await getDoc(doc(userDailyCheckCol(), todayStr)).catch(() => null);
+        if (fsSnap?.exists()) {
+          const fromFirestore = fsSnap.data();
+          dailyCheckState = fromFirestore;
+          cachePut('dailyCheck_' + todayStr, fromFirestore).catch(() => {});
+          renderDailyCheckCard();
+          return;
+        }
+        const o = ouraDaily[todayStr];
+        if (o && (o.hrvAvg != null || o.restingHr != null || o.sleepScore != null)) {
+          await generateDailyCheck(false);
+        } else {
+          dailyCheckState = { date: todayStr, waiting: true };
+          renderDailyCheckCard();
+          dailyCheckWaitForOura(todayStr);
+        }
+      } catch (e) {
+        console.error('initDailyCheck fehlgeschlagen:', e);
+      }
+    }
+
+    window.toggleDailyCheckCard = function() { dailyCheckExpanded = !dailyCheckExpanded; renderDailyCheckCard(); };
+
+    // Öffnet den Training-Tab, Unterbereich Plan, auf der aktuellen Woche (Link "Planvorschlag für heute").
+    window.openPlanToday = function() {
+      switchTab('training');
+      document.querySelector('[data-subtab="training-plan"]')?.click();
+      shiftPlanWeek(0);
+    };
+
+    function dailyCheckStatusColor(status) {
+      return status === 'gruen' ? 'var(--fo-ok, #22c55e)' : status === 'gelb' ? 'var(--fo-warn, #eab308)'
+        : status === 'rot' ? 'var(--fo-bad)' : 'var(--fo-text-3)';
+    }
+
+    // Rendert die Tagescheck-Karte oben in der Übersicht (#daily-check-card). Nie blockierend –
+    // wird asynchron aus initDailyCheck/generateDailyCheck heraus aufgerufen, nie aus dem App-Start
+    // selbst erzwungen.
+    function renderDailyCheckCard() {
+      const el = document.getElementById('daily-check-card');
+      if (!el) return;
+      const s = dailyCheckState;
+      if (!s) { el.style.display = 'none'; el.innerHTML = ''; return; }
+      el.style.display = 'block';
+
+      if (dailyCheckGenerating) {
+        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--fo-text-3);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Tagescheck wird erstellt …</div>`;
+        return;
+      }
+      if (s.waiting) {
+        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
+          <div style="font-size:13px;color:var(--fo-text-3);margin-bottom:8px;">Oura-Daten noch nicht da</div>
+          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Jetzt erstellen</button>
+        </div>`;
+        return;
+      }
+      if (s.error) {
+        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
+          <div class="fo-status-bad" style="font-size:13px;margin-bottom:8px;">${foIcon('alertCircle', 'fo-i--sm')} Tagescheck konnte nicht erstellt werden</div>
+          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Erneut versuchen</button>
+        </div>`;
+        return;
+      }
+
+      const dot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dailyCheckStatusColor(s.status)};flex-shrink:0;margin-top:3px;"></span>`;
+      const badges = [
+        s.flags?.illness ? `<span class="fo-tag" style="background:var(--fo-bad);color:#fff;margin-left:6px;">Infekt?</span>` : '',
+        s.flags?.alcohol ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;margin-left:6px;">Alkohol</span>` : ''
+      ].filter(Boolean).join('');
+      const actionsHtml = (s.actions || []).map(a => `<div style="font-size:13px;margin-top:2px;">• ${planEsc(a)}</div>`).join('');
+      const timeStr = s.createdAtMs ? new Date(s.createdAtMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+
+      let expandedHtml = '';
+      if (dailyCheckExpanded) {
+        const o = ouraDaily[s.date] || {};
+        const yesterday = dailyCheckShiftDate(s.date, -1);
+        const hrvBase = ouraWindowAvg('hrvAvg', 28, yesterday);
+        const rhrBase = ouraWindowAvg('restingHr', 28, yesterday);
+        const tempBase = ouraWindowAvg('tempDeviation', 28, yesterday);
+        const readyBase = ouraWindowAvg('readinessScore', 28, yesterday);
+        const vsBase = (val, base, dec = 0) => {
+          if (val == null) return '–';
+          const baseTxt = base.avg != null ? ` (Ø ${Math.round(base.avg * 10 ** dec) / 10 ** dec})` : '';
+          return Math.round(val * 10 ** dec) / 10 ** dec + baseTxt;
+        };
+        const keyNumsHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12px;color:var(--fo-text-2);margin-top:10px;">
+          <div>HRV: ${vsBase(o.hrvAvg, hrvBase)} ms</div>
+          <div>Ruhepuls: ${vsBase(o.restingHr, rhrBase)} bpm</div>
+          <div>Temp.-Abw.: ${o.tempDeviation != null ? (o.tempDeviation >= 0 ? '+' : '') + o.tempDeviation.toFixed(2) + ' °C' : '–'}${tempBase.avg != null ? ` (Ø ${tempBase.avg >= 0 ? '+' : ''}${tempBase.avg.toFixed(2)})` : ''}</div>
+          <div>Schlaf: ${o.sleepDurationSec ? Math.floor(o.sleepDurationSec / 3600) + ':' + String(Math.round((o.sleepDurationSec % 3600) / 60)).padStart(2, '0') + ' h' : '–'}</div>
+          <div>Readiness: ${vsBase(o.readinessScore, readyBase)}</div>
+          <div>Schlaf-Score: ${o.sleepScore ?? '–'}</div>
+        </div>`;
+
+        let alcoholPatternHtml = '';
+        if (s.flags?.alcohol) {
+          const p = getAlcoholHistoricalPattern();
+          alcoholPatternHtml = p.tooFewData
+            ? `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Alkohol-Muster: noch zu wenig Daten (n=${p.n}).</div>`
+            : `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Muster (n=${p.n} Alkohol-Nächte): HRV ${p.avgDeltaHrv >= 0 ? '+' : ''}${p.avgDeltaHrv} ms, Ruhepuls ${p.avgDeltaRhr >= 0 ? '+' : ''}${p.avgDeltaRhr} bpm ggü. Normal-Nächten.</div>`;
+        }
+
+        const planSuggestionHtml = s.planSuggestion ? `<div style="margin-top:10px;font-size:13px;">
+          <a href="#" onclick="openPlanToday();return false;" style="color:var(--fo-primary);text-decoration:none;">${foIcon('chevR', 'fo-i--sm')} Planvorschlag für heute</a>
+        </div>` : '';
+
+        expandedHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">
+          <div style="font-size:13px;color:var(--fo-text-2);">${planEsc(s.reason)}</div>
+          <div style="font-size:12px;color:var(--fo-text-3);margin-top:4px;">Konfidenz: ${s.confidence}</div>
+          ${keyNumsHtml}
+          ${alcoholPatternHtml}
+          ${planSuggestionHtml}
+        </div>`;
+      }
+
+      el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;" onclick="toggleDailyCheckCard()">
+          ${dot}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${planEsc(s.headline)}${badges}</div>
+            ${actionsHtml}
+          </div>
+          ${foIcon(dailyCheckExpanded ? 'chevD' : 'chevR', 'fo-toggle-chev' + (dailyCheckExpanded ? ' is-open' : ''))}
+        </div>
+        ${expandedHtml}
+        <div style="font-size:11px;color:var(--fo-text-3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+          <span>erstellt um ${timeStr}</span>
+          <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>
+        </div>
+      </div>`;
     }
 
     // Umschalter "Zeitraum der Daten": setzt analysisWindowDays, aktualisiert den aktiven Zustand

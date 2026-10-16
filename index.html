@@ -2529,14 +2529,6 @@
     
     // Login/Logout
     window.handleLogin = async function() {
-      // In nativer Android App: nativen Login triggern
-      if (navigator.userAgent.includes('FuelofitApp')) {
-        if (window.AndroidTokenBridge) {
-          // Native App soll Login-Screen öffnen
-          window.AndroidTokenBridge.startNativeLogin();
-        }
-        return;
-      }
       try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
@@ -4868,41 +4860,6 @@
         provisionalEl.hidden = !(todayGoal > 0 && usesAssumedDailySteps(currentDate, getKcalStepsForDate(currentDate, goalDayLog)));
       }
 
-      // Widget-Daten via Android Bridge aktualisieren (heute + letzte 7 Tage)
-      try {
-        if (window.AndroidTokenBridge && typeof AndroidTokenBridge.updateWidgetData === 'function') {
-          const steps = getAlltagsschritteForDate(currentDate);
-          AndroidTokenBridge.updateWidgetData(
-            Math.round(totalKcal),
-            Math.round(totalProtein * 10) / 10,
-            Math.round(totalCarbs * 10) / 10,
-            Math.round(totalFat * 10) / 10,
-            (todayGoal || 0),
-            steps,
-            currentDate
-          );
-
-          // Letzte 7 Tage cachen
-          if (typeof AndroidTokenBridge.updateWidgetHistory === 'function') {
-            const history = [];
-            for (let i = 1; i <= 31; i++) {
-              const d = new Date();
-              d.setDate(d.getDate() - i);
-              const dateStr = d.toISOString().split('T')[0];
-              const dayEntries = foodLog[dateStr] || [];
-              const dayKcal = dayEntries.reduce((s, e) => s + (e.kcal || 0), 0);
-              const dayProtein = dayEntries.reduce((s, e) => s + (e.protein || 0), 0);
-              const dayCarbs = dayEntries.reduce((s, e) => s + (e.carbs || 0), 0);
-              const dayFat = dayEntries.reduce((s, e) => s + (e.fat || 0), 0);
-              const daySteps = getAlltagsschritteForDate(dateStr);
-              const dayGoal = calcHistoricalKcalGoal(dateStr)?.total || 0;
-              history.push(`${dateStr}|${Math.round(dayKcal)}|${Math.round(dayProtein*10)/10}|${Math.round(dayCarbs*10)/10}|${Math.round(dayFat*10)/10}|${dayGoal}|${daySteps}`);
-            }
-            AndroidTokenBridge.updateWidgetHistory(history.join(';'));
-          }
-        }
-      } catch(e) {}
-
       // Update progress bars
       const kcalPct = todayGoal > 0 ? Math.round(totalKcal / todayGoal * 100) : 0;
       const proteinGoal = settings.proteinGoal || 150;
@@ -6229,7 +6186,7 @@
       }
     };
 
-    // ── Android Back-Button Handler ──────────────────────────────────────────
+    // ── Zurück-Button Handler (Browser-History/popstate, schließt oberstes offenes Modal) ──────
     const MODAL_IDS = [
       'add-food-modal',
       'edit-fooddb-modal',
@@ -6275,12 +6232,7 @@
       } else {
         // Kein Modal offen → App-Beenden-Bestätigung
         history.pushState(null, ''); // verhindert sofortiges Verlassen
-        showConfirm('App beenden?', '', 'logout', 'Beenden', true).then(ok => {
-          if (ok && window.AndroidTokenBridge) {
-            // Android: App minimieren statt schließen
-            window.AndroidTokenBridge.minimizeApp?.();
-          }
-        });
+        showConfirm('App beenden?', '', 'logout', 'Beenden', true);
       }
     });
 
@@ -6313,14 +6265,6 @@
 
     // Initial state damit der erste Back-Button-Druck korrekt verarbeitet wird
     history.replaceState(null, '');
-
-    // Gibt Schritte für ein Datum zurück (Garmin ist die einzige Quelle)
-    window.getStepsForDate = function(date) {
-      const entry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-      const garminSteps = entry?.steps || 0;
-      if (garminSteps > 0) return { steps: garminSteps, source: 'garmin' };
-      return { steps: 0, source: 'none' };
-    };
 
     // ── Custom Confirm Dialog ─────────────────────────────────────────────────
     window.confirmDialogResolve = null;
@@ -6361,9 +6305,8 @@
     // START_TAB: Tab beim App-Start. Einzige Stelle, an der er festgelegt wird (showTabPanel beim Laden,
     // Rückfall in renderAll). Der zuletzt offene Tab wird nicht gespeichert (die App tat das auch vorher nicht).
     const START_TAB = 'uebersicht';
-    // OLD_TAB_ALIASES: alte Tab-Werte → neue Tabs, damit Deeplinks (?tab=), openTabFromWidget und alte
-    // Links nicht ins Leere laufen. switchTab wendet sie an. Das Android-Widget öffnet 'ernaehrung' (existiert weiter)
-    // und klickt den Button direkt; ein alter Wert dort würde nicht über die Aliase laufen.
+    // OLD_TAB_ALIASES: alte Tab-Werte → neue Tabs, damit Deeplinks (?tab=) und alte Links nicht ins
+    // Leere laufen. switchTab wendet sie an.
     const OLD_TAB_ALIASES = {
       daten: 'einstellungen', // Daten-Tab aufgelöst: Lebensmittel/Rezepte → Ernährung, Import/Backup/Statistik → Einstellungen
       dashboard: 'analyse'    // Dashboard ist jetzt Analyse › Grafiken
@@ -6468,10 +6411,7 @@
       });
     });
     
-    // Feature 2: Widget-Klick öffnet Tab per URL-Parameter oder Android-Bridge
-    window.openTabFromWidget = function(tabName) {
-      switchTab(tabName);
-    };
+    // Deeplink: Tab per URL-Parameter öffnen (z.B. Bookmark/Link mit ?tab=...)
     (function checkDeeplink() {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');

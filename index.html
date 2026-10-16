@@ -1340,6 +1340,9 @@
         </div>
       </div>
 
+      <!-- Hinweis bei fehlgeschlagenem Hintergrund-Sync (siehe showLoadErrorNotice) -->
+      <div id="load-error-notice" class="fo-card" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;cursor:pointer;font-size:13px;" onclick="retryLoadAfterError()"></div>
+
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" class="fo-card" style="margin-bottom:12px;"></div>
 
@@ -2559,6 +2562,27 @@
       });
     }
 
+    // Hinweis "Daten konnten nicht aktualisiert werden" oben in der Übersicht (vor #daily-activity-
+    // summary), wenn der Hintergrund-Sync (loadAllData(true)) fehlschlägt. Vorher lief das lautlos
+    // durch: kein Toast bei backgroundSync, die Übersicht blieb unbemerkt auf dem alten Cache-Stand
+    // stehen (siehe Bugreport 2026-10-16/17). Höchstens ein Hinweis gleichzeitig, kein Toast-Spam.
+    window.__lastLoadError = null; // { message, atMs } – zum Nachschauen in der Konsole
+    function showLoadErrorNotice(err) {
+      window.__lastLoadError = { message: err?.message || String(err), atMs: Date.now() };
+      const el = document.getElementById('load-error-notice');
+      if (!el) return;
+      el.innerHTML = `${foIcon('alertCircle', 'fo-i--sm')} <span class="fo-status-bad">Daten konnten nicht aktualisiert werden – tippen zum Neuladen</span>`;
+      el.style.display = 'flex';
+    }
+    function hideLoadErrorNotice() {
+      const el = document.getElementById('load-error-notice');
+      if (el) el.style.display = 'none';
+    }
+    window.retryLoadAfterError = function() {
+      hideLoadErrorNotice();
+      loadAllData(false);
+    };
+
     // Load Data from Firebase
     async function loadAllData(backgroundSync = false) {
       if (!backgroundSync) showToast('Lade Daten...', 'wait');
@@ -2628,12 +2652,16 @@
           favorites = new Set(favSnap.data().ids || []);
         }
 
-        // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden
-        await loadCustomTypes();
+        // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden. Einzeln try/catch (wie die
+        // Aufrufe unten): trainingEntries/foodLog sind an dieser Stelle bereits geladen – ein
+        // Fehler hier darf saveToCache()/renderAll() am Ende nicht mehr verhindern, sonst bleibt
+        // z.B. die Übersicht (die nur über renderAll() hierhin aktualisiert wird, siehe
+        // showTabPanel(START_TAB)) stillschweigend auf dem alten Cache-Stand stehen.
+        try { await loadCustomTypes(); } catch (e) { console.error('loadCustomTypes fehlgeschlagen:', e); }
         // Pflicht-Übungen für den Zirkel ergänzen (nur fehlende, siehe ensureZirkelExerciseCatalog),
         // dann die zentralen Übungseinstellungen laden/erstmalig vorbelegen
         try { await ensureZirkelExerciseCatalog(); } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
-        await loadExerciseSettings();
+        try { await loadExerciseSettings(); } catch (e) { console.error('loadExerciseSettings fehlgeschlagen:', e); }
 
         // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
         try {
@@ -2645,7 +2673,8 @@
           await refreshOuraDaily();
         } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
 
-        // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan)
+        // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
+        // bereits try/catch-geschützt (fällt auf settings/trainingplan zurück), kann nicht mehr werfen
         await loadCurrentTrainingPlan();
 
         console.log(`Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
@@ -2655,11 +2684,13 @@
         saveToCache();
 
         renderAll();
+        hideLoadErrorNotice(); // vorheriger Fehler-Hinweis (falls sichtbar) nach erfolgreichem Load wieder weg
         setTimeout(() => checkAutoBackup(), 5000);
 
       } catch (err) {
         console.error('Load error:', err);
         if (!backgroundSync) showToast('Fehler beim Laden', 'bad');
+        else showLoadErrorNotice(err); // Hintergrund-Sync schlägt sonst lautlos fehl, siehe Bugreport
       }
     }
 
@@ -6424,6 +6455,7 @@
             window.dayLogs = dayLogs;
             renderTrainingHistory();
             renderDashboard();
+            renderFoodLog(); // Übersicht (ggf. im Hintergrund) auf denselben Stand bringen wie der Training-Tab
           }).catch(e => console.warn('Training reload error:', e));
         }
       });
@@ -8067,6 +8099,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       window.dayLogs = dayLogs;
       renderTrainingHistory();
       renderDashboard();
+      renderFoodLog(); // Übersicht auf denselben Stand bringen wie der Training-Tab
       await loadGoogleFitStatus();
       gfitLastSyncAt = Date.now();
       } finally {

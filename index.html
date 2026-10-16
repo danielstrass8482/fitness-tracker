@@ -3701,11 +3701,12 @@
             const typ = e.typ || oldTypeMap[e.type] || e.type || '';
             const label = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + customTypeLabel(typ, e);
             const badge = e.source === 'garmin' ? '<span class="fo-tag fo-tag--neutral" style="margin-left:6px;">Garmin</span>' : e.source === 'googlefit' ? '<span class="fo-tag" style="margin-left:6px;">Google Fit</span>' : '';
+            const subMeta = [isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || ''), entryStepsLabel(e.schritte)].filter(Boolean).join(' · ');
             return `
               <div class="fo-row"${idx > 0 ? ' style="border-top:1px solid var(--fo-line);"' : ''}>
                 <div class="fo-row__main">
                   <div class="fo-row__title">${label}${badge}${e.notiz ? ' · ' + e.notiz : ''}</div>
-                  <div class="fo-row__sub">${e.datum} · ${isHoldEntry(e) ? fmtHoldSets(e.holdSec) : (e.sets || '')}</div>
+                  <div class="fo-row__sub">${e.datum}${subMeta ? ' · ' + subMeta : ''}</div>
                 </div>
                 ${calcKcal > 0 ? `<div class="fo-row__end">${fmt(calcKcal)} <small>kcal</small></div>` : ''}
               </div>
@@ -5011,8 +5012,7 @@
           const kcal = activityRowKcal(a);
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
-          const schritteText = (a.schritte || 0) > 0 ? `${fmt(a.schritte)} Schritte` : '';
-          const autoMeta = [dist, zeit, schritteText].filter(Boolean).join(' · ');
+          const autoMeta = [dist, zeit, entryStepsLabel(a.schritte)].filter(Boolean).join(' · ');
           const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
@@ -5043,8 +5043,7 @@
           const zeitText = secSum > 0
             ? `${Math.floor(secSum / 3600)}:${String(Math.floor(secSum % 3600 / 60)).padStart(2, '0')}:${String(secSum % 60).padStart(2, '0')}`
             : '';
-          const schritteText = schritteSum > 0 ? `${fmt(schritteSum)} Schritte` : '';
-          const sumMeta = [distText, zeitText, schritteText].filter(Boolean).join(' · ');
+          const sumMeta = [distText, zeitText, entryStepsLabel(schritteSum)].filter(Boolean).join(' · ');
 
           const groupKey = currentDate + '|' + g.typ;
           const isOpen = expandedActivityGroups.has(groupKey);
@@ -6912,6 +6911,13 @@
       const list = (holdSec || []).map(s => (parseInt(s) || 0) + ' s');
       return `${list.length} ${list.length === 1 ? 'Satz' : 'Sätze'}: ${list.join(', ')}`;
     }
+    // Schrittangabe für eine Trainingszeile (z.B. "9.807 Schritte"), leer ohne Schrittzahl. Einzige
+    // Stelle für dieses Format – genutzt von allen Stellen, die Trainingseinträge mit Schritten rendern
+    // (Übersicht/Tagesansicht, Training-Historie, Dashboard "Letzte Aktivitäten", Plan-Woche), damit sie
+    // alle gleich aussehen. Nimmt einen Schritt-Wert (Einzeleintrag oder Summe einer Gruppe).
+    function entryStepsLabel(schritte) {
+      return (schritte || 0) > 0 ? `${fmt(schritte)} Schritte` : '';
+    }
     function isTrainingFormHold() {
       return trainingFormHoldForced || isHoldType(document.getElementById('training-type')?.value);
     }
@@ -7253,7 +7259,7 @@
               ${setsDisplay}
               ${setsTotal > 0 ? `<span style="color:var(--fo-primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
-              ${(e.schritte || 0) > 0 ? `<span style="color:var(--fo-text-3);margin-left:6px;">${fmt(e.schritte)} Schritte</span>` : ''}
+              ${entryStepsLabel(e.schritte) ? `<span style="color:var(--fo-text-3);margin-left:6px;">${entryStepsLabel(e.schritte)}</span>` : ''}
             </div>
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) : ''}
@@ -8947,11 +8953,13 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
               const istLabel = cmp.kind === 'distanz' ? (DONE_VERBS[u.typ] || 'Ist') : 'Dauer';
               status = `<div style="font-size:12px;color:var(--fo-text-2);">~ ${viaWord} · Geplant: ${fmtVal(cmp.plan)} · ${istLabel}: ${fmtVal(cmp.actual)}</div>`;
               if (kcal > 0) status += `<div style="font-size:12px;color:var(--fo-text);">${fmt(kcal)} kcal</div>`;
+              if (entryStepsLabel(e.schritte)) status += `<div style="font-size:12px;color:var(--fo-text-3);">${entryStepsLabel(e.schritte)}</div>`;
             } else {
               const actual = [
                 e.runden > 0 ? `${e.runden} Runde${e.runden === 1 ? '' : 'n'}` : '',
                 e.distanz > 0 ? planFmtKm(parseFloat(e.distanz)) : '',
-                e.zeit || ''
+                e.zeit || '',
+                entryStepsLabel(e.schritte)
               ].filter(Boolean).join(' · ');
               status = `<div style="font-size:12px;color:var(--fo-primary);">${foIcon('check', 'fo-i--sm')} ${viaWord}${actual ? ' · ' + actual : ''}${kcalHtml}</div>`;
             }
@@ -8978,7 +8986,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
         extra.forEach(e => {
           const title = (typIcon(e.typ) ? typIcon(e.typ) + ' ' : '') + planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
-          const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
+          const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', entryStepsLabel(e.schritte), isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
           const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
           rows += `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);opacity:.6;">
             <span style="width:26px;text-align:center;flex-shrink:0;font-size:12px;color:var(--fo-text-3);">+</span>

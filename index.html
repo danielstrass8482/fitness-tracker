@@ -2305,7 +2305,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-16 22:25';
+    const APP_BUILD = '2026-10-16 22:30';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -9402,36 +9402,144 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     // Ordnet Plan-Einheiten eines Tages den vorhandenen Einträgen zu.
     // Rückgabe: { result: [{ unit, entry, via: 'plan'|'garmin'|'log'|null,
-    //                        status: 'fulfilled'|'deviated'|'open', cmp }], extra: [entry] }
-    function planMatchDay(units, dayEntries) {
+    //                        status: 'fulfilled'|'deviated'|'open'|'replaced', cmp }], extra: [entry],
+    //             suggestionMatch: null | { entry, via, status, cmp } }
+    // suggestion (optional, nur für HEUTE übergeben, nie wenn status 'verworfen'): { originalUnitId, unit }
+    // aus dem Tagescheck (Teil A). Ohne suggestion verhält sich die Funktion exakt wie vorher (per
+    // Node-Test gegen echte Einträge/Pläne der letzten 14 Tage verifiziert – siehe Bericht).
+    function planMatchDay(units, dayEntries, suggestion) {
       const used = new Set();
       const result = units.map(u => ({ unit: u, entry: null, via: null, status: 'open', cmp: null }));
-      // 1. Manuell abgehakte Einheiten (planUnitId)
+      let suggestionMatch = null;
+
+      // 1. Manuell abgehakte Einheiten (planUnitId). Ein über die Vorschlags-Einheit gestarteter Zirkel
+      //    trägt planUnitId des ORIGINALS plus suggestionApplied:true (siehe saveZirkelTimer) – das
+      //    Original gilt dann als ERSETZT (nicht erfüllt, nicht offen/verpasst), der Vorschlag als erfüllt.
       result.forEach(r => {
         const e = dayEntries.find(e => !used.has(e) && e.source === 'plan' && e.planUnitId === r.unit.id);
-        if (e) { r.entry = e; r.via = 'plan'; r.status = 'fulfilled'; used.add(e); }
+        if (!e) return;
+        used.add(e);
+        if (e.suggestionApplied && suggestion && suggestion.originalUnitId === r.unit.id) {
+          r.status = 'replaced';
+          suggestionMatch = { entry: e, via: 'plan', status: 'fulfilled', cmp: null };
+        } else {
+          r.entry = e; r.via = 'plan'; r.status = 'fulfilled';
+        }
       });
-      // 2. Sonstige Einträge gleichen Typs (Garmin/Google Fit/manuell geloggt) – nur Typ, keine Variante.
-      //    Mehrere Kandidaten: längste Distanz, dann längste Dauer gewinnt. Zirkel: nie automatisch.
+
+      // 2. Sonstige Einträge (Garmin/Google Fit/manuell geloggt) – nur Typ, keine Variante. Mehrere
+      //    Kandidaten: längste Distanz, dann längste Dauer gewinnt. Zirkel: nie automatisch (Teil 1
+      //    oben deckt den Zirkel-Vorschlag bereits über planUnitId+suggestionApplied ab).
+      //    Existiert für diese Einheit ein Lauf-/Ausdauer-Vorschlag mit ANDEREM Typ, wird auch dessen
+      //    Typ als Kandidat zugelassen; der Eintrag geht an Original ODER Vorschlag, je nachdem wessen
+      //    Distanz/Dauer näher an der tatsächlichen liegt – das jeweils andere gilt als ERSETZT.
       const score = e => [parseFloat(e.distanz) || 0, parseHours(e.zeit || '')];
+      const deviationOf = c => c.cmp ? Math.abs(c.cmp.actual - c.cmp.plan) / c.cmp.plan : Infinity;
       result.forEach(r => {
-        if (r.entry || r.unit.typ === 'zirkel') return;
-        const candidates = dayEntries.filter(e => !used.has(e) && e.source !== 'plan' && e.typ === r.unit.typ);
+        if (r.entry || r.status === 'replaced' || r.unit.typ === 'zirkel') return;
+        const suggestsForThis = (suggestion && suggestion.originalUnitId === r.unit.id
+          && suggestion.unit.typ !== 'zirkel' && suggestion.unit.typ !== 'ruhetag') ? suggestion.unit : null;
+        const typs = suggestsForThis && suggestsForThis.typ !== r.unit.typ ? [r.unit.typ, suggestsForThis.typ] : [r.unit.typ];
+        const candidates = dayEntries.filter(e => !used.has(e) && e.source !== 'plan' && typs.includes(e.typ));
         if (!candidates.length) return;
         const e = candidates.reduce((best, c) => {
           const [bd, bh] = score(best), [cd, ch] = score(c);
           return cd > bd || (cd === bd && ch > bh) ? c : best;
         });
-        const { status, cmp } = planCompare(r.unit, e);
-        Object.assign(r, { entry: e, via: isAutoActivity(e) ? 'garmin' : 'log', status, cmp });
+        const cmpOrig = planCompare(r.unit, e);
+        if (suggestsForThis) {
+          const cmpSugg = planCompare(suggestsForThis, e);
+          if (deviationOf(cmpSugg) < deviationOf(cmpOrig)) {
+            r.status = 'replaced';
+            suggestionMatch = { entry: e, via: isAutoActivity(e) ? 'garmin' : 'log', status: cmpSugg.status, cmp: cmpSugg.cmp };
+            used.add(e);
+            return;
+          }
+        }
+        Object.assign(r, { entry: e, via: isAutoActivity(e) ? 'garmin' : 'log', status: cmpOrig.status, cmp: cmpOrig.cmp });
         used.add(e);
       });
+
       // Nur ungematchte Einträge zeigen, die selbst im Plan entstanden sind (source:'plan' – Abhaken oder
       // Ad-hoc-Zirkel). Garmin/Google-Fit/Strava-Aktivitäten und sonstige manuell geloggte Einträge gehören
       // nur in die Übersicht, nicht in den Plan (siehe Bericht, Teil 1).
       const extra = dayEntries.filter(e => !used.has(e) && e.source === 'plan');
-      return { result, extra };
+      return { result, extra, suggestionMatch };
     }
+
+    // Vorschlags-Zeile direkt unter dem Original, nur für heute (siehe renderPlanWeek). suggestionMatch
+    // ist gesetzt, wenn planMatchDay den Vorschlag bereits einem Eintrag zugeordnet hat (erfüllt/
+    // abgewichen) – sonst zeigt die Zeile einen Start-Button (Zirkel) oder nur das Ziel (Lauf/Sonstiges).
+    // Ruhetag-Vorschläge haben kein Ziel und keinen Start-Button (keine interaktive Erfüllung definiert).
+    function planSuggestionRowHtml(ds, suggestion, suggestionMatch) {
+      const u = suggestion.unit;
+      const isZirkel = u.typ === 'zirkel';
+      const isRuhetag = u.typ === 'ruhetag';
+      const vorschlagTag = `<span class="fo-tag" style="margin-right:6px;background:var(--fo-primary);color:var(--fo-on-primary);">Vorschlag</span>`;
+      const title = vorschlagTag + (isRuhetag ? 'Ruhetag' : isZirkel
+        ? `${typIcon('zirkel')} ${TYP_LABELS.zirkel}`
+        : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
+      const target = isRuhetag ? '' : isZirkel
+        ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
+        : planTarget(u);
+      const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
+          <summary style="cursor:pointer;font-size:12px;color:var(--fo-text-3);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}</summary>
+          ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;">${planUebungValueLabel(x)} ${planEsc(planUebungLabel(x))}</div>`).join('')}
+        </details>` : '';
+
+      let left, status;
+      if (suggestionMatch) {
+        const deviated = suggestionMatch.status === 'deviated';
+        left = deviated
+          ? `<span class="fo-check is-on" style="background:var(--fo-text-2);border-color:var(--fo-text-2);">~</span>`
+          : `<span class="fo-check is-on"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg></span>`;
+        const se = suggestionMatch.entry;
+        const kcal = activityKcalForGoal(se);
+        const viaWord = suggestionMatch.via === 'garmin' ? 'via Garmin' : suggestionMatch.via === 'log' ? 'erfasst' : 'abgehakt';
+        const actual = [se.distanz > 0 ? planFmtKm(parseFloat(se.distanz)) : '', se.zeit || '', entryStepsLabel(se.schritte)].filter(Boolean).join(' · ');
+        status = `<div style="font-size:12px;color:var(--fo-primary);">${foIcon('check', 'fo-i--sm')} ${viaWord}${actual ? ' · ' + actual : ''}${kcal > 0 ? ` · ${fmt(kcal)} kcal` : ''}</div>`;
+      } else {
+        left = `<span style="width:26px;height:26px;display:inline-block;border-radius:8px;border:2px dashed var(--fo-primary);flex-shrink:0;"></span>`;
+        status = isZirkel
+          ? `<button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="openSuggestionZirkelTimer('${ds}')" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>`
+          : '';
+      }
+
+      return `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px dashed var(--fo-line);">
+        ${left}
+        <div class="fo-row__main">
+          <div class="fo-row__title">${title}</div>
+          ${target ? `<div class="fo-row__sub">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
+          ${zirkelList}
+          <div class="fo-row__sub" style="font-style:italic;">${planEsc(suggestion.reason)}</div>
+          ${status}
+          <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="dismissDailyCheckSuggestion()" style="margin-top:4px;">Vorschlag verwerfen</button>
+        </div>
+      </div>`;
+    }
+
+    // Startet den Live-Timer mit der VORGESCHLAGENEN Zirkel-Einheit (nicht aus dem gespeicherten Plan,
+    // sondern aus dailyCheckState.planSuggestion). planUnitId wird auf das ORIGINAL gesetzt, damit
+    // saveZirkelTimer den Eintrag korrekt dem Original zuordnet (suggestionApplied:true, siehe dort).
+    window.openSuggestionZirkelTimer = function(ds) {
+      const sugg = dailyCheckState?.planSuggestion;
+      if (!sugg || sugg.unit.typ !== 'zirkel') return;
+      startZirkelTimerModal(sugg.unit, ds, sugg.originalUnitId, true);
+    };
+
+    // "Vorschlag verwerfen": blendet ihn für heute aus (status 'verworfen'), ohne den Rest der
+    // Tagescheck-Karte zu verändern. Persistiert in Firestore + IndexedDB-Cache.
+    window.dismissDailyCheckSuggestion = async function() {
+      if (!dailyCheckState?.planSuggestion) return;
+      dailyCheckState.suggestionStatus = 'verworfen';
+      try {
+        await setDoc(doc(userDailyCheckCol(), dailyCheckState.date), dailyCheckState);
+        cachePut('dailyCheck_' + dailyCheckState.date, dailyCheckState).catch(() => {});
+      } catch (e) {
+        console.error('Vorschlag verwerfen fehlgeschlagen:', e);
+      }
+      renderTrainingPlan(true);
+    };
 
     function renderTrainingPlan(force) {
       const container = document.getElementById('training-plan-container');
@@ -9486,16 +9594,22 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         const isFuture = ds > todayStr;
         const units = weekPlan[key] || [];
         const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
-        const { result, extra } = planMatchDay(units, dayEntries);
+        // Tagescheck-Planvorschlag (Teil B) gilt NUR für heute und nur solange nicht verworfen.
+        const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion
+          && dailyCheckState.suggestionStatus !== 'verworfen') ? dailyCheckState.planSuggestion : null;
+        const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion);
         totalPlanned += result.length;
         totalDone += result.filter(r => r.status !== 'open').length;
 
         let rows = '';
         result.forEach(({ unit: u, entry: e, via, status: matchStatus, cmp }) => {
           const isZirkel = u.typ === 'zirkel';
-          const title = isZirkel
+          const isReplaced = matchStatus === 'replaced';
+          const hasSuggestion = !!(todaySuggestion && todaySuggestion.originalUnitId === u.id);
+          const originalTag = hasSuggestion ? `<span class="fo-tag" style="margin-right:6px;">Original</span>` : '';
+          const title = originalTag + (isZirkel
             ? `<span class="fo-tag">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
-            : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : '');
+            : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
           const target = isZirkel
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
             : planTarget(u);
@@ -9505,7 +9619,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             </details>` : '';
           const deviated = matchStatus === 'deviated';
           let left, status = '';
-          if (e) {
+          if (isReplaced) {
+            // Original durch die (erfüllte) Vorschlags-Einheit ersetzt – weder offen/verpasst noch
+            // selbst erledigt, siehe planMatchDay/Bericht Teil B.
+            left = `<span style="width:26px;height:26px;display:inline-block;border-radius:8px;border:2px solid var(--fo-text-3);flex-shrink:0;"></span>`;
+            status = `<div style="font-size:12px;color:var(--fo-text-3);">${foIcon('chevR', 'fo-i--sm')} Ersetzt durch Vorschlag</div>`;
+          } else if (e) {
             // Erledigt bzw. abweichend erledigt: reiner Anzeige-Haken (nicht anklickbar, Rückgängig ist
             // der eigene Button unten) – .fo-check ohne .fo-checkhit-Wrapper, da hier keine Tippfläche nötig ist.
             left = deviated
@@ -9544,11 +9663,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
               <div class="fo-row__title" style="${e ? 'opacity:.75;' : ''}">${title}</div>
               ${target ? `<div class="fo-row__sub">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
               ${zirkelList}
-              ${isZirkel && !e && !isFuture ? `<button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="openZirkelTimer('${ds}','${u.id}')" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>` : ''}
+              ${isZirkel && !e && !isFuture && !isReplaced ? `<button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="openZirkelTimer('${ds}','${u.id}')" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>` : ''}
               ${u.notiz ? `<div class="fo-row__sub">${planEsc(u.notiz)}</div>` : ''}
               ${status}
             </div>
           </div>`;
+          if (hasSuggestion) rows += planSuggestionRowHtml(ds, todaySuggestion, suggestionMatch);
         });
 
         extra.forEach(e => {
@@ -10473,9 +10593,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     const ZIRKEL_REP_TAP_LOCK_MS = 500; // Doppeltipp-Schutz für "Fertig" (mode 'reps')
 
-    function startZirkelTimerModal(unit, ds, planUnitId) {
+    function startZirkelTimerModal(unit, ds, planUnitId, suggestionApplied) {
       zirkelTimerState = {
-        unit, ds: ds || null, planUnitId: planUnitId || null,
+        unit, ds: ds || null, planUnitId: planUnitId || null, suggestionApplied: !!suggestionApplied,
         segs: buildZirkelSegments(unit), segIdx: -1, segStartMs: null, pausedAtMs: null,
         done: [], startMs: null, elapsedSec: 0,
         wakeTimeoutId: null, lastTickKey: null, wakeLock: null, audioCtx: null, activeTones: [],
@@ -10984,7 +11104,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.saveZirkelTimer = async function() {
       const t = zirkelTimerState;
       if (!t || !t.finished) return;
-      const { unit, ds, planUnitId, elapsedSec, done } = t;
+      const { unit, ds, planUnitId, suggestionApplied, elapsedSec, done } = t;
       const zeit = planMinToZeit(elapsedSec / 60);
       const datum = ds || planYmd(new Date());
       const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec, perSide: x.perSide, metClass: x.metClass }));
@@ -11002,6 +11122,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         notiz: autoNotiz,
         source: 'plan',
         ...(planUnitId ? { planUnitId } : {}),
+        ...(suggestionApplied ? { suggestionApplied: true } : {}),
         runden: unit.runden, pauseSec: unit.pauseSec, prepSec: unit.prepSec, sideSwitchSec: unit.sideSwitchSec, uebungen, details,
         timestamp: datum + 'T' + timeNow
       };

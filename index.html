@@ -2543,6 +2543,22 @@
       }
     };
     
+    // Schutz gegen einen Google-Fit-Sync-Effekt (Cloud Function, hier nicht behebbar): sessionSteps
+    // wird bei JEDEM Resync live von der Google Fit API abgefragt (syncGoogleFitData in index.js) und
+    // kann bei einer Wiederholung 0 liefern, obwohl ein früherer Sync die Schritte korrekt erfasst hatte –
+    // der Server schreibt dann schritte: null und überschreibt den bekannten Wert. Übernimmt beim
+    // Nachladen für dieselbe Eintrags-ID den alten, bekannten Schritte-Wert, wenn der neu geladene Wert
+    // leer ist, damit bereits angezeigte Schritte nach einem Hintergrund-Resync nicht verschwinden.
+    function mergeTrainingEntriesPreservingSteps(freshEntries, previousEntries) {
+      const prevById = new Map((previousEntries || []).map(e => [e.id, e]));
+      return freshEntries.map(e => {
+        if ((e.schritte || 0) > 0) return e;
+        const prev = prevById.get(e.id);
+        if (prev && (prev.schritte || 0) > 0) return { ...e, schritte: prev.schritte };
+        return e;
+      });
+    }
+
     // Load Data from Firebase
     async function loadAllData(backgroundSync = false) {
       if (!backgroundSync) showToast('Lade Daten...', 'wait');
@@ -2599,8 +2615,9 @@
 
         // Load Training (last 365 days)
         const trainingSnap = await getDocs(query(userTrainingCol(), where('datum', '>=', cutoffStr)));
-        trainingEntries = [];
-        trainingSnap.forEach(d => trainingEntries.push(d.data()));
+        const freshTrainingEntries = [];
+        trainingSnap.forEach(d => freshTrainingEntries.push(d.data()));
+        trainingEntries = mergeTrainingEntriesPreservingSteps(freshTrainingEntries, trainingEntries);
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
@@ -6399,8 +6416,9 @@
             }
           }).catch(() => {});
           getDocs(userTrainingCol()).then(snap => {
-            trainingEntries = [];
-            snap.forEach(d => trainingEntries.push(d.data()));
+            const freshEntries = [];
+            snap.forEach(d => freshEntries.push(d.data()));
+            trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
             dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
             window.trainingEntries = trainingEntries;
             window.dayLogs = dayLogs;
@@ -7917,8 +7935,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       await syncFn({ startMs, endMs });
       // Reload only training entries (steps)
       const snap = await getDocs(userTrainingCol());
-      trainingEntries = [];
-      snap.forEach(d => trainingEntries.push(d.data()));
+      const freshEntries = [];
+      snap.forEach(d => freshEntries.push(d.data()));
+      trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
       dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
       window.trainingEntries = trainingEntries;
       window.dayLogs = dayLogs;
@@ -8040,8 +8059,9 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
       // Entries neu laden
       const snap = await getDocs(userTrainingCol());
-      trainingEntries = [];
-      snap.forEach(d => trainingEntries.push(d.data()));
+      const freshEntries = [];
+      snap.forEach(d => freshEntries.push(d.data()));
+      trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
       dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
       window.trainingEntries = trainingEntries;
       window.dayLogs = dayLogs;

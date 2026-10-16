@@ -2305,7 +2305,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-16 22:30';
+    const APP_BUILD = '2026-10-16 22:37';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -9460,6 +9460,15 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         used.add(e);
       });
 
+      // 3. Akzeptierter Ruhetag-Vorschlag (status 'gewaehlt', siehe acceptDailyCheckRestSuggestion):
+      // Original gilt als ERSETZT, wenn bis hierhin keine Aktivität zugeordnet wurde. Wird später doch
+      // eine Aktivität geloggt, hat das normale Matching oben bereits Vorrang (r.status wäre dann nicht
+      // mehr 'open') – die Aktivität bleibt sichtbar, wird nicht verdeckt (Task 1).
+      if (suggestion && suggestion.status === 'gewaehlt' && suggestion.unit.typ === 'ruhetag') {
+        const r = result.find(r => r.unit.id === suggestion.originalUnitId);
+        if (r && r.status === 'open') r.status = 'replaced';
+      }
+
       // Nur ungematchte Einträge zeigen, die selbst im Plan entstanden sind (source:'plan' – Abhaken oder
       // Ad-hoc-Zirkel). Garmin/Google-Fit/Strava-Aktivitäten und sonstige manuell geloggte Einträge gehören
       // nur in die Übersicht, nicht in den Plan (siehe Bericht, Teil 1).
@@ -9468,13 +9477,16 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     }
 
     // Vorschlags-Zeile direkt unter dem Original, nur für heute (siehe renderPlanWeek). suggestionMatch
-    // ist gesetzt, wenn planMatchDay den Vorschlag bereits einem Eintrag zugeordnet hat (erfüllt/
-    // abgewichen) – sonst zeigt die Zeile einen Start-Button (Zirkel) oder nur das Ziel (Lauf/Sonstiges).
-    // Ruhetag-Vorschläge haben kein Ziel und keinen Start-Button (keine interaktive Erfüllung definiert).
+    // ist gesetzt, wenn planMatchDay den Vorschlag automatisch einem Eintrag zugeordnet hat (Lauf/Sonstiges,
+    // erfüllt/abgewichen) – sonst zeigt die Zeile einen Start-Button (Zirkel) oder nur das Ziel.
+    // Ruhetag-Vorschläge haben kein Ziel/Start-Button, dafür die manuelle Aktion "Pause gemacht"
+    // (dailyCheckState.suggestionStatus === 'gewaehlt'), mit "Rückgängig" nur am selben Tag.
     function planSuggestionRowHtml(ds, suggestion, suggestionMatch) {
       const u = suggestion.unit;
       const isZirkel = u.typ === 'zirkel';
       const isRuhetag = u.typ === 'ruhetag';
+      const accepted = isRuhetag && dailyCheckState?.suggestionStatus === 'gewaehlt';
+      const sameDay = dailyCheckState?.date === berlinTodayStr();
       const vorschlagTag = `<span class="fo-tag" style="margin-right:6px;background:var(--fo-primary);color:var(--fo-on-primary);">Vorschlag</span>`;
       const title = vorschlagTag + (isRuhetag ? 'Ruhetag' : isZirkel
         ? `${typIcon('zirkel')} ${TYP_LABELS.zirkel}`
@@ -9488,7 +9500,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         </details>` : '';
 
       let left, status;
-      if (suggestionMatch) {
+      if (accepted) {
+        left = `<span class="fo-check is-on"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-check"/></svg></span>`;
+        status = `<div style="font-size:12px;color:var(--fo-primary);">${foIcon('check', 'fo-i--sm')} Pause gemacht</div>`;
+      } else if (suggestionMatch) {
         const deviated = suggestionMatch.status === 'deviated';
         left = deviated
           ? `<span class="fo-check is-on" style="background:var(--fo-text-2);border-color:var(--fo-text-2);">~</span>`
@@ -9505,6 +9520,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           : '';
       }
 
+      // Aktionen: akzeptierter Ruhetag → nur "Rückgängig" (nur am selben Tag, siehe Task 1); sonst
+      // ggf. "Pause gemacht" (nur Ruhetag) + immer "Vorschlag verwerfen".
+      const actions = accepted
+        ? (sameDay ? `<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="undoDailyCheckRestSuggestion()" style="margin-top:4px;">Rückgängig</button>` : '')
+        : `${isRuhetag ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="acceptDailyCheckRestSuggestion()" style="margin-top:4px;margin-right:6px;">Pause gemacht</button>` : ''}<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="dismissDailyCheckSuggestion()" style="margin-top:4px;">Vorschlag verwerfen</button>`;
+
       return `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px dashed var(--fo-line);">
         ${left}
         <div class="fo-row__main">
@@ -9513,7 +9534,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           ${zirkelList}
           <div class="fo-row__sub" style="font-style:italic;">${planEsc(suggestion.reason)}</div>
           ${status}
-          <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="dismissDailyCheckSuggestion()" style="margin-top:4px;">Vorschlag verwerfen</button>
+          ${actions}
         </div>
       </div>`;
     }
@@ -9527,18 +9548,43 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       startZirkelTimerModal(sugg.unit, ds, sugg.originalUnitId, true);
     };
 
-    // "Vorschlag verwerfen": blendet ihn für heute aus (status 'verworfen'), ohne den Rest der
-    // Tagescheck-Karte zu verändern. Persistiert in Firestore + IndexedDB-Cache.
-    window.dismissDailyCheckSuggestion = async function() {
-      if (!dailyCheckState?.planSuggestion) return;
-      dailyCheckState.suggestionStatus = 'verworfen';
+    // Persistiert dailyCheckState (Firestore + IndexedDB-Cache) und rendert Plan + Tagescheck-Karte
+    // neu – gemeinsame Stelle für alle Vorschlag-Aktionen (verwerfen/annehmen/rückgängig).
+    async function persistDailyCheckStateAndRerender(errorContext) {
       try {
         await setDoc(doc(userDailyCheckCol(), dailyCheckState.date), dailyCheckState);
         cachePut('dailyCheck_' + dailyCheckState.date, dailyCheckState).catch(() => {});
       } catch (e) {
-        console.error('Vorschlag verwerfen fehlgeschlagen:', e);
+        console.error(errorContext + ' fehlgeschlagen:', e);
       }
       renderTrainingPlan(true);
+      renderDailyCheckCard();
+    }
+
+    // "Vorschlag verwerfen": blendet ihn für heute aus (status 'verworfen').
+    window.dismissDailyCheckSuggestion = async function() {
+      if (!dailyCheckState?.planSuggestion) return;
+      dailyCheckState.suggestionStatus = 'verworfen';
+      await persistDailyCheckStateAndRerender('Vorschlag verwerfen');
+    };
+
+    // "Pause gemacht" (nur Ruhetag-Vorschläge): status 'gewaehlt' – planMatchDay markiert das Original
+    // dann als 'replaced', solange keine Aktivität dafür geloggt ist (siehe dort). Nur am selben Tag wie
+    // der Tagescheck selbst (siehe Task 1: keine nachträgliche Bearbeitung älterer Tage).
+    window.acceptDailyCheckRestSuggestion = async function() {
+      if (!dailyCheckState?.planSuggestion || dailyCheckState.planSuggestion.unit.typ !== 'ruhetag') return;
+      if (dailyCheckState.date !== berlinTodayStr()) return;
+      dailyCheckState.suggestionStatus = 'gewaehlt';
+      await persistDailyCheckStateAndRerender('Pause gemacht');
+    };
+
+    // "Rückgängig": zurück in den offenen Zustand (nicht 'verworfen' – Vorschlag bleibt wählbar).
+    // Ebenfalls nur am selben Tag.
+    window.undoDailyCheckRestSuggestion = async function() {
+      if (!dailyCheckState?.planSuggestion) return;
+      if (dailyCheckState.date !== berlinTodayStr()) return;
+      dailyCheckState.suggestionStatus = 'offen';
+      await persistDailyCheckStateAndRerender('Rückgängig (Pause)');
     };
 
     function renderTrainingPlan(force) {
@@ -9595,8 +9641,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         const units = weekPlan[key] || [];
         const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
         // Tagescheck-Planvorschlag (Teil B) gilt NUR für heute und nur solange nicht verworfen.
+        // status mitgegeben, damit planMatchDay einen akzeptierten Ruhetag-Vorschlag erkennt (Task 1).
         const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion
-          && dailyCheckState.suggestionStatus !== 'verworfen') ? dailyCheckState.planSuggestion : null;
+          && dailyCheckState.suggestionStatus !== 'verworfen')
+          ? { ...dailyCheckState.planSuggestion, status: dailyCheckState.suggestionStatus } : null;
         const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion);
         totalPlanned += result.length;
         totalDone += result.filter(r => r.status !== 'open').length;

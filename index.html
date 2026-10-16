@@ -1855,6 +1855,9 @@
             </div>
           </div>
         </section>
+
+        <!-- Versionsmarker (APP_BUILD) – zum Abgleich, welcher Stand auf dem Gerät tatsächlich läuft -->
+        <div id="app-build-marker" style="text-align:center;font-size:11px;color:var(--fo-text-3);padding:8px 0 16px;"></div>
       </div>
     </div>
 
@@ -2296,6 +2299,19 @@
     const db = getFirestore(app);
     const fbFunctions = getFunctions(app, 'us-central1');
     const fbFunctionsEU = getFunctions(app, 'europe-west1'); // Oura Functions laufen in europe-west1
+
+    // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
+    // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
+    const APP_BUILD = '2026-10-16 22:10';
+    console.info('Fuelofit Build:', APP_BUILD);
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('app-build-marker');
+      if (el) el.textContent = 'Build: ' + APP_BUILD;
+    });
+    if (document.readyState !== 'loading') {
+      const el = document.getElementById('app-build-marker');
+      if (el) el.textContent = 'Build: ' + APP_BUILD;
+    }
 
     // Global State
     let userId = null;
@@ -5017,8 +5033,13 @@
           const kcal = activityRowKcal(a);
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
-          const autoMeta = [dist, zeit, entryStepsLabel(a.schritte)].filter(Boolean).join(' · ');
-          const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
+          const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
+          // Schritte IMMER anhängen, unabhängig davon ob a.sets (bei Garmin/Google-Fit-Einträgen server-
+          // seitig vorbelegt, z.B. "10,23 km · 00:56:15") oder autoMeta greift – vorher stand
+          // entryStepsLabel nur innerhalb von autoMeta, das a.sets (fast immer gesetzt) nie erreichte
+          // (Bugreport 2026-10-17: Übersicht zeigte deshalb nie Schritte für Garmin-Aktivitäten).
+          const baseMeta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
+          const meta = [baseMeta, entryStepsLabel(a.schritte)].filter(Boolean).join(' · ');
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
             ${!child && emoji ? `<span class="fo-row__icon">${emoji}</span>` : ''}

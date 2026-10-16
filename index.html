@@ -2676,8 +2676,8 @@
     // 1. Garmin (tageslog.steps > 0) hat immer Vorrang.
     // 2. Fallback: Oura (oura_daily/{date}.steps), nur wenn kein Garmin-Wert vorliegt UND das Datum
     //    vor heute liegt (Berlin). Oura liefert den Tageswert erst nach Mitternacht, daher nie für heute.
-    // Garmin und Oura werden nie addiert. Die Oura-Werte sind vorläufig und dienen ausschließlich
-    // der Kalorienzielberechnung, sie werden in keiner Anzeige ausgewiesen.
+    // Garmin und Oura werden nie addiert. Die Oura-Werte sind vorläufig; sie fließen über
+    // getAlltagsschritteForDate auch in die Alltagsschritte-Anzeigen ein (identisch zum Kalorienziel).
     function getKcalStepsForDate(date, dayLog) {
       const garminSteps = dayLog?.steps || 0;
       if (garminSteps > 0) return garminSteps;
@@ -2711,6 +2711,26 @@
       return daySteps <= 0 && date === berlinTodayStr();
     }
 
+    // Aktivitäts-Schritte eines Tages: Summe aller Trainingseinträge (ohne Tageslog/Phonesteps) mit
+    // Schritten, die von den Gesamtschritten abgezogen werden (Laufen, Gehen, Wandern, etc. – siehe
+    // calcHistoricalKcalGoal). Einzige Stelle für diese Abzugsliste, genutzt von Kalorienziel UND Anzeigen.
+    function getActivityStepsForDate(date) {
+      return trainingEntries
+        .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
+        .reduce((sum, e) => sum + (e.schritte || 0), 0);
+    }
+
+    // Alltagsschritte eines Tages = genau der Wert, den calcHistoricalKcalGoal für die Schritt-Kalorien
+    // verwendet: Gesamtschritte (Garmin, sonst Oura-Fallback, heute ggf. Platzhalter) minus Aktivitätsschritte.
+    // Einzige Quelle für alle Anzeigen (Dashboard, Tagesansicht, Charts, Widget, Analyse-Tab).
+    function getAlltagsschritteForDate(date) {
+      const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+      const daySteps = getKcalStepsForDate(date, dayLog);
+      if (usesAssumedDailySteps(date, daySteps)) return getAssumedDailySteps();
+      return Math.max(0, daySteps - getActivityStepsForDate(date));
+    }
+    window.getAlltagsschritteForDate = getAlltagsschritteForDate;
+
     window.calcHistoricalKcalGoal = function calcHistoricalKcalGoal(date, allDayLogs, allTrainingEntries) {
       try {
         const s = settings;
@@ -2737,17 +2757,9 @@
           .filter(e => e.datum === date)
           .reduce((sum, e) => sum + activityKcalForGoal(e, actList), 0);
 
-        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-        const daySteps = getKcalStepsForDate(date, dayLog);
-
-        // Aktivitäts-Schritte für diesen Tag (alle Aktivitäten inkl. Gehen/Wandern abziehen)
-        const activitySteps = trainingEntries
-          .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
-          .reduce((sum, e) => sum + (e.schritte || 0), 0);
-
-        // Alltagsschritte (Garmin, sonst Oura-Fallback), Aktivitäts-Schritte werden abgezogen;
-        // heute ohne echte Schritte: Platzhalter aus den Einstellungen
-        const totalSteps = usesAssumedDailySteps(date, daySteps) ? getAssumedDailySteps() : Math.max(0, daySteps - activitySteps);
+        // Alltagsschritte (Garmin, sonst Oura-Fallback, heute ggf. Platzhalter), Aktivitäts-Schritte
+        // bereits abgezogen – einzige Quelle, auch für alle Anzeigen (getAlltagsschritteForDate)
+        const totalSteps = getAlltagsschritteForDate(date);
         const dailyKcal = Math.round(totalSteps * 0.04);
         const activity = Math.round(dayActivity);
 
@@ -2975,14 +2987,17 @@
         days[e.datum].act_kcal_garmin += e.kalorien || 0;
         days[e.datum].trainings++;
         if (e.typ === 'laufen') days[e.datum].run_km += parseFloat(e.distanz) || 0;
-        // Nur Lauf-Aktivitäten zählen als Aktivitätsschritte (nicht Gehen/Wandern)
-        const isRunActivity = ['laufen'].includes(e.typ);
-        const actSteps = isRunActivity ? (parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0) : 0;
-        days[e.datum].steps_activity += actSteps;
+      });
+
+      // Aktivitäts- und Alltagsschritte: gleiche Abzugslogik wie im Kalorienziel (getActivityStepsForDate/
+      // getAlltagsschritteForDate), damit diese Anzeigen (Dashboard-Charts/Kacheln) exakt dieselben
+      // Werte zeigen wie calcHistoricalKcalGoal.
+      Object.keys(days).forEach(date => {
+        days[date].steps_activity = getActivityStepsForDate(date);
+        days[date].steps_daily = getAlltagsschritteForDate(date);
       });
 
       Object.values(days).forEach(d => {
-        d.steps_daily = Math.max(0, d.steps_total - d.steps_activity);
         d.run_km = Math.round(d.run_km * 10) / 10;
       });
 
@@ -4842,8 +4857,7 @@
       // Widget-Daten via Android Bridge aktualisieren (heute + letzte 7 Tage)
       try {
         if (window.AndroidTokenBridge && typeof AndroidTokenBridge.updateWidgetData === 'function') {
-          const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
-          const steps = dayLog?.steps || 0;
+          const steps = getAlltagsschritteForDate(currentDate);
           AndroidTokenBridge.updateWidgetData(
             Math.round(totalKcal),
             Math.round(totalProtein * 10) / 10,
@@ -4866,8 +4880,7 @@
               const dayProtein = dayEntries.reduce((s, e) => s + (e.protein || 0), 0);
               const dayCarbs = dayEntries.reduce((s, e) => s + (e.carbs || 0), 0);
               const dayFat = dayEntries.reduce((s, e) => s + (e.fat || 0), 0);
-              const dayLogEntry = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === dateStr);
-              const daySteps = dayLogEntry?.steps || 0;
+              const daySteps = getAlltagsschritteForDate(dateStr);
               const dayGoal = calcHistoricalKcalGoal(dateStr)?.total || 0;
               history.push(`${dateStr}|${Math.round(dayKcal)}|${Math.round(dayProtein*10)/10}|${Math.round(dayCarbs*10)/10}|${Math.round(dayFat*10)/10}|${dayGoal}|${daySteps}`);
             }
@@ -4947,8 +4960,7 @@
       // ── Schritte + Aktivitäten unter den Kacheln ─────────────────────────
       const activityContainer = document.getElementById('daily-activity-summary');
       if (activityContainer) {
-        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === currentDate);
-        const steps = dayLog?.steps || 0;
+        const steps = getAlltagsschritteForDate(currentDate);
 
         const dayActivities = trainingEntries.filter(e =>
           e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
@@ -4986,7 +4998,8 @@
           const kcal = activityRowKcal(a);
           const dist = a.distanz > 0 ? `${String(a.distanz).replace('.', ',')} km` : '';
           const zeit = a.zeit || '';
-          const autoMeta = [dist, zeit].filter(Boolean).join(' · ');
+          const schritteText = (a.schritte || 0) > 0 ? `${fmt(a.schritte)} Schritte` : '';
+          const autoMeta = [dist, zeit, schritteText].filter(Boolean).join(' · ');
           const meta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
@@ -5011,12 +5024,14 @@
           // Summen: Distanz und Dauer nur, falls vorhanden; Kalorien = Summe der angezeigten Zeilenwerte
           const distSum = g.items.reduce((s, a) => s + (a.distanz > 0 ? parseFloat(a.distanz) || 0 : 0), 0);
           const secSum = Math.round(g.items.reduce((s, a) => s + parseHours(a.zeit || '') * 3600, 0));
+          const schritteSum = g.items.reduce((s, a) => s + (a.schritte || 0), 0);
           const kcalSum = g.items.reduce((s, a) => { const k = activityRowKcal(a); return s + (k > 0 ? Math.round(k) : 0); }, 0);
           const distText = distSum > 0 ? `${String(Math.round(distSum * 100) / 100).replace('.', ',')} km` : '';
           const zeitText = secSum > 0
             ? `${Math.floor(secSum / 3600)}:${String(Math.floor(secSum % 3600 / 60)).padStart(2, '0')}:${String(secSum % 60).padStart(2, '0')}`
             : '';
-          const sumMeta = [distText, zeitText].filter(Boolean).join(' · ');
+          const schritteText = schritteSum > 0 ? `${fmt(schritteSum)} Schritte` : '';
+          const sumMeta = [distText, zeitText, schritteText].filter(Boolean).join(' · ');
 
           const groupKey = currentDate + '|' + g.typ;
           const isOpen = expandedActivityGroups.has(groupKey);
@@ -7225,6 +7240,7 @@
               ${setsDisplay}
               ${setsTotal > 0 ? `<span style="color:var(--fo-primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
+              ${(e.schritte || 0) > 0 ? `<span style="color:var(--fo-text-3);margin-left:6px;">${fmt(e.schritte)} Schritte</span>` : ''}
             </div>
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) : ''}
@@ -7635,11 +7651,13 @@
         return [d, n.kcal, n.protein, n.carbs, n.fat, n.count, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
       });
 
-      // Tageslog: Gewicht & Schritte, letzte analysisWindowDays Tage
+      // Tageslog: Gewicht, Alltagsschritte & Aktivitätsschritte, letzte analysisWindowDays Tage.
+      // Alltags-/Aktivitätsschritte getrennt und über dieselben Helper wie das Kalorienziel berechnet
+      // (getAlltagsschritteForDate/getActivityStepsForDate) – identisch zum intern genutzten Wert.
       const dayLogRows = trainingEntries
         .filter(e => e.typ === 'tageslog' && e.datum >= cutoffNutritionStr)
         .sort((a, b) => a.datum.localeCompare(b.datum))
-        .map(e => [e.datum, e.weight ?? '-', e.steps ?? '-'].join('|'));
+        .map(e => [e.datum, e.weight ?? '-', getAlltagsschritteForDate(e.datum), getActivityStepsForDate(e.datum)].join('|'));
 
       // Oura-Erholungsdaten, gleicher Zeitraum wie die übrige Tages-Aggregation (90 Tage). Tage ganz
       // ohne Oura-Dokument fehlen in der Liste (wie dayLogRows ohne Tageslog-Eintrag), einzelne fehlende
@@ -7717,8 +7735,8 @@ ${ctx.exerciseRows.join('\n') || '(keine Einträge)'}
 Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|AnzahlMahlzeiten|KcalZiel|Differenz
 ${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
 
-=== Tageslog: Gewicht & Schritte (letzte ${analysisWindowDays} Tage) ===
-Format: Datum|Gewicht(kg)|Schritte
+=== Tageslog: Gewicht, Alltags- & Aktivitätsschritte (letzte ${analysisWindowDays} Tage) ===
+Format: Datum|Gewicht(kg)|Alltagsschritte|Aktivitätsschritte
 ${ctx.dayLogRows.join('\n') || '(keine Einträge)'}
 
 === Oura-Erholungsdaten (letzte ${analysisWindowDays} Tage, Fingerring) ===

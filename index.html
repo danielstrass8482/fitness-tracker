@@ -397,6 +397,15 @@
     .fo-toggle-chev { transform: rotate(-90deg); transition: transform .15s; color: var(--fo-text-3); }
     .fo-toggle-chev.is-open { transform: none; }
     @media (prefers-reduced-motion: reduce) { .fo-toggle-chev { transition: none; } }
+    /* Tagescheck-Karte: zugeklappt zeigt der chevD nach unten (tippen = mehr), aufgeklappt per
+       180°-Drehung nach oben (tippen = schließen) – andere Richtung als .fo-toggle-chev oben, bewusst
+       so gewünscht (siehe Bugreport 2026-10-18). Eine Zeile fester Höhe für jeden Kartenzustand. */
+    .fo-daily-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+    .fo-daily-headline-text { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fo-daily-chev { display: inline-flex; flex-shrink: 0; transition: transform .15s; color: var(--fo-text-3); }
+    .fo-daily-chev.is-open { transform: rotate(180deg); }
+    .fo-daily-expanded { border-top: 1px solid var(--fo-line); margin-top: 2px; padding: 10px 0 14px; }
+    @media (prefers-reduced-motion: reduce) { .fo-daily-chev { transition: none; } }
     /* Trainingsplan: auf-/zuklappbare Tageskopfzeilen (Wochenansicht, nicht der Editor) */
     .plan-day-header { width: 100%; min-height: var(--fo-tap); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0; margin-bottom: 6px; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
     /* Intervall-Zirkel Ablauf: Vollbild-Dialog mit .fo-timer; Safe-Area-Abstände mit Rückfall 0 */
@@ -2305,7 +2314,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-18 13:07';
+    const APP_BUILD = '2026-10-18 13:19';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2469,6 +2478,11 @@
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings')]);
+        // Tagescheck für heute synchron mitladen, damit die Karte im SELBEN ersten Render wie der Rest
+        // der Übersicht erscheint (renderAll → renderDailyCheckCard), nicht erst nach initDailyCheck
+        // (das läuft asynchron nach loadAllData/Sync) – behebt das Nachrücken/Pop-in vom Bugreport.
+        const cachedDailyCheck = await cacheGet('dailyCheck_' + berlinTodayStr());
+        if (cachedDailyCheck && cachedDailyCheck.date === berlinTodayStr()) dailyCheckState = cachedDailyCheck;
         // Typ-Dokumente (inkl. Haltezeit-Markierung) vor dem Trainings-Block setzen, damit das Formular gleich passt
         if (Array.isArray(cachedCustomTypes)) { customTrainingTypes = cachedCustomTypes; renderCustomTypes(); }
         if (Array.isArray(cachedIntervalTemplates)) intervalTemplates = cachedIntervalTemplates;
@@ -2938,6 +2952,7 @@
     function renderAll() {
       const activeTab = document.querySelector('.tab.active');
       if (!activeTab) showTabPanel(START_TAB);
+      renderDailyCheckCard(); // mit dem Rest der Übersicht im selben ersten Render, kein Nachrücken
       renderFoodLog();
       renderDataStats();
       renderFoodDB();
@@ -8231,26 +8246,28 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }, 60000);
     }
 
-    // Lebenszyklus beim App-Start: IndexedDB-Cache zuerst (schnell, zeigt sofort etwas an), dann
-    // Firestore (verbindlich). Existiert für heute noch nichts und sind die Oura-Daten schon da,
-    // wird automatisch generiert – sonst der Warte-Zustand mit "Jetzt erstellen".
+    // Lebenszyklus beim App-Start: dailyCheckState wurde bereits in loadFromCache() gesetzt, falls ein
+    // Cache-Eintrag für heute existiert (gleicher erster Render wie der Rest der Übersicht, kein
+    // erneutes Lesen hier). Firestore bleibt die verbindliche Quelle – nur aktualisieren/neu rendern,
+    // wenn sich der Inhalt wirklich geändert hat (kein Flackern, kein Verlust des aktuellen Auf-/
+    // Zugeklappt-Zustands, siehe Bugreport 2026-10-18). Existiert für heute weder im Cache noch in
+    // Firestore etwas und sind die Oura-Daten schon da, wird automatisch generiert – sonst der
+    // Warte-Zustand mit "Jetzt erstellen".
     async function initDailyCheck() {
       try {
         const todayStr = berlinTodayStr();
-        const cached = await cacheGet('dailyCheck_' + todayStr).catch(() => null);
-        if (cached && cached.date === todayStr) {
-          dailyCheckState = cached;
-          renderDailyCheckCard();
-          if (cached.error) return; // Fehler-Zustand zeigen, aber nicht automatisch neu versuchen
-          return;
-        }
         const fsSnap = await getDoc(doc(userDailyCheckCol(), todayStr)).catch(() => null);
         if (fsSnap?.exists()) {
           const fromFirestore = fsSnap.data();
-          dailyCheckState = fromFirestore;
-          cachePut('dailyCheck_' + todayStr, fromFirestore).catch(() => {});
-          renderDailyCheckCard();
+          if (JSON.stringify(fromFirestore) !== JSON.stringify(dailyCheckState)) {
+            dailyCheckState = fromFirestore;
+            cachePut('dailyCheck_' + todayStr, fromFirestore).catch(() => {});
+            renderDailyCheckCard();
+          }
           return;
+        }
+        if (dailyCheckState && dailyCheckState.date === todayStr) {
+          return; // aus dem Cache geladen (z.B. ein Fehler-Zustand), aber noch nichts in Firestore – kein Auto-Retry
         }
         const o = ouraDaily[todayStr];
         if (o && (o.hrvAvg != null || o.restingHr != null || o.sleepScore != null)) {
@@ -8279,50 +8296,52 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         : status === 'rot' ? 'var(--fo-bad)' : 'var(--fo-text-3)';
     }
 
-    // Rendert die Tagescheck-Karte oben in der Übersicht (#daily-check-card). Nie blockierend –
-    // wird asynchron aus initDailyCheck/generateDailyCheck heraus aufgerufen, nie aus dem App-Start
-    // selbst erzwungen.
+    // Rendert die Tagescheck-Karte oben in der Übersicht (#daily-check-card) – läuft als Teil von
+    // renderAll() im selben ersten Render wie der Rest der Übersicht, nie erst danach (siehe
+    // Bugreport 2026-10-18: Nachrücken/Pop-in). JEDER Zustand (Platzhalter/wartend/Fehler/normal)
+    // zeigt zusammengeklappt genau EINE Zeile fester Höhe (.fo-daily-row, min-height 44px). Platzhalter
+    // und "wird erstellt" sind nicht aufklappbar (nichts aufzuklappen), die übrigen drei Zustände
+    // (wartend/Fehler/normal) schon – chevD zusammengeklappt, 180°-Drehung (chevD→sieht wie chevU aus)
+    // aufgeklappt, siehe .fo-daily-chev-CSS.
     function renderDailyCheckCard() {
       const el = document.getElementById('daily-check-card');
       if (!el) return;
-      const s = dailyCheckState;
-      if (!s) { el.style.display = 'none'; el.innerHTML = ''; return; }
       el.style.display = 'block';
+      const s = dailyCheckState;
 
-      if (dailyCheckGenerating) {
-        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--fo-text-3);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Tagescheck wird erstellt …</div>`;
-        return;
-      }
-      if (s.waiting) {
-        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
-          <div style="font-size:13px;color:var(--fo-text-3);margin-bottom:8px;">Oura-Daten noch nicht da</div>
+      let dotColor, headlineHtml, badges = '', toggleable = true, expandedBodyHtml = '';
+
+      if (dailyCheckGenerating || !s) {
+        dotColor = 'var(--fo-text-3)';
+        headlineHtml = `<span style="color:var(--fo-text-3);">Tagescheck wird erstellt …</span>`;
+        toggleable = false;
+      } else if (s.waiting) {
+        dotColor = 'var(--fo-text-3)';
+        headlineHtml = `<span style="color:var(--fo-text-3);">Oura-Daten noch nicht da</span>`;
+        expandedBodyHtml = `<div class="fo-daily-expanded">
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Jetzt erstellen</button>
         </div>`;
-        return;
-      }
-      if (s.error) {
+      } else if (s.error) {
+        dotColor = 'var(--fo-bad)';
+        headlineHtml = `<span style="color:var(--fo-bad);">Tagescheck nicht verfügbar</span>`;
         const reason = s.lastError?.reason || s.errorMessage || 'Unbekannter Fehler';
-        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
-          <div class="fo-status-bad" style="font-size:13px;margin-bottom:8px;">${foIcon('alertCircle', 'fo-i--sm')} Tagescheck konnte nicht erstellt werden</div>
+        expandedBodyHtml = `<div class="fo-daily-expanded">
           <details style="font-size:11px;color:var(--fo-text-3);margin-bottom:8px;">
             <summary style="cursor:pointer;">Details</summary>
             <div style="margin-top:4px;word-break:break-word;">${planEsc(reason)}</div>
           </details>
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Erneut versuchen</button>
         </div>`;
-        return;
-      }
+      } else {
+        dotColor = dailyCheckStatusColor(s.status);
+        headlineHtml = planEsc(s.headline);
+        badges = [
+          s.flags?.illness ? `<span class="fo-tag" style="background:var(--fo-bad);color:#fff;margin-left:6px;flex-shrink:0;">Infekt?</span>` : '',
+          s.flags?.alcohol ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;margin-left:6px;flex-shrink:0;">Alkohol</span>` : ''
+        ].filter(Boolean).join('');
 
-      const dot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dailyCheckStatusColor(s.status)};flex-shrink:0;margin-top:3px;"></span>`;
-      const badges = [
-        s.flags?.illness ? `<span class="fo-tag" style="background:var(--fo-bad);color:#fff;margin-left:6px;">Infekt?</span>` : '',
-        s.flags?.alcohol ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;margin-left:6px;">Alkohol</span>` : ''
-      ].filter(Boolean).join('');
-      const actionsHtml = (s.actions || []).map(a => `<div style="font-size:13px;margin-top:2px;">• ${planEsc(a)}</div>`).join('');
-      const timeStr = s.createdAtMs ? new Date(s.createdAtMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
-
-      let expandedHtml = '';
-      if (dailyCheckExpanded) {
+        const actionsHtml = (s.actions || []).map(a => `<div style="font-size:13px;margin-top:2px;">• ${planEsc(a)}</div>`).join('');
+        const timeStr = s.createdAtMs ? new Date(s.createdAtMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
         const o = ouraDaily[s.date] || {};
         const yesterday = dailyCheckShiftDate(s.date, -1);
         const hrvBase = ouraWindowAvg('hrvAvg', 28, yesterday);
@@ -8350,34 +8369,38 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             ? `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Alkohol-Muster: noch zu wenig Daten (n=${p.n}).</div>`
             : `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Muster (n=${p.n} Alkohol-Nächte): HRV ${p.avgDeltaHrv >= 0 ? '+' : ''}${p.avgDeltaHrv} ms, Ruhepuls ${p.avgDeltaRhr >= 0 ? '+' : ''}${p.avgDeltaRhr} bpm ggü. Normal-Nächten.</div>`;
         }
-
         const planSuggestionHtml = s.planSuggestion ? `<div style="margin-top:10px;font-size:13px;">
           <a href="#" onclick="openPlanToday();return false;" style="color:var(--fo-primary);text-decoration:none;">${foIcon('chevR', 'fo-i--sm')} Planvorschlag für heute</a>
         </div>` : '';
 
-        expandedHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">
-          <div style="font-size:13px;color:var(--fo-text-2);">${planEsc(s.reason)}</div>
+        expandedBodyHtml = `<div class="fo-daily-expanded">
+          ${actionsHtml}
+          <div style="font-size:13px;color:var(--fo-text-2);margin-top:8px;">${planEsc(s.reason)}</div>
           <div style="font-size:12px;color:var(--fo-text-3);margin-top:4px;">Konfidenz: ${s.confidence}</div>
           ${keyNumsHtml}
           ${alcoholPatternHtml}
           ${planSuggestionHtml}
+          <div style="font-size:11px;color:var(--fo-text-3);margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
+            <span>erstellt um ${timeStr}</span>
+            <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>
+          </div>
         </div>`;
       }
 
-      el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
-        <div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;" onclick="toggleDailyCheckCard()">
-          ${dot}
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;font-size:14px;">${planEsc(s.headline)}${badges}</div>
-            ${actionsHtml}
-          </div>
-          ${foIcon(dailyCheckExpanded ? 'chevD' : 'chevR', 'fo-toggle-chev' + (dailyCheckExpanded ? ' is-open' : ''))}
-        </div>
-        ${expandedHtml}
-        <div style="font-size:11px;color:var(--fo-text-3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-          <span>erstellt um ${timeStr}</span>
-          <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>
-        </div>
+      const dot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>`;
+      const chevHtml = toggleable
+        ? `<span class="fo-daily-chev${dailyCheckExpanded ? ' is-open' : ''}">${foIcon('chevD', 'fo-i--sm')}</span>`
+        : `<span style="width:16px;flex-shrink:0;"></span>`;
+      const row = `<div class="fo-daily-row" style="cursor:${toggleable ? 'pointer' : 'default'};"${toggleable ? ' onclick="toggleDailyCheckCard()"' : ''}>
+        ${dot}
+        <span class="fo-daily-headline-text">${headlineHtml}</span>
+        ${badges}
+        ${chevHtml}
+      </div>`;
+
+      el.innerHTML = `<div class="fo-card" style="padding:0 16px;margin-bottom:12px;">
+        ${row}
+        ${toggleable && dailyCheckExpanded ? expandedBodyHtml : ''}
       </div>`;
     }
 

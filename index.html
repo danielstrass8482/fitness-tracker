@@ -2305,7 +2305,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-16 22:37';
+    const APP_BUILD = '2026-10-18 13:07';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8060,9 +8060,26 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 }`;
     }
 
+    // Toleranz vor JSON.parse (Bugreport 2026-10-17): Markdown-Codeblock-Hülle entfernen, DANACH
+    // zusätzlich auf die erste "{" bis letzte "}" zuschneiden, falls das Modell trotz Anweisung Text
+    // davor/danach mitschickt.
+    function extractDailyCheckJsonCandidate(raw) {
+      let s = (raw || '').trim();
+      s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const first = s.indexOf('{');
+      const last = s.lastIndexOf('}');
+      if (first !== -1 && last !== -1 && last > first) s = s.slice(first, last + 1);
+      return s;
+    }
+
     // Ruft denselben Anthropic-Call wie der Analyse-Tab auf (settings.anthropicApiKey, Modell
-    // claude-sonnet-5) – keine neue Schlüsselverwaltung. Wirft bei fehlendem Key, HTTP-Fehler oder
-    // nicht parsbarer Antwort (JSON.parse wirft von sich aus).
+    // claude-sonnet-5) – keine neue Schlüsselverwaltung. max_tokens 3000 statt vorher 1024: der echte
+    // Call (Bugreport 2026-10-17, reproduziert) zeigt durchgängig 800-950 Output-Tokens, davon
+    // 500-665 für modellinternes "thinking" (nicht abschaltbar über diesen Endpunkt) – bei 1024 blieb
+    // kaum noch Spielraum, ein etwas längerer Thinking-Anteil hätte den sichtbaren JSON-Text
+    // mitten im Satz abschneiden können. Wirft bei fehlendem Key, HTTP-Fehler, leerer Textantwort
+    // (z.B. durch max_tokens abgeschnitten, erkennbar an stop_reason) oder nicht parsbarem JSON – der
+    // jeweilige rohe Modelltext hängt als err.rawText am Error (siehe generateDailyCheck/lastError).
     async function callDailyCheckModel(payload) {
       const apiKey = settings.anthropicApiKey;
       if (!apiKey) throw new Error('Kein Anthropic API Key in den Einstellungen');
@@ -8076,7 +8093,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         },
         body: JSON.stringify({
           model: 'claude-sonnet-5',
-          max_tokens: 1024,
+          max_tokens: 3000,
           system: buildDailyCheckSystemPrompt(),
           messages: [{ role: 'user', content: JSON.stringify(payload) }]
         })
@@ -8084,23 +8101,37 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error?.message || ('HTTP ' + resp.status));
       const textBlock = (data.content || []).find(b => b.type === 'text');
-      const raw = (textBlock?.text || '').trim();
-      // Markdown-Codeblock-Hülle entfernen, falls das Modell trotz Anweisung eine mitschickt
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-      return JSON.parse(cleaned);
+      const rawText = (textBlock?.text || '').trim();
+      if (!rawText) {
+        const err = new Error('Keine Textantwort vom Modell' + (data.stop_reason === 'max_tokens' ? ' (max_tokens erreicht)' : ' (stop_reason: ' + data.stop_reason + ')'));
+        err.rawText = '';
+        throw err;
+      }
+      const cleaned = extractDailyCheckJsonCandidate(rawText);
+      try {
+        return { parsed: JSON.parse(cleaned), rawText };
+      } catch (parseErr) {
+        const err = new Error('JSON ungültig: ' + parseErr.message);
+        err.rawText = rawText;
+        throw err;
+      }
     }
 
-    // Strenge Validierung der Modell-Antwort gegen die Form aus A.4. planSuggestion.unit wird mit
-    // derselben Normalisierung wie reguläre Plan-Einheiten geprüft (normalizePlanUnit/
+    // Validierung der Modell-Antwort gegen die Form aus A.4. Harte Prüfung NUR für fehlende/falsch
+    // typisierte Pflichtfelder (status, actions als nicht-leeres String-Array, confidence, flags) –
+    // weiche Grenzen (headline/reason-Länge, mehr als 2 actions) werden abgeschnitten statt die ganze
+    // Karte zu verwerfen (Bugreport 2026-10-17: das Modell lag bei der Länge gelegentlich knapp daneben,
+    // das war vorher ein kompletter Fehler-Zustand statt einer harmlosen Kürzung). planSuggestion.unit
+    // wird mit derselben Normalisierung wie reguläre Plan-Einheiten geprüft (normalizePlanUnit/
     // normalizeZirkelUebung) – bei Fehlern wird NUR der Vorschlag verworfen, die restliche Karte bleibt.
     function validateDailyCheckResult(raw) {
       if (!raw || typeof raw !== 'object') return { valid: false, error: 'Kein Objekt' };
-      if (!['gruen', 'gelb', 'rot'].includes(raw.status)) return { valid: false, error: 'status ungültig' };
-      if (typeof raw.headline !== 'string' || !raw.headline || raw.headline.length > 60) return { valid: false, error: 'headline ungültig' };
-      if (!Array.isArray(raw.actions) || raw.actions.length < 1 || raw.actions.length > 2 || !raw.actions.every(a => typeof a === 'string' && a)) return { valid: false, error: 'actions ungültig' };
-      if (typeof raw.reason !== 'string' || !raw.reason || raw.reason.length > 250) return { valid: false, error: 'reason ungültig' };
-      if (!['hoch', 'mittel', 'niedrig'].includes(raw.confidence)) return { valid: false, error: 'confidence ungültig' };
-      if (!raw.flags || typeof raw.flags.illness !== 'boolean' || typeof raw.flags.alcohol !== 'boolean') return { valid: false, error: 'flags ungültig' };
+      if (!['gruen', 'gelb', 'rot'].includes(raw.status)) return { valid: false, error: 'status fehlt/ungültig' };
+      if (typeof raw.headline !== 'string' || !raw.headline.trim()) return { valid: false, error: 'headline fehlt' };
+      if (!Array.isArray(raw.actions) || raw.actions.length < 1 || !raw.actions.every(a => typeof a === 'string' && a.trim())) return { valid: false, error: 'actions fehlt/ungültig' };
+      if (typeof raw.reason !== 'string' || !raw.reason.trim()) return { valid: false, error: 'reason fehlt' };
+      if (!['hoch', 'mittel', 'niedrig'].includes(raw.confidence)) return { valid: false, error: 'confidence fehlt/ungültig' };
+      if (!raw.flags || typeof raw.flags.illness !== 'boolean' || typeof raw.flags.alcohol !== 'boolean') return { valid: false, error: 'flags fehlt/ungültig' };
 
       let planSuggestion = null;
       if (raw.planSuggestion != null) {
@@ -8124,9 +8155,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       return {
         valid: true,
         data: {
-          status: raw.status, headline: String(raw.headline).slice(0, 60),
-          actions: raw.actions.slice(0, 2).map(a => String(a)),
-          reason: String(raw.reason).slice(0, 250), confidence: raw.confidence,
+          status: raw.status, headline: String(raw.headline).trim().slice(0, 60),
+          actions: raw.actions.slice(0, 2).map(a => String(a).trim()),
+          reason: String(raw.reason).trim().slice(0, 250), confidence: raw.confidence,
           flags: { illness: !!raw.flags.illness, alcohol: !!raw.flags.alcohol },
           planSuggestion
         }
@@ -8150,9 +8181,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       renderDailyCheckCard();
       try {
         const payload = buildDailyCheckPayload(todayStr);
-        const raw = await callDailyCheckModel(payload);
-        const { valid, data, error } = validateDailyCheckResult(raw);
-        if (!valid) throw new Error('Ungültige Modell-Antwort: ' + error);
+        const { parsed, rawText } = await callDailyCheckModel(payload);
+        const { valid, data, error } = validateDailyCheckResult(parsed);
+        if (!valid) {
+          const err = new Error('JSON ungültig: ' + error);
+          err.rawText = rawText;
+          throw err;
+        }
         const toSave = { date: todayStr, ...data, createdAtMs: Date.now(), model: 'claude-sonnet-5' };
         if (toSave.planSuggestion) toSave.suggestionStatus = 'offen';
         await setDoc(doc(userDailyCheckCol(), todayStr), toSave);
@@ -8161,9 +8196,17 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         renderTrainingPlan(); // falls Plan-Tab offen: neuen Vorschlag sofort zeigen (Teil B)
       } catch (e) {
         console.error('Tagescheck-Generierung fehlgeschlagen:', e);
-        const errState = { date: todayStr, error: true, errorMessage: e.message, atMs: Date.now() };
+        // lastError macht den Fehler auch außerhalb des Geräts nachvollziehbar (Bugreport 2026-10-17:
+        // Fehler lag bisher NUR im lokalen IndexedDB-Cache, nirgends von außen einsehbar). Niemals den
+        // API-Key speichern – rawTextSnippet ist der Modelltext, nicht der Request.
+        const errState = {
+          date: todayStr, error: true, errorMessage: e.message,
+          lastError: { atMs: Date.now(), reason: e.message, rawTextSnippet: (e.rawText || '').slice(0, 500) }
+        };
         dailyCheckState = errState;
-        cachePut('dailyCheck_' + todayStr, errState).catch(() => {}); // kein Auto-Retry bei jedem App-Start
+        window.__lastDailyCheckError = errState.lastError;
+        cachePut('dailyCheck_' + todayStr, errState).catch(() => {}); // Cache verhindert Auto-Retry-Spam am selben Gerät
+        try { await setDoc(doc(userDailyCheckCol(), todayStr), errState); } catch (e2) { console.error('Fehler-Status in Firestore speichern fehlgeschlagen:', e2); }
       } finally {
         dailyCheckGenerating = false;
         renderDailyCheckCard();
@@ -8258,8 +8301,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         return;
       }
       if (s.error) {
+        const reason = s.lastError?.reason || s.errorMessage || 'Unbekannter Fehler';
         el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
           <div class="fo-status-bad" style="font-size:13px;margin-bottom:8px;">${foIcon('alertCircle', 'fo-i--sm')} Tagescheck konnte nicht erstellt werden</div>
+          <details style="font-size:11px;color:var(--fo-text-3);margin-bottom:8px;">
+            <summary style="cursor:pointer;">Details</summary>
+            <div style="margin-top:4px;word-break:break-word;">${planEsc(reason)}</div>
+          </details>
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Erneut versuchen</button>
         </div>`;
         return;

@@ -2314,7 +2314,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-18 13:19';
+    const APP_BUILD = '2026-10-19 09:40';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2952,8 +2952,7 @@
     function renderAll() {
       const activeTab = document.querySelector('.tab.active');
       if (!activeTab) showTabPanel(START_TAB);
-      renderDailyCheckCard(); // mit dem Rest der Übersicht im selben ersten Render, kein Nachrücken
-      renderFoodLog();
+      renderFoodLog(); // ruft renderDailyCheckCard() selbst als Erstes auf – im selben ersten Render, kein Nachrücken
       renderDataStats();
       renderFoodDB();
       renderRecipes();
@@ -4676,6 +4675,7 @@
       const { newDate, blocked } = computeDateStep(days);
       if (blocked) return;
       currentDate = newDate;
+      dailyCheckExpanded = false; // neuer Tag = andere Tagescheck-Karte, startet zugeklappt
       renderFoodLog();
     };
     
@@ -4909,6 +4909,10 @@
     }
 
     function renderFoodLog() {
+      // Die Tagescheck-Karte gehört zum gerade angezeigten Tag (currentDate), nicht fest zu "heute"
+      // (Bugreport 2026-10-19) – renderFoodLog läuft bei JEDEM Tageswechsel (changeDate/slideToDay)
+      // und auch im ersten Render (renderAll), ist also die einzige Stelle, die dafür nötig ist.
+      renderDailyCheckCard();
       // Update date display
       const dateObj = new Date(currentDate + 'T12:00:00');
       const dateStr = dateObj.toLocaleDateString('de-DE', { 
@@ -8184,6 +8188,27 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     let dailyCheckState = null;   // aktuell geladener/generierter Tagescheck für heute (oder null)
     let dailyCheckExpanded = false;
     let dailyCheckGenerating = false;
+    // Nur-Lesen-Cache für vergangene Tage (Bugreport 2026-10-19: die Karte zeigte beim Zurückblättern
+    // immer dailyCheckState, d.h. HEUTE, egal welcher Tag in der Übersicht stand – dailyCheck/{Datum}
+    // in Firestore war dabei nie betroffen/überschrieben, reiner Anzeigefehler). Schlüssel = Datum,
+    // Wert = das Dokument, oder null = bestätigt kein Dokument für diesen Tag vorhanden. Nicht über
+    // die App-Sitzung hinaus persistiert (kein IndexedDB-Eintrag) – rein zum Vermeiden wiederholter
+    // Firestore-Reads beim Vor-/Zurückblättern innerhalb derselben Sitzung.
+    const dailyCheckPastCache = {};
+
+    // Lädt dailyCheck/{dateStr} (ein Tag in der Vergangenheit) einmalig aus Firestore und rendert die
+    // Karte neu, falls der Nutzer zu diesem Zeitpunkt noch immer auf diesem Tag steht (currentDate
+    // kann sich während des Awaits geändert haben).
+    async function fetchPastDailyCheck(dateStr) {
+      try {
+        const snap = await getDoc(doc(userDailyCheckCol(), dateStr));
+        dailyCheckPastCache[dateStr] = snap.exists() ? snap.data() : null;
+      } catch (e) {
+        console.warn('fetchPastDailyCheck fehlgeschlagen:', dateStr, e);
+        return; // bewusst NICHT cachen (auch nicht als null) – bei Netzwerkfehler soll der nächste Aufruf erneut versuchen
+      }
+      if (currentDate === dateStr) renderDailyCheckCard();
+    }
 
     // Jeder Schritt einzeln abgesichert (A.5): ein Fehler hier darf nie loadAllData/den Rest der
     // Übersicht mitreißen. generateDailyCheck selbst hat sein eigenes try/catch; initDailyCheck wird
@@ -8297,25 +8322,56 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     }
 
     // Rendert die Tagescheck-Karte oben in der Übersicht (#daily-check-card) – läuft als Teil von
-    // renderAll() im selben ersten Render wie der Rest der Übersicht, nie erst danach (siehe
-    // Bugreport 2026-10-18: Nachrücken/Pop-in). JEDER Zustand (Platzhalter/wartend/Fehler/normal)
-    // zeigt zusammengeklappt genau EINE Zeile fester Höhe (.fo-daily-row, min-height 44px). Platzhalter
-    // und "wird erstellt" sind nicht aufklappbar (nichts aufzuklappen), die übrigen drei Zustände
-    // (wartend/Fehler/normal) schon – chevD zusammengeklappt, 180°-Drehung (chevD→sieht wie chevU aus)
-    // aufgeklappt, siehe .fo-daily-chev-CSS.
+    // renderFoodLog() (von renderAll() wie auch von jedem Tageswechsel aufgerufen), im selben ersten
+    // Render wie der Rest der Übersicht, nie erst danach (siehe Bugreport 2026-10-18: Nachrücken/
+    // Pop-in). Die Karte gehört zum in der Übersicht ausgewählten Tag (currentDate), NICHT fest zu
+    // "heute" (Bugreport 2026-10-19: zeigte beim Zurückblättern immer dailyCheckState, also heute).
+    // Zukunft: keine Karte. Heute: wie bisher dailyCheckState (Generierung/Vorschlag/Fehler-Retry).
+    // Vergangenheit: nur-lesender Stand aus dailyCheckPastCache/Firestore, ohne Generieren/"Neu
+    // erstellen"/Planvorschlag-Link – wenn kein Dokument existiert, bleibt die Karte unsichtbar (kein
+    // Platzhalter, keine leere Box). JEDER sichtbare Zustand zeigt zusammengeklappt genau EINE Zeile
+    // fester Höhe (.fo-daily-row, min-height 44px). Platzhalter/"wird erstellt" sind nicht aufklappbar,
+    // die übrigen Zustände schon – chevD zusammengeklappt, 180°-Drehung aufgeklappt (.fo-daily-chev-CSS).
     function renderDailyCheckCard() {
       const el = document.getElementById('daily-check-card');
       if (!el) return;
+      const todayStr = berlinTodayStr();
+
+      let s, readOnly;
+      if (currentDate > todayStr) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+      } else if (currentDate === todayStr) {
+        s = dailyCheckState;
+        readOnly = false;
+      } else {
+        const cached = dailyCheckPastCache[currentDate];
+        if (cached === undefined) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          fetchPastDailyCheck(currentDate); // einmalig je Tag, siehe dailyCheckPastCache
+          return;
+        }
+        if (cached === null) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          return; // bestätigt: für diesen Tag existiert kein Tagescheck
+        }
+        s = cached;
+        readOnly = true;
+      }
       el.style.display = 'block';
-      const s = dailyCheckState;
 
       let dotColor, headlineHtml, badges = '', toggleable = true, expandedBodyHtml = '';
 
-      if (dailyCheckGenerating || !s) {
+      if (!readOnly && (dailyCheckGenerating || !s)) {
         dotColor = 'var(--fo-text-3)';
         headlineHtml = `<span style="color:var(--fo-text-3);">Tagescheck wird erstellt …</span>`;
         toggleable = false;
       } else if (s.waiting) {
+        // Kommt nur für "heute" vor (waiting-Zustände werden nie nach Firestore geschrieben, siehe
+        // generateDailyCheck/initDailyCheck) – readOnly kann hier nie true sein.
         dotColor = 'var(--fo-text-3)';
         headlineHtml = `<span style="color:var(--fo-text-3);">Oura-Daten noch nicht da</span>`;
         expandedBodyHtml = `<div class="fo-daily-expanded">
@@ -8330,7 +8386,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             <summary style="cursor:pointer;">Details</summary>
             <div style="margin-top:4px;word-break:break-word;">${planEsc(reason)}</div>
           </details>
-          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Erneut versuchen</button>
+          ${readOnly ? '' : '<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Erneut versuchen</button>'}
         </div>`;
       } else {
         dotColor = dailyCheckStatusColor(s.status);
@@ -8369,7 +8425,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             ? `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Alkohol-Muster: noch zu wenig Daten (n=${p.n}).</div>`
             : `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">Persönliches Muster (n=${p.n} Alkohol-Nächte): HRV ${p.avgDeltaHrv >= 0 ? '+' : ''}${p.avgDeltaHrv} ms, Ruhepuls ${p.avgDeltaRhr >= 0 ? '+' : ''}${p.avgDeltaRhr} bpm ggü. Normal-Nächten.</div>`;
         }
-        const planSuggestionHtml = s.planSuggestion ? `<div style="margin-top:10px;font-size:13px;">
+        // Der Planvorschlag-Link führt zum HEUTIGEN Plantag (openPlanToday → shiftPlanWeek(0)) und
+        // ergibt für einen vergangenen Tag keinen Sinn – nur bei !readOnly zeigen (Vorgabe: "The plan
+        // suggestion link only appears for today").
+        const planSuggestionHtml = (!readOnly && s.planSuggestion) ? `<div style="margin-top:10px;font-size:13px;">
           <a href="#" onclick="openPlanToday();return false;" style="color:var(--fo-primary);text-decoration:none;">${foIcon('chevR', 'fo-i--sm')} Planvorschlag für heute</a>
         </div>` : '';
 
@@ -8382,7 +8441,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           ${planSuggestionHtml}
           <div style="font-size:11px;color:var(--fo-text-3);margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
             <span>erstellt um ${timeStr}</span>
-            <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>
+            ${readOnly ? '' : '<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>'}
           </div>
         </div>`;
       }

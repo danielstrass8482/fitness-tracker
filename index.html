@@ -2314,7 +2314,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-19 09:40';
+    const APP_BUILD = '2026-10-19 10:15';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8255,21 +8255,81 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.regenerateDailyCheck = function() { generateDailyCheck(true); };
     window.createDailyCheckNow = function() { generateDailyCheck(false); };
 
-    // Wartet (nur innerhalb der laufenden Session) darauf, dass die Oura-Daten für heute ankommen,
-    // und generiert dann einmalig automatisch. Bricht ab, wenn inzwischen ein anderer Zustand gilt
-    // (z.B. durch "Jetzt erstellen" oder einen erfolgreichen Sync) oder nach ~30 Minuten.
-    function dailyCheckWaitForOura(todayStr, attempt = 0) {
-      if (attempt > 30) return;
-      setTimeout(async () => {
-        if (!dailyCheckState?.waiting || dailyCheckState.date !== todayStr) return;
-        const o = ouraDaily[todayStr];
-        if (o && (o.hrvAvg != null || o.restingHr != null || o.sleepScore != null)) {
-          await generateDailyCheck(false);
-        } else {
-          dailyCheckWaitForOura(todayStr, attempt + 1);
-        }
-      }, 60000);
+    // "Vollständig genug" für den Tagescheck: Schlafdaten (sleepScore ODER sleepDurationSec) für die
+    // Nacht VOR dateStr vorhanden. Readiness/Temp.-Abweichung sind optional und lösen, wenn sie erst
+    // später nachkommen, bewusst KEIN automatisches Neu-Generieren aus (siehe tryOuraAutoSync) –
+    // "Neu erstellen" bleibt dafür als manuelle Option.
+    function ouraNightDataComplete(dateStr) {
+      const o = ouraDaily[dateStr];
+      return !!(o && (o.sleepScore != null || o.sleepDurationSec != null));
     }
+
+    // ── Automatischer Oura-Sync bei fehlenden Daten der letzten Nacht (Bugreport 2026-10-19) ───────
+    // Ursache des Bugs: syncOura läuft serverseitig nur alle 3 Stunden (0 */3 * * *, Europe/Berlin);
+    // öffnet der Nutzer die App zwischen zwei Durchläufen, nachdem er morgens erst die Oura-App
+    // geöffnet hat (Ring synct erst dann zur Oura-Cloud), hat Fuelofit die neue Nacht serverseitig
+    // noch nicht abgeholt – UND selbst wenn doch, hätte das bisherige ouraDaily (nur bei App-Start via
+    // refreshOuraDaily() geladen) nichts davon gewusst, ohne dass irgendetwas das Neuladen angestoßen
+    // hätte. Diese Funktion schließt beide Lücken: sie ruft syncOuraManual selbst aktiv auf (Start +
+    // Rückkehr aus dem Hintergrund) und lädt danach ouraDaily neu. Begrenzung auf max. 3 automatische
+    // Backoff-Retries/Tag (2/5/10 Minuten) plus den initialen Aufruf = 4 automatische Sync-Aufrufe pro
+    // Tag im schlimmsten Fall, um die Oura-API nicht zu häufig automatisch zu belasten; danach nur noch
+    // über den manuellen "Jetzt synchronisieren"/"Jetzt erstellen"-Button. Kein Retry während die App
+    // im Hintergrund ist (siehe visibilityState-Prüfung oben in der Funktion).
+    const OURA_AUTOSYNC_RETRY_DELAYS_MS = [2 * 60000, 5 * 60000, 10 * 60000];
+    let ouraAutoSyncState = { date: null, attempts: 0, inProgress: false, retryTimer: null };
+    let ouraAutoSyncInProgress = false; // nur für den Karten-Text ("wird abgerufen …" statt "noch nicht da")
+
+    function scheduleOuraAutoSyncRetry() {
+      const idx = ouraAutoSyncState.attempts - 1; // attempts wurde für den gerade gelaufenen Versuch bereits hochgezählt
+      const delay = OURA_AUTOSYNC_RETRY_DELAYS_MS[idx];
+      if (delay == null) return; // alle Retries verbraucht – ab jetzt nur noch manuell
+      if (ouraAutoSyncState.retryTimer) clearTimeout(ouraAutoSyncState.retryTimer);
+      ouraAutoSyncState.retryTimer = setTimeout(() => tryOuraAutoSync('retry'), delay);
+    }
+
+    async function tryOuraAutoSync(grund) {
+      if (!userId || auth.currentUser?.isAnonymous) return;
+      if (!navigator.onLine) return;
+      if (document.visibilityState !== 'visible') return; // kein Retry im Hintergrund – ein in diesem Moment feuernder Timer verfällt ungenutzt, der nächste "visible"-Wechsel startet regulär neu
+      const todayStr = berlinTodayStr();
+      if (ouraAutoSyncState.date !== todayStr) ouraAutoSyncState = { date: todayStr, attempts: 0, inProgress: false, retryTimer: null };
+      if (ouraNightDataComplete(todayStr)) return; // schon da, nichts zu tun
+      if (ouraAutoSyncState.inProgress) return;
+      if (ouraAutoSyncState.attempts > OURA_AUTOSYNC_RETRY_DELAYS_MS.length) return; // 1 initial + 3 Retries verbraucht
+
+      ouraAutoSyncState.inProgress = true;
+      const cardWasWaiting = dailyCheckState?.waiting && dailyCheckState.date === todayStr;
+      if (cardWasWaiting) { ouraAutoSyncInProgress = true; renderDailyCheckCard(); }
+      try {
+        const syncFn = httpsCallable(fbFunctionsEU, 'syncOuraManual');
+        await syncFn({ days: 2 }); // letzte Nacht + Vortag reichen hier, kein 7-Tage-Backfill nötig
+        await refreshOuraDaily();
+        saveToCache();
+        renderOuraDailyCard(currentDate);
+        ouraAutoSyncState.attempts++;
+        if (ouraNightDataComplete(todayStr)) {
+          // Nur automatisch generieren, wenn für heute noch nichts Gültiges vorliegt (null/anderes
+          // Datum/waiting) – ein bereits bestehender Fehler-Zustand bleibt bewusst manuell ("Erneut
+          // versuchen"), damit ein Oura-unabhängiger Fehler nicht automatisch wiederholt wird.
+          if (!dailyCheckState || dailyCheckState.date !== todayStr || dailyCheckState.waiting) {
+            await generateDailyCheck(false); // Guard gegen Doppel-Generierung ist bereits in generateDailyCheck selbst
+          }
+        } else {
+          scheduleOuraAutoSyncRetry();
+        }
+      } catch (e) {
+        console.warn('Oura Auto-Sync (' + grund + ') fehlgeschlagen:', e);
+        ouraAutoSyncState.attempts++;
+        scheduleOuraAutoSyncRetry();
+      } finally {
+        ouraAutoSyncState.inProgress = false;
+        if (cardWasWaiting) { ouraAutoSyncInProgress = false; renderDailyCheckCard(); }
+      }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') tryOuraAutoSync('visible');
+    });
 
     // Lebenszyklus beim App-Start: dailyCheckState wurde bereits in loadFromCache() gesetzt, falls ein
     // Cache-Eintrag für heute existiert (gleicher erster Render wie der Rest der Übersicht, kein
@@ -8277,7 +8337,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // wenn sich der Inhalt wirklich geändert hat (kein Flackern, kein Verlust des aktuellen Auf-/
     // Zugeklappt-Zustands, siehe Bugreport 2026-10-18). Existiert für heute weder im Cache noch in
     // Firestore etwas und sind die Oura-Daten schon da, wird automatisch generiert – sonst der
-    // Warte-Zustand mit "Jetzt erstellen".
+    // Warte-Zustand, UND tryOuraAutoSync holt die fehlenden Daten aktiv (statt nur passiv zu warten).
     async function initDailyCheck() {
       try {
         const todayStr = berlinTodayStr();
@@ -8294,13 +8354,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         if (dailyCheckState && dailyCheckState.date === todayStr) {
           return; // aus dem Cache geladen (z.B. ein Fehler-Zustand), aber noch nichts in Firestore – kein Auto-Retry
         }
-        const o = ouraDaily[todayStr];
-        if (o && (o.hrvAvg != null || o.restingHr != null || o.sleepScore != null)) {
+        if (ouraNightDataComplete(todayStr)) {
           await generateDailyCheck(false);
         } else {
           dailyCheckState = { date: todayStr, waiting: true };
           renderDailyCheckCard();
-          dailyCheckWaitForOura(todayStr);
+          tryOuraAutoSync('init');
         }
       } catch (e) {
         console.error('initDailyCheck fehlgeschlagen:', e);
@@ -8373,7 +8432,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         // Kommt nur für "heute" vor (waiting-Zustände werden nie nach Firestore geschrieben, siehe
         // generateDailyCheck/initDailyCheck) – readOnly kann hier nie true sein.
         dotColor = 'var(--fo-text-3)';
-        headlineHtml = `<span style="color:var(--fo-text-3);">Oura-Daten noch nicht da</span>`;
+        headlineHtml = ouraAutoSyncInProgress
+          ? `<span style="color:var(--fo-text-3);">Oura-Daten werden abgerufen …</span>`
+          : `<span style="color:var(--fo-text-3);">Oura-Daten noch nicht da</span>`;
         expandedBodyHtml = `<div class="fo-daily-expanded">
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Jetzt erstellen</button>
         </div>`;

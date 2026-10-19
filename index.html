@@ -1170,7 +1170,7 @@
           <div class="fo-grid2">
             <div class="fo-field">
               <label class="fo-label" for="training-date">Datum</label>
-              <input class="fo-input" type="date" id="training-date">
+              <input class="fo-input" type="date" id="training-date" onchange="updateVariantOptions()">
             </div>
             <div class="fo-field">
               <label class="fo-label" for="training-time">Uhrzeit</label>
@@ -1189,6 +1189,7 @@
               </select>
               <svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg>
             </div>
+            <div id="training-type-pause-hint" style="display:none;font-size:12px;color:var(--fo-text-3);margin-top:4px;"></div>
           </div>
 
           <div class="fo-field">
@@ -1254,7 +1255,13 @@
         <div class="fo-card" style="margin-top:20px;">
           <div class="fo-card__head"><h3 class="fo-card__title">Übungen verwalten</h3></div>
           <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+            <div id="exercise-pause-summary"></div>
             <div id="custom-types-list"></div>
+            <div id="exercise-pause-bulkbar" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--fo-bg-2, rgba(128,128,128,.08));padding:8px;border-radius:8px;">
+              <span id="exercise-pause-bulk-count" style="font-size:12px;color:var(--fo-text-2);flex:1;"></span>
+              <input class="fo-input" type="date" id="exercise-pause-bulk-date" style="width:auto;flex:none;">
+              <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="applyBulkExercisePause()">Ausgewählte pausieren</button>
+            </div>
             <div class="fo-field">
               <label class="fo-label" for="custom-type-name" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">Name der neuen Übung</label>
               <input class="fo-input" type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)">
@@ -2314,7 +2321,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-19 10:15';
+    const APP_BUILD = '2026-10-19 11:30';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -7067,7 +7074,25 @@
         variantSel.innerHTML = list.map(([key, label]) => `<option value="${key}">${label}</option>`).join('');
       }
       updateTrainingFormMode();
+      updateTrainingTypePauseHint();
     };
+
+    // Hinweis im Loggen-Formular (Teil 3): eine pausierte Übung kann trotzdem manuell geloggt werden
+    // (kein Block), zeigt nur einen Hinweis. Datum des Formulars entscheidet (nicht fest "heute"), da
+    // auch nachträglich für vergangene Tage geloggt werden kann.
+    function updateTrainingTypePauseHint() {
+      const hint = document.getElementById('training-type-pause-hint');
+      if (!hint) return;
+      const typ = document.getElementById('training-type')?.value;
+      const dateStr = document.getElementById('training-date')?.value || berlinTodayStr();
+      if (typ && isExercisePaused(typ, dateStr)) {
+        hint.style.display = 'block';
+        hint.textContent = 'Hinweis: pausiert bis ' + fmtPauseUntilShort(exerciseSettings[typ]?.pausedUntil) + ' – wird trotzdem gespeichert.';
+      } else {
+        hint.style.display = 'none';
+        hint.textContent = '';
+      }
+    }
 
     // Bearbeiten-Modus des Loggen-Formulars: ID des Eintrags, der gerade bearbeitet wird (sonst null).
     // saveTrainingEntry überschreibt dann dasselbe Dokument statt einen neuen Eintrag anzulegen.
@@ -8037,6 +8062,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         if (steps != null) stepsHistory.push({ datum: d, schritte: steps });
       }
 
+      // Aktuell pausierte Übungen (Teil 3, "Übung pausieren bis") – das Modell darf sie nicht
+      // vorschlagen (siehe System-Prompt); validateDailyCheckResult filtert zusätzlich serverseitig.
+      const pausedExercises = Object.entries(exerciseSettings)
+        .filter(([, s]) => s?.pausedUntil && todayStr <= s.pausedUntil)
+        .map(([typ, s]) => ({ typ, label: planTypLabel(typ), pausiert_bis: s.pausedUntil }));
+
       return {
         kontext: 'Trainiert für einen Halbmarathon. HRV ist tagesweise verrauscht – Trends vertrauen, nicht Einzelwerten.',
         letzte_nacht: lastNight,
@@ -8048,7 +8079,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         plan_morgen: planTomorrow,
         ernaehrung_letzte_3_tage: nutritionHistory,
         kalorienziel_heute: todayGoal || null,
-        schritte_letzte_7_tage: stepsHistory
+        schritte_letzte_7_tage: stepsHistory,
+        uebungen_pausiert: pausedExercises
       };
     }
 
@@ -8065,6 +8097,7 @@ Regeln:
 - Begründe mit Trends/Abweichungen; fehlen Daten oder ist das Signal schwach, sag das und senke confidence.
 - Maximal 2 actions, je ein Satz, konkret für heute.
 - Wenn eine Änderung der heutigen Plan-Einheit (plan_heute) sinnvoll ist, liefere eine konkrete alternative Einheit in planSuggestion.unit – gleiche Form wie eine Plan-Einheit: Lauf/Rad/Gehen = {typ, distanz_km, dauer_min, notiz}, Zirkel = {typ:"zirkel", runden, uebungen:[{typ, variant, mode, holdSec, wdh, pauseSec, perSide}]}, Ruhetag = {typ:"ruhetag"}. Ändere NIE den Plan selbst, schlage nur vor. Ohne sinnvolle Änderung: planSuggestion = null.
+- Schlage NIEMALS eine der in uebungen_pausiert gelisteten Übungen vor (auch nicht als einzelne Übung innerhalb eines Zirkel-Vorschlags) – der Nutzer kann sie aktuell nicht ausführen. Lasse sie bei einem Zirkel-Vorschlag einfach weg; wähle für einen Einzelübungs-Vorschlag eine andere, nicht pausierte Übung.
 - Sprache: Deutsch, informelles "du".
 
 Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
@@ -8161,7 +8194,27 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           } else {
             try {
               const normalized = normalizePlanUnit(ps.unit);
-              planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+              // Ein Vorschlag darf nie eine pausierte Übung enthalten (Teil 3): bei einem Zirkel wird
+              // sie herausgefiltert (Dauer neu berechnet); besteht der Zirkel danach aus 0 Übungen,
+              // oder schlägt der Vorschlag direkt eine pausierte Übung als Einheit vor, wird der ganze
+              // Vorschlag verworfen statt eine leere/pausierte Einheit anzuzeigen.
+              const todayStr = berlinTodayStr();
+              if (normalized.typ === 'zirkel') {
+                const activeUebungen = (normalized.uebungen || []).filter(x => !isExercisePaused(x.typ, todayStr));
+                if (!activeUebungen.length) {
+                  console.warn('planSuggestion (Zirkel) besteht nur aus pausierten Übungen, Vorschlag verworfen');
+                } else {
+                  if (activeUebungen.length !== normalized.uebungen.length) {
+                    normalized.uebungen = activeUebungen;
+                    normalized.dauerMin = calcZirkelDauerMin(normalized);
+                  }
+                  planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+                }
+              } else if (isExercisePaused(normalized.typ, todayStr)) {
+                console.warn('planSuggestion schlägt eine pausierte Übung vor, Vorschlag verworfen:', normalized.typ);
+              } else {
+                planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+              }
             } catch (e) {
               console.warn('planSuggestion.unit ungültig, Vorschlag verworfen:', e);
             }
@@ -9598,7 +9651,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // suggestion (optional, nur für HEUTE übergeben, nie wenn status 'verworfen'): { originalUnitId, unit }
     // aus dem Tagescheck (Teil A). Ohne suggestion verhält sich die Funktion exakt wie vorher (per
     // Node-Test gegen echte Einträge/Pläne der letzten 14 Tage verifiziert – siehe Bericht).
-    function planMatchDay(units, dayEntries, suggestion) {
+    // ds (Teil 3, optional/4. Parameter – NUR für die neue Pausiert-Prüfung unten; ohne ds verhält sich
+    // alles exakt wie vorher, siehe Verifikation): der Kalendertag, für den dayEntries/suggestion gelten.
+    function planMatchDay(units, dayEntries, suggestion, ds) {
       const used = new Set();
       const result = units.map(u => ({ unit: u, entry: null, via: null, status: 'open', cmp: null }));
       let suggestionMatch = null;
@@ -9658,6 +9713,17 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       if (suggestion && suggestion.status === 'gewaehlt' && suggestion.unit.typ === 'ruhetag') {
         const r = result.find(r => r.unit.id === suggestion.originalUnitId);
         if (r && r.status === 'open') r.status = 'replaced';
+      }
+
+      // 4. Einzelne Plan-Einheiten, die NUR aus einer pausierten Übung bestehen (z.B. Klimmzüge als
+      // eigene Einheit, Teil 3) – zählen weder als offen noch als verpasst, solange sie noch offen sind
+      // (eine tatsächlich geloggte Aktivität oben hat immer Vorrang und bleibt stehen). Zirkel-Einheiten
+      // sind hier ausgenommen: dort werden einzelne pausierte Übungen nur grau markiert (Anzeige), die
+      // Einheit selbst bleibt normal offen/erfüllbar (siehe renderPlanWeek/zirkelList).
+      if (ds) {
+        result.forEach(r => {
+          if (r.status === 'open' && r.unit.typ !== 'zirkel' && isExercisePaused(r.unit.typ, ds)) r.status = 'paused';
+        });
       }
 
       // Nur ungematchte Einträge zeigen, die selbst im Plan entstanden sind (source:'plan' – Abhaken oder
@@ -9836,7 +9902,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion
           && dailyCheckState.suggestionStatus !== 'verworfen')
           ? { ...dailyCheckState.planSuggestion, status: dailyCheckState.suggestionStatus } : null;
-        const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion);
+        const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion, ds);
         totalPlanned += result.length;
         totalDone += result.filter(r => r.status !== 'open').length;
 
@@ -9852,10 +9918,17 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           const target = isZirkel
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
             : planTarget(u);
+          // Einzelne pausierte Übungen innerhalb eines Zirkels (Teil 3): nur grau + Badge, die Einheit
+          // selbst bleibt normal offen/erfüllbar (siehe planMatchDay, Zirkel ist dort von Schritt 4 ausgenommen).
           const zirkelList = isZirkel && u.uebungen?.length ? `<details style="margin-top:2px;">
               <summary style="cursor:pointer;font-size:12px;color:var(--fo-text-3);">${u.uebungen.length} Übung${u.uebungen.length === 1 ? '' : 'en'}${u.pauseSec > 0 ? ` · ${planFmtPause(u.pauseSec)} Pause` : ''}</summary>
-              ${u.uebungen.map(x => `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;">${planUebungValueLabel(x)} ${planEsc(planUebungLabel(x))}</div>`).join('')}
+              ${u.uebungen.map(x => {
+                const xPaused = isExercisePaused(x.typ, ds);
+                const badge = xPaused ? ` <span class="fo-tag" style="margin-left:4px;">pausiert bis ${fmtPauseUntilShort(exerciseSettings[x.typ]?.pausedUntil)}</span>` : '';
+                return `<div style="font-size:12px;color:var(--fo-text-3);padding:2px 0 2px 12px;${xPaused ? 'opacity:.5;' : ''}">${planUebungValueLabel(x)} ${planEsc(planUebungLabel(x))}${badge}</div>`;
+              }).join('')}
             </details>` : '';
+          const isPaused = matchStatus === 'paused';
           const deviated = matchStatus === 'deviated';
           let left, status = '';
           if (isReplaced) {
@@ -9863,6 +9936,11 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             // selbst erledigt, siehe planMatchDay/Bericht Teil B.
             left = `<span style="width:26px;height:26px;display:inline-block;border-radius:8px;border:2px solid var(--fo-text-3);flex-shrink:0;"></span>`;
             status = `<div style="font-size:12px;color:var(--fo-text-3);">${foIcon('chevR', 'fo-i--sm')} Ersetzt durch Vorschlag</div>`;
+          } else if (isPaused) {
+            // Einzelne Plan-Einheit besteht nur aus einer aktuell pausierten Übung (Teil 3) – zählt
+            // weder als offen noch als verpasst in der Wochenstatistik (siehe totalDone oben).
+            left = `<span style="width:26px;height:26px;display:inline-block;border-radius:8px;border:2px solid var(--fo-text-3);flex-shrink:0;"></span>`;
+            status = `<div style="font-size:12px;color:var(--fo-text-3);">pausiert bis ${fmtPauseUntilShort(exerciseSettings[u.typ]?.pausedUntil)}</div>`;
           } else if (e) {
             // Erledigt bzw. abweichend erledigt: reiner Anzeige-Haken (nicht anklickbar, Rückgängig ist
             // der eigene Button unten) – .fo-check ohne .fo-checkhit-Wrapper, da hier keine Tippfläche nötig ist.
@@ -9899,7 +9977,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           rows += `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);">
             ${left}
             <div class="fo-row__main">
-              <div class="fo-row__title" style="${e ? 'opacity:.75;' : ''}">${title}</div>
+              <div class="fo-row__title" style="${(e || isReplaced || isPaused) ? 'opacity:.75;' : ''}">${title}</div>
               ${target ? `<div class="fo-row__sub">${isZirkel ? '' : 'Ziel: '}${target}</div>` : ''}
               ${zirkelList}
               ${isZirkel && !e && !isFuture && !isReplaced ? `<button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="openZirkelTimer('${ds}','${u.id}')" style="margin-top:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-play"/></svg>Start</button>` : ''}
@@ -10832,10 +10910,25 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     const ZIRKEL_REP_TAP_LOCK_MS = 500; // Doppeltipp-Schutz für "Fertig" (mode 'reps')
 
+    // Pausierte Übungen (Teil 3) werden für den tatsächlichen Lauf komplett herausgefiltert – keine
+    // Arbeitszeit, keine Wechselpause für sie, keine Pieptöne (buildZirkelSegments sieht sie gar nicht).
+    // allUebungen behält die UNGEFILTERTE Liste nur für die Intro-Anzeige (grau + "pausiert bis",
+    // siehe zirkelExerciseListHtml/renderZirkelTimerIntro) – der eigentliche Lauf/die Kalorien
+    // arbeiten ausschließlich mit der gefilterten unit. Sind ALLE Übungen pausiert, wird der Timer gar
+    // nicht gestartet (kurze Meldung statt leerem Zirkel).
     function startZirkelTimerModal(unit, ds, planUnitId, suggestionApplied) {
+      const effectiveDs = ds || berlinTodayStr();
+      const allUebungen = unit.uebungen || [];
+      const activeUebungen = allUebungen.filter(x => !isExercisePaused(x.typ, effectiveDs));
+      if (!activeUebungen.length) {
+        showToast('Alle Übungen dieses Zirkels sind pausiert', 'bad');
+        return;
+      }
+      const activeUnit = activeUebungen.length === allUebungen.length ? unit : { ...unit, uebungen: activeUebungen };
       zirkelTimerState = {
-        unit, ds: ds || null, planUnitId: planUnitId || null, suggestionApplied: !!suggestionApplied,
-        segs: buildZirkelSegments(unit), segIdx: -1, segStartMs: null, pausedAtMs: null,
+        unit: activeUnit, allUebungen, pausedDs: effectiveDs,
+        ds: ds || null, planUnitId: planUnitId || null, suggestionApplied: !!suggestionApplied,
+        segs: buildZirkelSegments(activeUnit), segIdx: -1, segStartMs: null, pausedAtMs: null,
         done: [], startMs: null, elapsedSec: 0,
         wakeTimeoutId: null, lastTickKey: null, wakeLock: null, audioCtx: null, activeTones: [],
         repLockUntil: 0, finished: false,
@@ -10875,10 +10968,19 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       return seg.side ? `${label} (${seg.side})` : label;
     }
 
-    // Übungsliste (Intro/Ablauf): Zielwert mode-aware ("45 s" bzw. "12×"), aktuelle/kommende Übung hervorgehoben
-    function zirkelExerciseListHtml(unit, highlightIdx) {
-      return `<ul class="fo-card fo-list zk-exercises">${unit.uebungen.map((x, i) => `
-            <li class="fo-row zk-exercise"${i === highlightIdx ? ' style="font-weight:700;"' : ''}><span class="fo-row__icon">${foIcon(x.mode === 'time' ? 'clock' : 'strength', 'fo-i--sm')}</span><div class="fo-row__main"><div class="fo-row__title">${planEsc(planUebungLabel(x))} · ${planUebungValueLabel(x)}</div></div></li>`).join('')}
+    // Übungsliste (Intro/Ablauf): Zielwert mode-aware ("45 s" bzw. "12×"), aktuelle/kommende Übung hervorgehoben.
+    // pausedDs (nur Intro, siehe renderZirkelTimerIntro): ist gesetzt, werden pausierte Übungen grau
+    // mit "pausiert bis TT.MM." markiert, bleiben aber in der Liste sichtbar (Teil 3) – der Ablauf-Aufruf
+    // (renderZirkelTimerRunning) übergibt unit.uebungen bereits gefiltert und kein pausedDs, zeigt also
+    // nie eine pausierte Übung an.
+    function zirkelExerciseListHtml(unit, highlightIdx, pausedDs) {
+      return `<ul class="fo-card fo-list zk-exercises">${unit.uebungen.map((x, i) => {
+        const paused = pausedDs && isExercisePaused(x.typ, pausedDs);
+        const style = [i === highlightIdx ? 'font-weight:700;' : '', paused ? 'opacity:.5;' : ''].filter(Boolean).join('');
+        const pauseBadge = paused ? ` <span class="fo-tag" style="margin-left:4px;">pausiert bis ${fmtPauseUntilShort(exerciseSettings[x.typ]?.pausedUntil)}</span>` : '';
+        return `
+            <li class="fo-row zk-exercise"${style ? ` style="${style}"` : ''}><span class="fo-row__icon">${foIcon(x.mode === 'time' ? 'clock' : 'strength', 'fo-i--sm')}</span><div class="fo-row__main"><div class="fo-row__title">${planEsc(planUebungLabel(x))} · ${planUebungValueLabel(x)}${pauseBadge}</div></div></li>`;
+      }).join('')}
           </ul>`;
     }
 
@@ -10968,10 +11070,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     }
 
     function renderZirkelTimerIntro() {
-      const { unit } = zirkelTimerState;
+      const { unit, allUebungen, pausedDs } = zirkelTimerState;
       const meta = [`${unit.runden} Runde${unit.runden === 1 ? '' : 'n'}`];
       if (unit.pauseSec > 0) meta.push(`${planFmtPause(unit.pauseSec)} Rundenpause`);
       if (unit.prepSec > 0) meta.push(`${unit.prepSec}s Vorbereitung`);
+      // Intro zeigt die UNGEFILTERTE Übungsliste (inkl. pausierter, grau), der Lauf selbst (unit) kennt
+      // sie gar nicht mehr (Teil 3).
       setZirkelTimerBody(`
         <div class="iv-timer-page">
           <div class="iv-page__head">
@@ -10979,7 +11083,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             <h1 class="iv-page__title">${planEsc(unit.notiz || 'Zirkel')}</h1>
             <p class="iv-page__meta fo-num">${meta.join(' · ')}</p>
           </div>
-          ${zirkelExerciseListHtml(unit, -1)}
+          ${zirkelExerciseListHtml({ ...unit, uebungen: allUebungen || unit.uebungen }, -1, pausedDs)}
           <button class="fo-btn fo-btn--primary fo-btn--block iv-start" type="button" onclick="zirkelTimerBegin()">${foIcon('play', 'fo-i--lg', true)}Start</button>
         </div>`);
     }
@@ -11797,6 +11901,91 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       await setExerciseSetting(typ, { perSideDefault: !!checked });
     };
 
+    // ── Übungen pausieren bis (Teil 3) ──────────────────────────────────────────────────────────────
+    // pausedUntil: 'YYYY-MM-DD' (inklusiv, lokales Datum wie planYmd – NIE new Date("yyyy-mm-dd"),
+    // das wäre UTC), zusammen mit den übrigen Übungseinstellungen in exerciseSettings[typ] gespeichert
+    // (users/{uid}/settings/exercises, IndexedDB-Cache 'exerciseSettings') – keine Migration nötig, da
+    // ein fehlendes Feld automatisch "nicht pausiert" bedeutet (siehe isExercisePaused). Schlüssel ist
+    // `typ`, dieselbe ID, die exerciseSettings/Zirkel-uebungen/Plan-Einheiten/manuelle Einträge überall
+    // verwenden (z.B. 'pushups', 'pullups' für feste Arten, 'custom_bizep_curls' für eigene). Abgelaufene
+    // Pausen brauchen keine Aufräumaktion, sie wirken ab dem Folgetag einfach nicht mehr (String-Vergleich).
+    function isExercisePaused(typ, dateStr) {
+      const until = exerciseSettings[typ]?.pausedUntil;
+      return !!until && dateStr <= until;
+    }
+
+    // 'YYYY-MM-DD' → "TT.MM." (für "pausiert bis TT.MM."-Anzeigen). Numerische Konstruktion statt
+    // new Date(dateStr) (das wäre UTC, siehe Architektur-Hinweis Datum-Handling).
+    function fmtPauseUntilShort(dateStr) {
+      if (!dateStr) return '';
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+    }
+
+    window.setExercisePause = async function(typ, dateStr) {
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { showToast('Bitte ein Datum wählen'); return; }
+      await setExerciseSetting(typ, { pausedUntil: dateStr });
+      renderCustomTypes();
+      renderExercisePauseSummary();
+    };
+
+    window.clearExercisePause = async function(typ) {
+      await setExerciseSetting(typ, { pausedUntil: null });
+      renderCustomTypes();
+      renderExercisePauseSummary();
+    };
+
+    window.setExercisePauseFromInput = async function(typ) {
+      const input = document.getElementById('exercise-pause-date-' + typ);
+      await window.setExercisePause(typ, input?.value || '');
+    };
+
+    // Mehrfachauswahl für die Sammel-Pause (nur Sitzung, nicht persistiert) – siehe renderCustomTypes/
+    // renderExercisePauseBulkBar.
+    let exercisePauseSelection = new Set();
+
+    window.toggleExercisePauseSelect = function(typ, checked) {
+      if (checked) exercisePauseSelection.add(typ); else exercisePauseSelection.delete(typ);
+      renderExercisePauseBulkBar();
+    };
+
+    function renderExercisePauseBulkBar() {
+      const bar = document.getElementById('exercise-pause-bulkbar');
+      if (!bar) return;
+      const n = exercisePauseSelection.size;
+      bar.style.display = n > 0 ? 'flex' : 'none';
+      const countEl = document.getElementById('exercise-pause-bulk-count');
+      if (countEl) countEl.textContent = n + (n === 1 ? ' Übung ausgewählt' : ' Übungen ausgewählt');
+    }
+
+    window.applyBulkExercisePause = async function() {
+      const dateStr = document.getElementById('exercise-pause-bulk-date')?.value || '';
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { showToast('Bitte ein Datum wählen'); return; }
+      const typs = [...exercisePauseSelection];
+      if (!typs.length) return;
+      for (const typ of typs) await setExerciseSetting(typ, { pausedUntil: dateStr });
+      exercisePauseSelection = new Set();
+      renderCustomTypes();
+      renderExercisePauseSummary();
+      showToast(typs.length + ' Übung' + (typs.length === 1 ? '' : 'en') + ' pausiert bis ' + fmtPauseUntilShort(dateStr), 'ok');
+    };
+
+    // Kurze Übersicht aktuell pausierter Übungen, oben in "Übungen verwalten" (Teil 3, Step 2).
+    function renderExercisePauseSummary() {
+      const el = document.getElementById('exercise-pause-summary');
+      if (!el) return;
+      const todayStr = berlinTodayStr();
+      const paused = Object.entries(exerciseSettings)
+        .filter(([, s]) => s?.pausedUntil && todayStr <= s.pausedUntil)
+        .map(([typ, s]) => ({ typ, label: planTypLabel(typ), bis: s.pausedUntil }))
+        .sort((a, b) => a.bis.localeCompare(b.bis));
+      if (!paused.length) { el.innerHTML = ''; return; }
+      el.innerHTML = `<div style="font-size:12px;color:var(--fo-text-2);display:flex;flex-direction:column;gap:4px;padding:10px;background:var(--fo-bg-2, rgba(128,128,128,.08));border-radius:8px;">
+        <strong style="color:var(--fo-text);font-size:13px;">Aktuell pausiert</strong>
+        ${paused.map(p => `<div>${planEsc(p.label)} – bis ${fmtPauseUntilShort(p.bis)}</div>`).join('')}
+      </div>`;
+    }
+
     function zirkelMetClassOptionsHtml(selected) {
       return ['leicht', 'mittel', 'intensiv'].map(c =>
         `<option value="${c}"${c === selected ? ' selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`).join('');
@@ -11811,16 +12000,37 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         </label>`;
     }
 
+    // Pausieren-Zeile unter jeder Übungszeile (Teil 3, Step 2): Checkbox für die Sammel-Pause +
+    // entweder "Pausieren bis [Datum]" oder, wenn bereits pausiert, "pausiert bis TT.MM." + "Pause aufheben".
+    function zirkelExercisePauseRowHtml(typ) {
+      const todayStr = berlinTodayStr();
+      const until = exerciseSettings[typ]?.pausedUntil;
+      const paused = isExercisePaused(typ, todayStr);
+      const selected = exercisePauseSelection.has(typ);
+      const pauseControl = paused
+        ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;">pausiert bis ${fmtPauseUntilShort(until)}</span>
+           <button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="clearExercisePause('${typ}')">Pause aufheben</button>`
+        : `<input type="date" id="exercise-pause-date-${typ}" min="${todayStr}" style="padding:4px 6px;border:1px solid var(--fo-line);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px;width:auto;">
+           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="setExercisePauseFromInput('${typ}')">Pausieren bis</button>`;
+      return `<div class="fo-row" style="padding-top:2px;padding-bottom:8px;gap:8px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;flex:none;cursor:pointer;font-size:12px;color:var(--fo-text-3);" title="Für Sammel-Pause auswählen">
+            <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleExercisePauseSelect('${typ}', this.checked)" style="width:18px;height:18px;flex:none;">Auswählen
+          </label>
+          <div class="fo-row__actions" style="gap:8px;flex-wrap:wrap;flex:1;">${pauseControl}</div>
+        </div>`;
+    }
+
     function renderCustomTypes() {
       const container = document.getElementById('custom-types-list');
       if (!container) return;
       const rows = [];
       ZIRKEL_FIXED_EXERCISE_TYPES.forEach(typ => {
-        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:10px;flex-wrap:wrap;gap:8px;${rows.length > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
+        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:4px;flex-wrap:wrap;gap:8px;${rows.length > 0 ? 'border-top:1px solid var(--fo-line);' : ''}">
             <span class="fo-row__icon">${typIcon(typ)}</span>
             <div class="fo-row__main"><div class="fo-row__title">${planEsc(TYP_LABELS[typ] || typ)}</div></div>
             <div class="fo-row__actions" style="gap:8px;flex-wrap:wrap;">${zirkelExerciseSettingControlsHtml(typ)}</div>
           </div>`);
+        rows.push(zirkelExercisePauseRowHtml(typ));
       });
       customTrainingTypes.forEach((t, i) => {
         if (t.id === renamingCustomTypeId) {
@@ -11836,7 +12046,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             </div>`);
           return;
         }
-        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:10px;border-top:1px solid var(--fo-line);flex-wrap:wrap;gap:8px;">
+        rows.push(`<div class="fo-row" style="padding-top:10px;padding-bottom:4px;border-top:1px solid var(--fo-line);flex-wrap:wrap;gap:8px;">
             <span class="fo-row__icon">${typIcon(t.id)}</span>
             <div class="fo-row__main"><div class="fo-row__title">${planEsc(t.label)}</div></div>
             <div class="fo-row__actions" style="gap:8px;flex-wrap:wrap;">
@@ -11846,8 +12056,11 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
               <button class="fo-iconbtn fo-iconbtn--danger" type="button" onclick="removeCustomType(${i})" aria-label="Entfernen"><svg class="fo-i" aria-hidden="true"><use href="#i-trash"/></svg></button>
             </div>
           </div>`);
+        rows.push(zirkelExercisePauseRowHtml(t.id));
       });
       container.innerHTML = rows.join('');
+      renderExercisePauseSummary();
+      renderExercisePauseBulkBar();
     }
 
     // Umbenennen: ändert nur das Feld label im Typ-Dokument trainingTypes/{id}. ID und Einträge bleiben

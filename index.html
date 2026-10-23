@@ -2321,7 +2321,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-23 19:00';
+    const APP_BUILD = '2026-10-23 20:40';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2497,7 +2497,7 @@
           cacheGet('ouraStatus'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
-        const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings')]);
+        const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings, cachedSubjectiveStatusHistory] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings'), cacheGet('subjectiveStatusHistory')]);
         // Tagescheck für heute synchron mitladen, damit die Karte im SELBEN ersten Render wie der Rest
         // der Übersicht erscheint (renderAll → renderDailyCheckCard), nicht erst nach initDailyCheck
         // (das läuft asynchron nach loadAllData/Sync) – behebt das Nachrücken/Pop-in vom Bugreport.
@@ -2507,6 +2507,7 @@
         if (Array.isArray(cachedCustomTypes)) { customTrainingTypes = cachedCustomTypes; renderCustomTypes(); }
         if (Array.isArray(cachedIntervalTemplates)) intervalTemplates = cachedIntervalTemplates;
         if (cachedExerciseSettings && typeof cachedExerciseSettings === 'object') { exerciseSettings = cachedExerciseSettings; renderCustomTypes(); }
+        if (Array.isArray(cachedSubjectiveStatusHistory)) subjectiveStatusHistory = cachedSubjectiveStatusHistory;
         let hasCache = false;
         if (cachedFoodDB?.length) { foodDB = cachedFoodDB; window.foodDB = foodDB; hasCache = true; }
         if (cachedRecipes?.length) { recipes = cachedRecipes; window.recipes = recipes; hasCache = true; }
@@ -2564,6 +2565,7 @@
         cachePut('customTrainingTypes', customTrainingTypes),
         cachePut('intervalTemplates', intervalTemplates),
         cachePut('exerciseSettings', exerciseSettings),
+        cachePut('subjectiveStatusHistory', subjectiveStatusHistory),
       ]).catch(e => console.warn('Cache save error:', e));
     }
 
@@ -2734,6 +2736,7 @@
         // dann die zentralen Übungseinstellungen laden/erstmalig vorbelegen
         try { await ensureZirkelExerciseCatalog(); } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
         try { await loadExerciseSettings(); } catch (e) { console.error('loadExerciseSettings fehlgeschlagen:', e); }
+        try { await loadSubjectiveStatusHistory(); } catch (e) { console.error('loadSubjectiveStatusHistory fehlgeschlagen:', e); }
 
         // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
         try {
@@ -8000,6 +8003,74 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         : { id: u.id, typ: u.typ, variant: u.variant || null, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, notiz: u.notiz || null };
     }
 
+    // ── Subjektiver Status ("Wie fühlst du dich?") ──────────────────────────────────────────────────
+    // users/{uid}/settings/subjectiveStatus, Feld "history": [{status:'angeschlagen'|'krank',
+    // von:'YYYY-MM-DD', bis:'YYYY-MM-DD'|null, notiz}]. "Fit" wird NIE als eigener Eintrag gespeichert
+    // (es ist der Default/Ruhezustand ohne Badge) – es beendet nur die zuletzt offene Periode (bis=null
+    // -> bis=Vortag von heute). Lokale Datumsstrings wie überall (planYmd/berlinTodayStr), nie
+    // toISOString(). Nur EINE offene Periode zur Zeit (letzter Eintrag mit bis===null).
+    let subjectiveStatusHistory = [];
+    const SUBJECTIVE_STATUS_LABELS = { angeschlagen: 'angeschlagen', krank: 'krank' };
+    const userSubjectiveStatusDoc = () => doc(db, 'users', userId, 'settings', 'subjectiveStatus');
+
+    function subjectiveStatusForDate(dateStr) {
+      return subjectiveStatusHistory.find(e => e.von <= dateStr && (e.bis == null || dateStr <= e.bis)) || null;
+    }
+    function currentSubjectiveStatus() { return subjectiveStatusForDate(berlinTodayStr()); }
+
+    async function loadSubjectiveStatusHistory() {
+      try {
+        const snap = await getDoc(userSubjectiveStatusDoc());
+        subjectiveStatusHistory = Array.isArray(snap.data()?.history) ? snap.data().history : [];
+        cachePut('subjectiveStatusHistory', subjectiveStatusHistory);
+      } catch (e) { console.warn('Subjektiven Status laden fehlgeschlagen:', e); }
+    }
+    async function persistSubjectiveStatusHistory() {
+      await setDoc(userSubjectiveStatusDoc(), { history: subjectiveStatusHistory });
+      cachePut('subjectiveStatusHistory', subjectiveStatusHistory).catch(() => {});
+    }
+
+    // Statuswechsel (Button Fit/Leicht angeschlagen/Krank) – schließt eine offene Periode und eröffnet
+    // ggf. eine neue; löst genau EINE Regenerierung der heutigen Karte aus (Vorgabe Teil 2.1). Eine
+    // reine Notiz-Änderung (updateSubjectiveStatusNotiz) ändert den Status nicht und regeneriert daher
+    // NICHT automatisch.
+    window.setSubjectiveStatus = async function(status) {
+      if (!['fit', 'angeschlagen', 'krank'].includes(status)) return;
+      const todayStr = berlinTodayStr();
+      const cur = subjectiveStatusHistory[subjectiveStatusHistory.length - 1];
+      if (cur && cur.bis == null) {
+        if (cur.von === todayStr) subjectiveStatusHistory.pop(); // selber Tag: ersetzen statt doppeltem Eintrag
+        else cur.bis = dailyCheckShiftDate(todayStr, -1);
+      }
+      if (status !== 'fit') {
+        subjectiveStatusHistory.push({ status, von: todayStr, bis: null, notiz: '' });
+      }
+      try { await persistSubjectiveStatusHistory(); } catch (e) { console.error('Subjektiven Status speichern fehlgeschlagen:', e); }
+      await generateDailyCheck(true);
+    };
+    window.updateSubjectiveStatusNotiz = async function(value) {
+      const cur = subjectiveStatusHistory[subjectiveStatusHistory.length - 1];
+      if (!cur || cur.bis != null) return; // keine aktive (nicht-fit) Periode -> nichts zu speichern
+      cur.notiz = String(value || '').trim().slice(0, 80);
+      try { await persistSubjectiveStatusHistory(); } catch (e) { console.error('Notiz speichern fehlgeschlagen:', e); }
+      renderDailyCheckCard();
+    };
+
+    function subjectiveStatusSelectorHtml(cur) {
+      const activeStyle = 'background:var(--fo-primary);color:#fff;';
+      const btn = (status, label) => {
+        const isActive = (status === 'fit' && !cur) || (cur && cur.status === status);
+        return `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" style="${isActive ? activeStyle : ''}" onclick="setSubjectiveStatus('${status}')">${label}</button>`;
+      };
+      return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">
+        <div style="font-size:12px;color:var(--fo-text-3);margin-bottom:6px;">Wie fühlst du dich?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${btn('fit', 'Fit')}${btn('angeschlagen', 'Leicht angeschlagen')}${btn('krank', 'Krank')}</div>
+        <input id="subj-status-notiz" type="text" maxlength="80" placeholder="Kurze Notiz (z.B. Erkältung)" value="${planEsc(cur?.notiz || '')}"
+          style="width:100%;margin-top:6px;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--fo-line);background:transparent;color:var(--fo-text-1);box-sizing:border-box;"
+          onchange="updateSubjectiveStatusNotiz(this.value)"${!cur ? ' disabled' : ''} />
+      </div>`;
+    }
+
     // Kompakte, aggregierte Datenbasis für den Tagescheck-Call – keine Rohdumps (siehe Bericht A.2).
     function buildDailyCheckPayload(todayStr) {
       const yesterday = dailyCheckShiftDate(todayStr, -1);
@@ -8088,6 +8159,12 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         .filter(([, s]) => s?.pausedUntil && todayStr <= s.pausedUntil)
         .map(([typ, s]) => ({ typ, label: planTypLabel(typ), pausiert_bis: s.pausedUntil }));
 
+      // Subjektiver Status (Teil 2.1) – "fit"/null = kein besonderer Zustand gemeldet.
+      const subjStatus = currentSubjectiveStatus();
+      const subjektiverStatus = subjStatus
+        ? { status: subjStatus.status, seit: subjStatus.von, notiz: subjStatus.notiz || '' }
+        : { status: 'fit', seit: null, notiz: '' };
+
       return {
         kontext: 'Trainiert für einen Halbmarathon. HRV ist tagesweise verrauscht – Trends vertrauen, nicht Einzelwerten.',
         letzte_nacht: lastNight,
@@ -8100,7 +8177,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         ernaehrung_letzte_3_tage: nutritionHistory,
         kalorienziel_heute: todayGoal || null,
         schritte_letzte_7_tage: stepsHistory,
-        uebungen_pausiert: pausedExercises
+        uebungen_pausiert: pausedExercises,
+        subjektiverStatus
       };
     }
 
@@ -8118,6 +8196,8 @@ Regeln:
 - Maximal 2 actions, je ein Satz, konkret für heute.
 - Wenn eine Änderung der heutigen Plan-Einheit (plan_heute) sinnvoll ist, liefere eine konkrete alternative Einheit in planSuggestion.unit – gleiche Form wie eine Plan-Einheit: Lauf/Rad/Gehen = {typ, distanz_km, dauer_min, notiz}, Zirkel = {typ:"zirkel", runden, uebungen:[{typ, variant, mode, holdSec, wdh, pauseSec, perSide}]}, Ruhetag = {typ:"ruhetag"}. Ändere NIE den Plan selbst, schlage nur vor. Ohne sinnvolle Änderung: planSuggestion = null.
 - Schlage NIEMALS eine der in uebungen_pausiert gelisteten Übungen vor (auch nicht als einzelne Übung innerhalb eines Zirkel-Vorschlags) – der Nutzer kann sie aktuell nicht ausführen. Lasse sie bei einem Zirkel-Vorschlag einfach weg; wähle für einen Einzelübungs-Vorschlag eine andere, nicht pausierte Übung.
+- Erwähne eine pausierte Übung NIEMALS als Aktion oder in der Headline (sie wird ohnehin automatisch übersprungen, ein Hinweis darauf ist nutzlos) – höchstens EIN neutraler Halbsatz im reason-Feld, falls relevant.
+- subjektiverStatus.status "angeschlagen" oder "krank" hat Vorrang vor guten Messwerten: empfiehl reduzierte Intensität bzw. Pause, auch wenn illness_signale.flagged=false ist. Bei status="krank" niemals status="gruen" zurückgeben. Formuliere Messwert-Aussagen immer als Einschränkung ("keine Infektzeichen in den Messwerten"), NIE als absolute Aussage über den Gesundheitszustand ("du bist nicht krank"). confidence bezieht sich NUR auf die Messwert-Einschätzung; widersprechen sich Messwerte und subjektiverStatus, benenne das in einem kurzen Satz im reason-Feld.
 - Sprache: Deutsch, informelles "du".
 
 Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
@@ -8189,6 +8269,48 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }
     }
 
+    // Teil 2.2: true, wenn sich suggestedUnit von originalUnit NUR dadurch unterscheidet, dass der/die
+    // pausierten Slots fehlen oder durch etwas anderes ERSETZT wurden – alle anderen Parameter (Runden,
+    // Pause, Wiederholungen/Haltezeit/jeSeite der NICHT pausierten Übungen) sind identisch. Zwei Muster
+    // werden unterschieden, je nach Übungsanzahl der Suggestion:
+    // a) gleiche Anzahl wie original (Ersetzen, Reihenfolge erhalten): jeder pausierte Slot darf durch
+    //    IRGENDEINE Übung ersetzt sein, jeder nicht-pausierte Slot muss exakt identisch bleiben (genau
+    //    der real beobachtete Bugfall "Tausche Push-ups gegen Alternativübung").
+    // b) Anzahl = Anzahl nicht-pausierter Original-Übungen (reines Entfernen ohne Ersatz): die
+    //    verbleibenden Übungen müssen 1:1 mit den nicht-pausierten Original-Übungen übereinstimmen.
+    // Ohne originalUnit (z.B. Einheit nicht mehr im Plan) konservativ false, damit ein eigentlich
+    // sinnvoller Vorschlag nicht grundlos verworfen wird.
+    function isSuggestionOnlyAboutPausedExercises(originalUnit, suggestedUnit, todayStr) {
+      if (!originalUnit || originalUnit.typ !== 'zirkel' || suggestedUnit.typ !== 'zirkel') return false;
+      if ((originalUnit.runden || 0) !== (suggestedUnit.runden || 0)) return false;
+      if ((originalUnit.pauseSec || 0) !== (suggestedUnit.pauseSec || 0)) return false;
+      if ((originalUnit.sideSwitchSec || 0) !== (suggestedUnit.sideSwitchSec || 0)) return false;
+      if ((originalUnit.prepSec || 0) !== (suggestedUnit.prepSec || 0)) return false;
+      const sameUebung = (a, b) => a.typ === b.typ && (a.variant || '') === (b.variant || '') && a.mode === b.mode &&
+        (a.wdh || null) === (b.wdh || null) && (a.holdSec || null) === (b.holdSec || null) &&
+        !!a.perSide === !!b.perSide && (a.pauseSec || 0) === (b.pauseSec || 0);
+      const orig = originalUnit.uebungen || [];
+      const sug = suggestedUnit.uebungen || [];
+      if (sug.length === orig.length) {
+        // Muster a) Ersetzen an gleicher Position – pausierte Original-Slots werden übersprungen
+        // (beliebiger Inhalt im Vorschlag an dieser Stelle erlaubt), alle anderen müssen gleich sein.
+        for (let i = 0; i < orig.length; i++) {
+          if (isExercisePaused(orig[i].typ, todayStr)) continue;
+          if (!sameUebung(orig[i], sug[i])) return false;
+        }
+        return true;
+      }
+      const origActive = orig.filter(x => !isExercisePaused(x.typ, todayStr));
+      if (sug.length === origActive.length) {
+        // Muster b) reines Entfernen ohne Ersatz
+        for (let i = 0; i < origActive.length; i++) {
+          if (!sameUebung(origActive[i], sug[i])) return false;
+        }
+        return true;
+      }
+      return false; // andere Übungsanzahl -> echte inhaltliche Änderung (z.B. zusätzliche Übung)
+    }
+
     // Validierung der Modell-Antwort gegen die Form aus A.4. Harte Prüfung NUR für fehlende/falsch
     // typisierte Pflichtfelder (status, actions als nicht-leeres String-Array, confidence, flags) –
     // weiche Grenzen (headline/reason-Länge, mehr als 2 actions) werden abgeschnitten statt die ganze
@@ -8219,6 +8341,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
               // oder schlägt der Vorschlag direkt eine pausierte Übung als Einheit vor, wird der ganze
               // Vorschlag verworfen statt eine leere/pausierte Einheit anzuzeigen.
               const todayStr = berlinTodayStr();
+              const originalUnit = dailyCheckPlanUnitsForDay(todayStr).find(u => u.id === ps.originalUnitId) || null;
               if (normalized.typ === 'zirkel') {
                 const activeUebungen = (normalized.uebungen || []).filter(x => !isExercisePaused(x.typ, todayStr));
                 if (!activeUebungen.length) {
@@ -8228,7 +8351,15 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
                     normalized.uebungen = activeUebungen;
                     normalized.dauerMin = calcZirkelDauerMin(normalized);
                   }
-                  planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+                  // Teil 2.2: ein Vorschlag, der sich außer dem Entfernen/Ersetzen pausierter Übungen in
+                  // nichts von der heutigen Original-Einheit unterscheidet, bringt nichts – die
+                  // pausierten Übungen werden ohnehin automatisch übersprungen (siehe Bugreport
+                  // 2026-10-21: "Tausche Push-ups gegen Alternativübung" war nutzlos).
+                  if (isSuggestionOnlyAboutPausedExercises(originalUnit, normalized, todayStr)) {
+                    console.warn('planSuggestion (Zirkel) ändert nichts außer pausierten Übungen, Vorschlag verworfen');
+                  } else {
+                    planSuggestion = { originalUnitId: ps.originalUnitId, reason: String(ps.reason).slice(0, 150), unit: normalized };
+                  }
                 }
               } else if (isExercisePaused(normalized.typ, todayStr)) {
                 console.warn('planSuggestion schlägt eine pausierte Übung vor, Vorschlag verworfen:', normalized.typ);
@@ -8244,11 +8375,25 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         }
       }
 
+      // Teil 2.2: Aktionen, die eine pausierte Übung erwähnen, werden entfernt (Hinweise auf den
+      // automatischen Skip sind nutzlos, siehe Bugreport 2026-10-21). Bleibt danach keine Aktion mehr
+      // übrig, bleibt die Karte trotzdem gültig (leeres actions-Array, siehe renderDailyCheckCard).
+      const todayStrForActions = berlinTodayStr();
+      const pausedLabelsLower = Object.entries(exerciseSettings)
+        .filter(([, s]) => s?.pausedUntil && todayStrForActions <= s.pausedUntil)
+        .map(([typ]) => planTypLabel(typ).toLowerCase())
+        .filter(Boolean);
+      const filteredActions = raw.actions.slice(0, 2).map(a => String(a).trim()).filter(a => {
+        const low = a.toLowerCase();
+        if (low.includes('pausier')) return false;
+        return !pausedLabelsLower.some(lbl => low.includes(lbl));
+      });
+
       return {
         valid: true,
         data: {
           status: raw.status, headline: String(raw.headline).trim().slice(0, 60),
-          actions: raw.actions.slice(0, 2).map(a => String(a).trim()),
+          actions: filteredActions,
           reason: String(raw.reason).trim().slice(0, 250), confidence: raw.confidence,
           flags: { illness: !!raw.flags.illness, alcohol: !!raw.flags.alcohol },
           planSuggestion
@@ -8596,6 +8741,22 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             ${readOnly ? '' : '<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="regenerateDailyCheck()">Neu erstellen</button>'}
           </div>
         </div>`;
+      }
+
+      // Teil 2.1 (subjektiver Status): Badge gilt unabhängig vom Karten-Zustand (auch während
+      // "wird erstellt"/Warten/Fehler sichtbar, deshalb hier NACH der if/else-Kette angehängt statt nur
+      // im Normalzweig). Heute: Bedienelement (Auswahl + Notiz). Vergangenheit: nur-lesender Stand des
+      // damaligen Tages, falls vorhanden.
+      const subjStatusForRow = readOnly ? subjectiveStatusForDate(currentDate) : currentSubjectiveStatus();
+      if (subjStatusForRow) {
+        badges += `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;margin-left:6px;flex-shrink:0;">${SUBJECTIVE_STATUS_LABELS[subjStatusForRow.status]}</span>`;
+      }
+      if (toggleable) {
+        if (!readOnly) {
+          expandedBodyHtml += subjectiveStatusSelectorHtml(subjStatusForRow);
+        } else if (subjStatusForRow) {
+          expandedBodyHtml += `<div style="font-size:12px;color:var(--fo-text-3);margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">Status an diesem Tag: ${SUBJECTIVE_STATUS_LABELS[subjStatusForRow.status]}${subjStatusForRow.notiz ? ' – ' + planEsc(subjStatusForRow.notiz) : ''}</div>`;
+        }
       }
 
       const dot = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>`;

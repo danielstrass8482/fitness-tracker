@@ -2321,7 +2321,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-19 11:30';
+    const APP_BUILD = '2026-10-23 19:00';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2403,13 +2403,26 @@
     // diese Mittelung: die Analyse-Tab-Erholungsbasis (7 Tage bis heute, buildAnalysisContextData)
     // UND der Tagescheck (14-/28-Tage-Baseline bis GESTERN, damit "heute" nicht in seine eigene
     // Baseline einfließt) rufen dieselbe Funktion mit unterschiedlichen Parametern auf.
+    //
+    // Bugreport 2026-10-21: korrupte/unvollständige Nächte (z.B. ein 03:00-Sync-Lauf, der nur ein
+    // 14-Minuten-Fragment statt der echten Hauptschlafperiode gespeichert hatte) verzerrten die
+    // Schlaf-/Erholungsbaseline massiv (gemessene 14-Tage-Baseline 4,77h statt der echten ~5,7h).
+    // Für alle Nacht-Felder (Schlaf, HRV, Ruhepuls, Temperatur, Readiness) fließt ein Tag nur ein,
+    // wenn er "vollständig" ist (sleepScore UND readinessScore vorhanden – dieselbe Definition wie
+    // das serverseitige ouraComplete-Feld, hier direkt aus den Werten berechnet statt aus dem
+    // gespeicherten Feld, damit auch ältere, vor diesem Fix geschriebene Tage ohne das Feld korrekt
+    // behandelt werden). Tagesaktivität (Schritte, activityScore, Kalorien) ist davon NICHT betroffen.
+    const OURA_NIGHT_FIELDS = new Set(['sleepScore', 'sleepDurationSec', 'hrvAvg', 'restingHr', 'deepSleepSec', 'tempDeviation', 'readinessScore']);
     function ouraWindowAvg(field, days, endDateStr) {
       const vals = [];
       const end = new Date((endDateStr || berlinTodayStr()) + 'T12:00:00');
       for (let i = 0; i < days; i++) {
         const dt = new Date(end); dt.setDate(end.getDate() - i);
         const key = dt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-        const v = ouraDaily[key]?.[field];
+        const day = ouraDaily[key];
+        if (!day) continue;
+        if (OURA_NIGHT_FIELDS.has(field) && !(day.sleepScore != null && day.readinessScore != null)) continue;
+        const v = day[field];
         if (v != null) vals.push(v);
       }
       const count = vals.length;
@@ -7992,8 +8005,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const yesterday = dailyCheckShiftDate(todayStr, -1);
       const lastNightRaw = ouraDaily[todayStr] || null;
 
+      // Plausibilitäts-Filter (Bugreport 2026-10-21): eine sehr kurze Dauer OHNE Schlaf-Score ist mit
+      // hoher Wahrscheinlichkeit ein noch unvollständig synchronisiertes/in Bearbeitung befindliches
+      // Fragment (siehe "0:14h"-Bug), keine echte kurze Nacht. Score vorhanden = Oura hat die Nacht
+      // final verarbeitet, dann zählt auch ein kurzer Wert als real.
+      const lastNightDurationImplausible = !!lastNightRaw && lastNightRaw.sleepScore == null &&
+        lastNightRaw.sleepDurationSec != null && lastNightRaw.sleepDurationSec < 3 * 3600;
+
       const lastNight = lastNightRaw ? {
-        schlafdauer_std: lastNightRaw.sleepDurationSec != null ? Math.round(lastNightRaw.sleepDurationSec / 36) / 100 : null,
+        schlafdauer_std: (!lastNightDurationImplausible && lastNightRaw.sleepDurationSec != null) ? Math.round(lastNightRaw.sleepDurationSec / 36) / 100 : null,
         schlaf_score: lastNightRaw.sleepScore ?? null,
         readiness_score: lastNightRaw.readinessScore ?? null,
         hrv_ms: lastNightRaw.hrvAvg ?? null,
@@ -8281,7 +8301,14 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           err.rawText = rawText;
           throw err;
         }
-        const toSave = { date: todayStr, ...data, createdAtMs: Date.now(), model: 'claude-sonnet-5' };
+        // Wurde ohne vollständige Oura-Nachtdaten erstellt (Button "Trotzdem erstellen" im
+        // Warte-Zustand) – Konfidenz wird unabhängig von der Modellantwort auf "niedrig" erzwungen,
+        // die Karte zeigt zusätzlich einen Hinweis (siehe renderDailyCheckCard). Sobald vollständige
+        // Daten später in derselben Sitzung eintreffen, regeneriert tryOuraAutoSync die Karte genau
+        // einmal automatisch (gesteuert über dieses Feld selbst, siehe dort).
+        const incompleteOura = !ouraNightDataComplete(todayStr);
+        if (incompleteOura) data.confidence = 'niedrig';
+        const toSave = { date: todayStr, ...data, createdAtMs: Date.now(), model: 'claude-sonnet-5', incompleteOura };
         if (toSave.planSuggestion) toSave.suggestionStatus = 'offen';
         await setDoc(doc(userDailyCheckCol(), todayStr), toSave);
         dailyCheckState = toSave;
@@ -8308,13 +8335,16 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.regenerateDailyCheck = function() { generateDailyCheck(true); };
     window.createDailyCheckNow = function() { generateDailyCheck(false); };
 
-    // "Vollständig genug" für den Tagescheck: Schlafdaten (sleepScore ODER sleepDurationSec) für die
-    // Nacht VOR dateStr vorhanden. Readiness/Temp.-Abweichung sind optional und lösen, wenn sie erst
-    // später nachkommen, bewusst KEIN automatisches Neu-Generieren aus (siehe tryOuraAutoSync) –
-    // "Neu erstellen" bleibt dafür als manuelle Option.
+    // "Vollständig genug" für den Tagescheck (Bugreport 2026-10-21, verschärft ggü. der ursprünglichen
+    // Fassung): Schlaf-Score UND Readiness-Score für die Nacht müssen vorhanden sein – entspricht
+    // exakt dem serverseitigen ouraComplete-Feld (functions/index.js), hier direkt aus den Werten
+    // berechnet statt aus dem gespeicherten Feld, damit auch ältere Tage ohne das Feld korrekt
+    // behandelt werden. Schlafdauer ALLEIN reicht nicht mehr: ein 03:00-Sync-Lauf kann ein kurzes,
+    // noch nicht fertig verarbeitetes Fragment als "Schlafdauer" liefern, ohne dass je ein Score dazu
+    // kommt (der 0:14h-Bug) – das wäre nach der alten Definition fälschlich "vollständig" gewesen.
     function ouraNightDataComplete(dateStr) {
       const o = ouraDaily[dateStr];
-      return !!(o && (o.sleepScore != null || o.sleepDurationSec != null));
+      return !!(o && o.sleepScore != null && o.readinessScore != null);
     }
 
     // ── Automatischer Oura-Sync bei fehlenden Daten der letzten Nacht (Bugreport 2026-10-19) ───────
@@ -8367,6 +8397,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           // versuchen"), damit ein Oura-unabhängiger Fehler nicht automatisch wiederholt wird.
           if (!dailyCheckState || dailyCheckState.date !== todayStr || dailyCheckState.waiting) {
             await generateDailyCheck(false); // Guard gegen Doppel-Generierung ist bereits in generateDailyCheck selbst
+          } else if (dailyCheckState.incompleteOura) {
+            // Karte wurde zuvor über "Trotzdem erstellen" mit unvollständigen Oura-Daten erzeugt –
+            // jetzt sind die Daten vollständig da: genau einmal automatisch neu erstellen (force:
+            // true, da der Dedupe-Guard in generateDailyCheck sonst einen vorhandenen, fehlerfreien
+            // Stand überspringen würde). Selbstbegrenzend: der neue Stand hat incompleteOura=false,
+            // ein erneuter Treffer hier kann also nicht mehr vorkommen.
+            await generateDailyCheck(true);
           }
         } else {
           scheduleOuraAutoSyncRetry();
@@ -8487,9 +8524,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         dotColor = 'var(--fo-text-3)';
         headlineHtml = ouraAutoSyncInProgress
           ? `<span style="color:var(--fo-text-3);">Oura-Daten werden abgerufen …</span>`
-          : `<span style="color:var(--fo-text-3);">Oura-Daten noch nicht da</span>`;
+          : `<span style="color:var(--fo-text-3);">Oura-Daten der Nacht noch nicht vollständig</span>`;
         expandedBodyHtml = `<div class="fo-daily-expanded">
-          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Jetzt erstellen</button>
+          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Trotzdem erstellen</button>
         </div>`;
       } else if (s.error) {
         dotColor = 'var(--fo-bad)';
@@ -8550,6 +8587,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           ${actionsHtml}
           <div style="font-size:13px;color:var(--fo-text-2);margin-top:8px;">${planEsc(s.reason)}</div>
           <div style="font-size:12px;color:var(--fo-text-3);margin-top:4px;">Konfidenz: ${s.confidence}</div>
+          ${s.incompleteOura ? `<div style="font-size:12px;color:var(--fo-warn, #eab308);margin-top:4px;">Auf Basis unvollständiger Oura-Daten</div>` : ''}
           ${keyNumsHtml}
           ${alcoholPatternHtml}
           ${planSuggestionHtml}
@@ -9041,6 +9079,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         ? new Date(ouraStatus.lastSyncAtMs).toLocaleDateString('de-DE') + ' ' + new Date(ouraStatus.lastSyncAtMs).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})
         : 'noch nicht synchronisiert');
       if (loadedDays > 0) syncLine += ' · Geladene Tage: ' + loadedDays;
+      // "unvollständig" nur relevant für die heutige Nacht (siehe ouraNightDataComplete) – an einem
+      // vergangenen, in der Übersicht angezeigten Tag ist der Zustand längst final.
+      if (date === berlinTodayStr() && !ouraNightDataComplete(date)) syncLine += ' · unvollständig';
       statusLines.push(syncLine);
 
       let statusHtml = statusLines.map(line => `<div>${line}</div>`).join('');

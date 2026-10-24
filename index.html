@@ -2321,7 +2321,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-23 20:40';
+    const APP_BUILD = '2026-10-24 06:30';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -7256,8 +7256,12 @@
         renderTrainingHistory();
         renderDataStats();
 
-        // Auto-update weight in settings if a weight was entered
-        if (weight) {
+        // Auto-update weight in settings: NUR wenn dieser Eintrag (nach dem Speichern) auch der
+        // NEUESTE datierte Gewichtseintrag ist – ein nachträglich für ein VERGANGENES Datum erfasstes
+        // Gewicht darf einen bereits neueren Wert (anderer Tageslog oder manuelle Einstellung) nicht
+        // zurücksetzen (Bugreport 2026-10-24, generalisierte Regel: "nie mit einem gleich/älter
+        // datierten Wert überschreiben").
+        if (weight != null && getLatestWeight()?.datum === date) {
           settings.weight = weight;
           const weightInput = document.getElementById('settings-weight');
           if (weightInput) {
@@ -7266,11 +7270,14 @@
               `Zuletzt eingetragen: ${weight} kg am ${date}`;
             calcTDEE();
           }
-          // Gewicht auch in Firestore-Settings speichern
+          // Gewicht auch in Firestore-Settings speichern – Fehler hier sichtbar machen statt nur zu loggen.
           if (userId) {
-            setDoc(doc(db, 'users', userId, 'settings', 'main'),
-              { weight: weight }, { merge: true }
-            ).catch(e => console.warn('Weight settings save error:', e));
+            try {
+              await setDoc(doc(db, 'users', userId, 'settings', 'main'), { weight: weight }, { merge: true });
+            } catch (e) {
+              console.error('Weight settings save error:', e);
+              showToast('Gewicht in Einstellungen aktualisieren fehlgeschlagen', 'bad');
+            }
           }
         }
         
@@ -7479,7 +7486,6 @@
           document.getElementById('settings-gender').value = settings.gender || 'male';
           document.getElementById('settings-age').value = settings.age || '';
           document.getElementById('settings-height').value = settings.height || '';
-          document.getElementById('settings-weight').value = settings.weight || '';
           if (document.getElementById('settings-detail-days'))
             document.getElementById('settings-detail-days').value = settings.detailDays || 31;
           if (document.getElementById('settings-anthropic-key'))
@@ -7488,8 +7494,15 @@
           if (latestWeight) {
             document.getElementById('settings-weight-hint').textContent =
               `Zuletzt eingetragen: ${latestWeight.weight} kg am ${latestWeight.datum}`;
-            document.getElementById('settings-weight').value = latestWeight.weight;
           }
+          // Bugreport 2026-10-24: Feld sprang nach jedem Neuladen auf den neuesten TAGESLOG-Eintrag
+          // zurück, auch wenn eine manuelle Änderung über die Einstellungen-Karte (ohne zugehörigen
+          // Tageslog-Eintrag) neuer war. Einheitliche Quelle statt eines unbedingten Überschreibens:
+          // dieselbe Priorisierung wie überall sonst (weightForDate – neuester DATIERTER Eintrag,
+          // sonst settings.weight). saveSettings() legt ab jetzt bei jeder Gewichtsänderung zusätzlich
+          // einen Tageslog-Eintrag für HEUTE an, wodurch "neuester datierter Eintrag" und "zuletzt
+          // manuell gespeichert" wieder übereinstimmen.
+          document.getElementById('settings-weight').value = weightForDate(berlinTodayStr()) || '';
 
           calcTDEE();
         }
@@ -7538,6 +7551,22 @@
       document.getElementById('settings-tdee').value = tdee;
     };
     
+    // Einheitliche Quelle für "aktuelles Gewicht" (Bugreport 2026-10-24): legt/aktualisiert den
+    // Tageslog-Eintrag für HEUTE mit dem neuen Gewicht (merge – vorhandene Felder wie Schritte bleiben
+    // erhalten), damit "neuester datierter Gewichtseintrag" (weightForDate/getLatestWeight) und "zuletzt
+    // über die Einstellungen manuell gespeichert" dieselbe Quelle sind, ohne separate Prioritätslogik.
+    async function upsertTodayWeightLog(weight) {
+      const todayStr = berlinTodayStr();
+      const id = 'log_' + todayStr.replace(/-/g, '');
+      await setDoc(doc(userTrainingCol(), id), { id, datum: todayStr, typ: 'tageslog', weight }, { merge: true });
+      const idx = trainingEntries.findIndex(e => e.id === id);
+      if (idx >= 0) trainingEntries[idx] = { ...trainingEntries[idx], weight, datum: todayStr, typ: 'tageslog' };
+      else trainingEntries.push({ id, datum: todayStr, typ: 'tageslog', weight });
+      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+      window.trainingEntries = trainingEntries;
+      window.dayLogs = dayLogs;
+    }
+
     window.saveSettings = async function() {
       const tdee = parseInt(document.getElementById('settings-tdee').value) || 2700;
       const protein = parseInt(document.getElementById('settings-protein').value) || 150;
@@ -7566,6 +7595,10 @@
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');
         await setDoc(docRef, settings);
+        if (weight != null) {
+          try { await upsertTodayWeightLog(weight); }
+          catch (e) { console.error('Tageslog-Gewicht (heute) speichern fehlgeschlagen:', e); showToast('Gewicht in Einstellungen gespeichert, Tageslog-Eintrag fehlgeschlagen', 'bad'); }
+        }
         saveToCache();
 
         // Update display

@@ -1262,21 +1262,6 @@
               <input class="fo-input" type="date" id="exercise-pause-bulk-date" style="width:auto;flex:none;">
               <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="applyBulkExercisePause()">Ausgewählte pausieren</button>
             </div>
-            <div class="fo-field">
-              <label class="fo-label" for="custom-type-name" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">Name der neuen Übung</label>
-              <input class="fo-input" type="text" id="custom-type-name" placeholder="Name (z.B. Dips, Plank...)">
-            </div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-              <div class="fo-select" style="flex:1;min-width:120px;"><select id="custom-type-metclass" aria-label="Intensität">
-                  <option value="leicht">Leicht</option>
-                  <option value="mittel" selected>Mittel</option>
-                  <option value="intensiv">Intensiv</option>
-                </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;">
-                <input type="checkbox" id="custom-type-perside" style="width:20px;height:20px;"> je Seite
-              </label>
-            </div>
-            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="addCustomType()"><svg class="fo-i" aria-hidden="true"><use href="#i-plus"/></svg>Hinzufügen</button>
             <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="migrateCustomTypes()"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Fehlende Arten anlegen</button>
           </div>
         </div>
@@ -2361,7 +2346,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-30 12:49';
+    const APP_BUILD = '2026-10-30 18:44';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2410,7 +2395,7 @@
     // Typ-Icons für Aktivitätszeilen. Ohne passendes Sprite-Icon bleibt das bisherige Emoji (gemeldete Ausnahme).
     const TYP_ICONS = { laufen: 'run', rad: 'bike', rad_indoor: 'bike', rad_ebike: 'ebike', gehen: 'walk', wandern: 'walk', kraft: 'strength', pullups: 'strength', pushups: 'strength', yoga: 'yoga', cardio: 'heart', zirkel: 'circuit' };
     const TYP_EMOJI = { schwimmen: '🏊', lunges: '🦵', terraband_knie: '🦵', crosstraining: '⚡' };
-    // Eigene Übungen (ID-Präfix custom_, siehe window.addCustomType) stehen nicht in TYP_ICONS: Haltezeit-
+    // Eigene Übungen (ID-Präfix custom_, siehe resolveExerciseId) stehen nicht in TYP_ICONS: Haltezeit-
     // Übungen (Typ-Dokument kind:'hold', siehe isHoldType) bekommen das plank-Icon, alle anderen strength –
     // unabhängig vom Namen (kein Namensraten), und auch ohne geladenes Typ-Dokument (dann greift isHoldType's
     // eigener false-Fallback, siehe dort). Einzige Stelle, die Icons für Aktivitäten/Übungen/Trainingstypen
@@ -7121,7 +7106,6 @@
     window.updateVariantOptions = function() {
       const typeSel = document.getElementById('training-type');
       const type = typeSel.value;
-      typeSel.dataset.last = type; // letzte gültige Auswahl (für "Neue Übung anlegen")
       const variantSel = document.getElementById('training-variant');
       if (type.startsWith('custom_')) {
         variantSel.innerHTML = '<option value="">—</option>';
@@ -8867,8 +8851,16 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Trotzdem erstellen</button>
         </div>`;
       } else if (s.error) {
+        // Fehlertext und Status strikt getrennt halten (vorher vermischt): headlineHtml bleibt reiner
+        // Fehlertext, der bereits erfolgreich gespeicherte subjektive Status (krank/angeschlagen) erscheint
+        // – falls aktiv – als eigenes Badge wie bei den Infekt?/Alkohol-Flags, nicht in denselben String
+        // verwoben. Der Status selbst ist durch den Fehler nicht betroffen (liegt in subjectiveStatusHistory).
         dotColor = 'var(--fo-bad)';
         headlineHtml = `<span style="color:var(--fo-bad);">Tagescheck nicht verfügbar</span>`;
+        const curStatus = !readOnly ? currentSubjectiveStatus() : null;
+        if (curStatus && curStatus.status !== 'fit') {
+          badges = `<span class="fo-tag" style="background:var(--fo-text-3);color:#fff;margin-left:6px;flex-shrink:0;">${planEsc(SUBJECTIVE_STATUS_LABELS[curStatus.status] || curStatus.status)}</span>`;
+        }
         const reason = s.lastError?.reason || s.errorMessage || 'Unbekannter Fehler';
         expandedBodyHtml = `<div class="fo-daily-expanded">
           <details style="font-size:11px;color:var(--fo-text-3);margin-bottom:8px;">
@@ -9626,10 +9618,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     function zirkelMetForClass(cls) {
       return ZIRKEL_MET_CLASSES[cls] || ZIRKEL_MET_CLASSES[ZIRKEL_MET_DEFAULT_CLASS];
     }
-    // Label-Abgleich (case-insensitiv) NUR noch als Fallback für alte Daten ohne Trainingsart-ID (typ:'kraft'
-    // + Freitext-Variante, die sich nicht über zirkelLegacyVariantTyp zuordnen lässt). Für alles mit einer ID
-    // (feste Typen, custom_-Typen) kommen Klasse/perSide ausschließlich aus den zentralen Übungseinstellungen
-    // (exerciseSettings, siehe "Übungen verwalten") – siehe Teil 2.3.
+    // Label-Abgleich (case-insensitiv) nur noch als letzter Fallback, falls für eine Trainingsart (noch)
+    // keine zentrale Übungseinstellung existiert. Für alles mit einer ID (feste Typen, custom_-Typen)
+    // kommen Klasse/perSide normalerweise aus den zentralen Übungseinstellungen (exerciseSettings, siehe
+    // "Übungen verwalten") – siehe Teil 2.3.
     const ZIRKEL_LEICHT_RE = /bird\s*dog|glute\s*bridge|mobili|dehn/i;
     const ZIRKEL_INTENSIV_RE = /split\s*squat|squat|pull-?up|push-?up|liegestütz/i;
     const ZIRKEL_PERSIDE_RE = /seit.?plank|side.?plank|bird\s*dog|split\s*squat|einbeinig|single.?leg/i;
@@ -9638,34 +9630,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       return (planTypLabel(typ) + ' ' + (variant || '')).trim();
     }
 
-    // Alte Zirkel-Übungen mit typ:'kraft' + Freitext-Variante der passenden Trainingsart zuordnen (Abgleich
-    // über den normalisierten Namen: klein, getrimmt, einfache Singular/Plural-Toleranz durch optionales "s").
-    // Nur beim Lesen (normalizeZirkelUebung) – Firestore-Daten bleiben unverändert, bis neu gespeichert wird.
-    // Reihenfolge wichtig: "Bulgarian Split Squat(s)" vor "Split Squat(s)" prüfen (sonst falscher Treffer).
-    const ZIRKEL_VARIANT_TYP_MAP = [
-      [/^bulgarian\s*split\s*squats?$/i, 'custom_bulgarian_split_squats'],
-      [/^split\s*squats?$/i, 'custom_split_squats'],
-      [/^(gerade\s*)?planks?$/i, 'custom_plank'],
-      [/^(seitliche\s*planks?|seit\s*planks?|seitplanks?|side\s*planks?)$/i, 'custom_seitplank'],
-      [/^glute\s*bridges?$/i, 'custom_glute_bridge'],
-      [/^bird\s*dogs?$/i, 'custom_bird_dog']
-    ];
-    function zirkelLegacyVariantTyp(variant) {
-      const norm = String(variant || '').trim();
-      if (!norm) return null;
-      const hit = ZIRKEL_VARIANT_TYP_MAP.find(([re]) => re.test(norm));
-      return hit ? hit[1] : null;
-    }
-
     // Anzeigename einer Übung, normalisiert über alle Quellen hinweg (Zirkel-details, manuelle Halte-
-    // Einträge, alte typ:'kraft'+Freitext-Varianten) – für die Analyse-Tab-Auswertung pro Übung (Teil 3.2).
+    // Einträge) – für die Analyse-Tab-Auswertung pro Übung (Teil 3.2). Die frühere Zuordnung alter
+    // typ:'kraft'+Freitext-Varianten (zirkelLegacyVariantTyp/ZIRKEL_VARIANT_TYP_MAP) wurde entfernt, siehe
+    // ID-Bereinigung 30.10.2026 Teil 1.4: 0 Zirkel-Einträge mit typ:'kraft' hingen real noch davon ab.
     function zirkelNormalizedExerciseLabel(typ, variant) {
-      let t = typ, v = String(variant || '').trim();
-      if (t === 'kraft') {
-        const mapped = zirkelLegacyVariantTyp(v);
-        if (mapped) { t = mapped; v = ''; }
-      }
-      return planTypLabel(t) + (v ? ' · ' + v : '');
+      const v = String(variant || '').trim();
+      return planTypLabel(typ) + (v ? ' · ' + v : '');
     }
 
     // Detail-Zeilen (eines Zirkel-Eintrags) zu einer Zeile je Übung zusammenfassen: Ø Wert pro Runde
@@ -9767,19 +9738,14 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     // Eine Zirkel-Übung normalisieren: { typ, variant, mode:'time'|'reps', holdSec, wdh, pauseSec, perSide,
     // metClass }. legacyModeFallback greift nur, wenn kein mode gespeichert ist (alte Daten): Plan-Zirkel
-    // kannte nur Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time'). Alte
-    // typ:'kraft'+Freitext-Varianten werden, wenn zuordenbar, auf die passende Trainingsart-ID umgelegt
-    // (zirkelLegacyVariantTyp, nur beim Lesen). perSide fehlt bei alten Daten → false (3.1). metClass kommt
-    // für Plan-/Vorlagen-Übungen IMMER aus den aktuellen Übungseinstellungen (nicht mehr pro Übung
-    // überschreibbar, Teil 2.3) – ein evtl. gespeichertes altes metClass-Feld wird hier bewusst ignoriert.
+    // kannte nur Wiederholungen ('reps'), alte Intervall-Zirkel-Schritte nur Haltezeit ('time').
+    // perSide fehlt bei alten Daten → false (3.1). metClass kommt für Plan-/Vorlagen-Übungen IMMER aus den
+    // aktuellen Übungseinstellungen (nicht mehr pro Übung überschreibbar, Teil 2.3) – ein evtl. gespeichertes
+    // altes metClass-Feld wird hier bewusst ignoriert.
     function normalizeZirkelUebung(x, legacyModeFallback) {
       const mode = x.mode === 'time' || x.mode === 'reps' ? x.mode : legacyModeFallback;
-      let typ = x.typ || '';
-      let variant = String(x.variant || '').trim();
-      if (typ === 'kraft') {
-        const mapped = zirkelLegacyVariantTyp(variant);
-        if (mapped) { typ = mapped; variant = ''; }
-      }
+      const typ = x.typ || '';
+      const variant = String(x.variant || '').trim();
       return {
         typ, variant, mode,
         holdSec: Math.max(0, parseInt(x.holdSec) || 0),
@@ -10448,10 +10414,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: t.label }); });
       // Typen aus dem Plan, die (noch) nicht in den Listen sind
       PLAN_DAYS.forEach(({ key }) => (planDraft?.[key] || []).forEach(u => {
-        if (u.typ && u.typ !== PLAN_CUSTOM_OPTION && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: u.typLabel || u.typ });
+        if (u.typ && u.typ !== 'zirkel' && !opts.find(o => o.id === u.typ)) opts.push({ id: u.typ, label: u.typLabel || u.typ });
       }));
-      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
-        + `<option value="${PLAN_CUSTOM_OPTION}"${selected === PLAN_CUSTOM_OPTION ? ' selected' : ''}>Neue Übung anlegen</option>`;
+      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
     }
 
     // Varianten für einen Typ: vordefinierte (Loggen-Formular) + in trainingEntries/Plan vorkommende
@@ -10488,16 +10453,14 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         + `<option value="${PLAN_CUSTOM_OPTION}"${sel === PLAN_CUSTOM_OPTION ? ' selected' : ''}>Eigene…</option>`;
     }
 
-    // 'kraft' (Freitext-Katchall) ist im Zirkel-Editor nicht mehr wählbar (Teil 2.3) – nur noch Trainingsarten
-    // mit fester ID. Eine alte Zirkel-Übung mit typ:'kraft' bleibt über den Fallback unten weiter anzeigbar,
-    // bis sie (über zirkelLegacyVariantTyp beim Lesen oder manuell) einer Trainingsart zugeordnet ist.
-    const ZIRKEL_NEW_EXERCISE_OPTION = '__zirkel_new_exercise__';
+    // 'kraft' (Freitext-Katchall) ist im Zirkel-Editor nicht wählbar (Teil 2.3) – nur noch Trainingsarten
+    // mit fester ID. Neue Übungen entstehen nur noch über den Workout-Builder (resolveExerciseId), nicht
+    // mehr manuell aus diesem Editor (ID-Bereinigung 30.10.2026).
     function planZirkelTypeOptions(selected) {
       const opts = ZIRKEL_BASE_TYPES.filter(t => t !== 'kraft').map(t => ({ id: t, label: TYP_LABELS[t] || t }));
       getCustomExerciseOptions().forEach(t => { if (!opts.find(o => o.id === t.id)) opts.push({ id: t.id, label: t.label }); });
       if (selected && !opts.find(o => o.id === selected)) opts.push({ id: selected, label: planTypLabel(selected) });
-      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('')
-        + `<option value="${ZIRKEL_NEW_EXERCISE_OPTION}">+ Neue Übung anlegen</option>`;
+      return opts.map(o => `<option value="${planEsc(o.id)}"${o.id === selected ? ' selected' : ''}>${planEsc(o.label)}</option>`).join('');
     }
 
     function planZirkelSummaryText(z) {
@@ -10540,7 +10503,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.zirkelAddUebung = function(ctx, key, idx) {
       const list = zirkelCtxUnit(ctx, key, idx).uebungen;
       const prev = list[list.length - 1];
-      const typ = prev?.typ || 'custom_plank';
+      const typ = prev?.typ || 'custom_gerade_planks';
       const mode = prev?.mode || defaultZirkelModeForTyp(typ);
       list.push({
         typ, variant: '', mode,
@@ -10570,59 +10533,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     window.zirkelUebungType = function(ctx, key, idx, j, value) {
       const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
-      if (value === ZIRKEL_NEW_EXERCISE_OPTION) {
-        x._newExercise = true;
-        zirkelCtxRerender(ctx, key, idx);
-        return;
-      }
-      x._newExercise = false;
       x.typ = value;
       x.variant = '';
       x._variantCustom = false;
       x.perSide = zirkelDefaultPerSide(value, '');
       x.metClass = zirkelDefaultMetClass(value, '');
       zirkelCtxRerender(ctx, key, idx);
-    };
-
-    window.zirkelCancelNewUebung = function(ctx, key, idx, j) {
-      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
-      x._newExercise = false;
-      zirkelCtxRerender(ctx, key, idx);
-    };
-
-    // Neue Übung direkt aus dem Zirkel-Editor anlegen (Name, Intensität, je Seite) – gespeichert als
-    // eigene Trainingsart (globalTrainingTypesCol) + zentrale Übungseinstellung (setExerciseSetting),
-    // dieselben Daten wie über "Übungen verwalten" (Teil 2.2/2.3).
-    window.zirkelCreateUebungType = async function(ctx, key, idx, j) {
-      const fieldId = `${ctx}-${key}-${idx}-${j}`;
-      const x = zirkelCtxUnit(ctx, key, idx).uebungen[j];
-      const nameInput = document.getElementById(`znew-name-${fieldId}`);
-      const name = (nameInput?.value || '').trim();
-      if (!name) { showToast('Bitte einen Namen eingeben', 'bad'); return; }
-      const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const metClass = document.getElementById(`znew-met-${fieldId}`)?.value || ZIRKEL_MET_DEFAULT_CLASS;
-      const perSideDefault = !!document.getElementById(`znew-side-${fieldId}`)?.checked;
-      try {
-        if (!customTrainingTypes.find(t => t.id === id)) {
-          await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
-          customTrainingTypes.push({ id, label: name });
-          customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
-          cachePut('customTrainingTypes', customTrainingTypes);
-          updateTrainingTypeSelect();
-        }
-        await setExerciseSetting(id, { metClass, perSideDefault });
-        x._newExercise = false;
-        x.typ = id;
-        x.variant = '';
-        x._variantCustom = false;
-        x.perSide = perSideDefault;
-        x.metClass = metClass;
-        zirkelCtxRerender(ctx, key, idx);
-        showToast(name + ' angelegt', 'ok');
-      } catch (e) {
-        console.error('Neue Übung anlegen fehlgeschlagen:', e);
-        showToast('Anlegen fehlgeschlagen', 'bad');
-      }
     };
 
     window.zirkelUebungVariant = function(ctx, key, idx, j, value) {
@@ -10667,31 +10583,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     // Eine Übungs-Zeile: Typ, Verschieben (Pfeile), Variante, Umschalter Halten/Wdh., Zielwert
     // (Sek. bzw. Wdh., "je Seite" wenn perSide), Wechselpause danach, perSide-Schalter, Intensität (nur
-    // Anzeige – kommt aus den zentralen Übungseinstellungen, siehe Teil 2.3). Bei "+ Neue Übung anlegen"
-    // (x._newExercise) stattdessen ein Mini-Formular: Name, Intensität, je Seite.
+    // Anzeige – kommt aus den zentralen Übungseinstellungen, siehe Teil 2.3). Neue Übungen entstehen nur
+    // noch über den Workout-Builder, kein Mini-Formular mehr hier (ID-Bereinigung 30.10.2026).
     function zirkelUebungRowHtml(ctx, key, idx, x, j, total, inp) {
       const args = `'${ctx}','${key}',${idx},${j}`;
-      if (x._newExercise) {
-        const fieldId = `${ctx}-${key}-${idx}-${j}`;
-        return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
-            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
-              <span style="flex:1;font-weight:600;font-size:13px;">Neue Übung</span>
-              <button onclick="zirkelCancelNewUebung(${args})" title="Abbrechen" aria-label="Abbrechen" style="padding:8px 10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;">${foIcon('close', 'fo-i--sm')}</button>
-            </div>
-            <input type="text" id="znew-name-${fieldId}" placeholder="Name, z.B. Dips" style="${inp}margin-bottom:6px;">
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
-              <select id="znew-met-${fieldId}" aria-label="Intensität" style="${inp}width:auto;flex:none;padding:6px 8px;">
-                <option value="leicht">Leicht</option>
-                <option value="mittel" selected>Mittel</option>
-                <option value="intensiv">Intensiv</option>
-              </select>
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
-                <input type="checkbox" id="znew-side-${fieldId}" style="width:18px;height:18px;flex:none;">je Seite
-              </label>
-            </div>
-            <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="zirkelCreateUebungType(${args})">Anlegen</button>
-          </div>`;
-      }
       return `<div style="border-left:2px solid var(--border);padding:4px 0 4px 10px;margin-bottom:8px;">
           <div style="display:flex;gap:6px;margin-bottom:6px;">
             <select onchange="zirkelUebungType(${args},this.value)" style="${inp}flex:1;">${planZirkelTypeOptions(x.typ)}</select>
@@ -10812,7 +10707,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           <summary style="cursor:pointer;font-weight:600;padding:4px 0;">${label} <span style="font-weight:400;font-size:12px;color:var(--muted);">${units.length ? units.length + ' Einheit' + (units.length > 1 ? 'en' : '') : 'Ruhetag'}</span></summary>`;
         units.forEach((u, idx) => {
           if (u.typ === 'zirkel') { html += renderPlanZirkelEditor(key, idx, u, inp, lbl); return; }
-          const isCustom = u.typ === PLAN_CUSTOM_OPTION;
           html += `<div style="border-top:1px solid var(--border);padding:10px 0;">
             <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
               <div style="flex:1;">
@@ -10821,8 +10715,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
               </div>
               <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" aria-label="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">${foIcon('trash', 'fo-i--sm')}</button>
             </div>
-            ${isCustom ? `<div style="margin-bottom:8px;"><label style="${lbl}">Name des neuen Typs</label>
-              <input type="text" value="${planEsc(u.typLabel)}" placeholder="z.B. Mobility" oninput="planEditField('${key}',${idx},'typLabel',this.value)" style="${inp}"></div>` : ''}
             <div style="margin-bottom:8px;"><label style="${lbl}">Variante (optional)</label>
               <select onchange="planEditVariant('${key}',${idx},this.value)" style="${inp}">${planVariantOptions(u)}</select>
               ${u._variantCustom ? `<input type="text" value="${planEsc(u.variant)}" placeholder="z.B. Intervall, Tempo, Bulgarian Split Squat" oninput="planEditField('${key}',${idx},'variant',this.value)" style="${inp}margin-top:6px;">` : ''}</div>
@@ -10863,7 +10755,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.planAddZirkel = function(key) {
       planDraft[key].push({
         id: newPlanUnitId(), typ: 'zirkel', runden: 3, pauseSec: 150, prepSec: 0, sideSwitchSec: 5,
-        uebungen: [{ typ: 'custom_plank', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 0, perSide: zirkelDefaultPerSide('custom_plank', ''), metClass: zirkelDefaultMetClass('custom_plank', '') }],
+        uebungen: [{ typ: 'custom_gerade_planks', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 0, perSide: zirkelDefaultPerSide('custom_gerade_planks', ''), metClass: zirkelDefaultMetClass('custom_gerade_planks', '') }],
         notiz: ''
       });
       renderTrainingPlan(true);
@@ -10885,7 +10777,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     window.planEditType = function(key, idx, value) {
       const u = planDraft[key][idx];
       u.typ = value;
-      if (value !== PLAN_CUSTOM_OPTION) u.typLabel = '';
+      u.typLabel = '';
       // Varianten und Zielwerte gehören zum Typ → zurücksetzen
       u.variant = '';
       u._variantCustom = false;
@@ -10951,40 +10843,19 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const monday = opts?.monday || planCurrentMonday();
       const isCurrentWeekSave = monday === planCurrentMonday();
 
-      // Eigene Freitext-Typen validieren und als Trainingsart registrieren (PLAN_CUSTOM_OPTION
-      // kommt nur aus dem manuellen Editor – der Workout-Builder liefert bereits aufgelöste IDs und
-      // registriert neue Übungen vor diesem Aufruf selbst).
-      const newTypes = [];
+      // Zirkel-Einheiten validieren (neue Übungen entstehen nur noch über den Workout-Builder/
+      // resolveExerciseId, nicht mehr über diesen Editor – ID-Bereinigung 30.10.2026).
       for (const { key, label } of PLAN_DAYS) {
         for (const u of sourcePlan[key]) {
-          if (u.typ === 'zirkel') {
-            if (!(parseInt(u.runden) >= 1)) { showToast(`${label}: Zirkel braucht mind. 1 Runde`, 'bad'); return; }
-            if (!u.uebungen.some(x => (x.mode === 'time' ? parseInt(x.holdSec) : parseInt(x.wdh)) > 0)) { showToast(`${label}: Zirkel braucht Übungen mit Haltezeit oder Wiederholungen`, 'bad'); return; }
-            continue;
-          }
-          if (u.typ !== PLAN_CUSTOM_OPTION) continue;
-          const name = (u.typLabel || '').trim();
-          if (!name) { showToast(`${label}: Namen für eigenen Typ eingeben`, 'bad'); return; }
-          const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-          u.typ = id;
-          u.typLabel = name;
-          if (!customTrainingTypes.find(t => t.id === id) && !newTypes.find(t => t.id === id)) newTypes.push({ id, label: name });
+          if (u.typ !== 'zirkel') continue;
+          if (!(parseInt(u.runden) >= 1)) { showToast(`${label}: Zirkel braucht mind. 1 Runde`, 'bad'); return; }
+          if (!u.uebungen.some(x => (x.mode === 'time' ? parseInt(x.holdSec) : parseInt(x.wdh)) > 0)) { showToast(`${label}: Zirkel braucht Übungen mit Haltezeit oder Wiederholungen`, 'bad'); return; }
         }
       }
 
       const btn = document.getElementById('plan-save-btn');
       if (btn) { btn.disabled = true; setIconText(btn, 'clock', 'Speichere...'); }
       try {
-        for (const t of newTypes) {
-          await setDoc(doc(globalTrainingTypesCol(), t.id), { id: t.id, label: t.label, addedBy: userId });
-          customTrainingTypes.push(t);
-        }
-        if (newTypes.length) {
-          customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
-          renderCustomTypes();
-          updateTrainingTypeSelect();
-        }
-
         // Version ab `monday`: existiert sie schon → überschreiben, sonst neu anlegen
         const plan = normalizeTrainingPlan(sourcePlan);
         await setDoc(doc(userPlanCol(), monday), { ...plan, datum: monday, updatedAt: new Date().toISOString() });
@@ -11141,7 +11012,11 @@ Regeln:
 
     // Eine einzelne vorgeschlagene Änderung validieren/normalisieren. Wirft bei ungültiger Form
     // (von validateWorkoutBuilderResult einzeln abgefangen, Rest bleibt gültig – gleiche Toleranz wie
-    // der Tagescheck-Planvorschlag). "__new__"-Übungen werden hier in eine echte custom_-ID aufgelöst.
+    // der Tagescheck-Planvorschlag). "__new__"-Übungen werden hier über resolveExerciseIdPreview
+    // aufgelöst: existiert schon eine Übung mit demselben normalisierten Namen, wird deren ID verwendet
+    // (reusedExercises, "bestehende Übung verwendet" in der Vorschau) statt blind eine neue ID zu
+    // erzeugen – ID-Bereinigung 30.10.2026. Schreibt noch nichts (dryRun-Charakter, siehe
+    // resolveExerciseIdPreview); die tatsächliche Anlage passiert erst in applyWorkoutBuilderChanges.
     function validateWorkoutBuilderChange(change, todayStr) {
       if (!change || typeof change !== 'object') throw new Error('Änderung ist kein Objekt');
       if (!['add', 'update', 'remove'].includes(change.op)) throw new Error('op fehlt/ungültig');
@@ -11149,18 +11024,22 @@ Regeln:
       if (!dayKey) throw new Error('Tag fehlt/ungültig: ' + change.day);
       if (change.op === 'remove') {
         if (!change.unitId) throw new Error('remove ohne unitId');
-        return { op: 'remove', dayKey, unitId: change.unitId, unit: null, newExercise: null };
+        return { op: 'remove', dayKey, unitId: change.unitId, unit: null, newExercise: null, reusedExercises: [] };
       }
       if (!change.unit || typeof change.unit !== 'object') throw new Error(change.op + ' ohne unit');
       let newExercise = null;
+      const reusedExercises = [];
       if (change.unit.typ === 'zirkel' && Array.isArray(change.unit.uebungen)) {
         change.unit.uebungen = change.unit.uebungen.map(x => {
           if (x.typ !== '__new__') return x;
           const label = String(x.anzeigename || '').trim() || 'Neue Übung';
-          const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-          const id = 'custom_' + (slug || newPlanUnitId());
-          newExercise = { id, label, intensitaet: ['leicht', 'mittel', 'intensiv'].includes(x.intensitaet_vorschlag) ? x.intensitaet_vorschlag : 'mittel', perSide: !!x.perSide };
-          return { typ: id, variant: '', mode: x.modus === 'time' ? 'time' : 'reps', holdSec: x.holdSec || 0, wdh: x.wdh || 0, pauseSec: x.pauseSec || 0, perSide: !!x.perSide };
+          const resolved = resolveExerciseIdPreview(label);
+          if (resolved.created) {
+            newExercise = { id: resolved.id, label: resolved.label, intensitaet: ['leicht', 'mittel', 'intensiv'].includes(x.intensitaet_vorschlag) ? x.intensitaet_vorschlag : 'mittel', perSide: !!x.perSide };
+          } else {
+            reusedExercises.push(resolved.label);
+          }
+          return { typ: resolved.id, variant: '', mode: x.modus === 'time' ? 'time' : 'reps', holdSec: x.holdSec || 0, wdh: x.wdh || 0, pauseSec: x.pauseSec || 0, perSide: !!x.perSide };
         });
         // Serverseitige Absicherung zusätzlich zum System-Prompt (wie beim Tagescheck-Planvorschlag):
         // pausierte Übungen dürfen in keinem Fall in einer neuen/geänderten Einheit landen.
@@ -11174,7 +11053,7 @@ Regeln:
         if (!change.unitId) throw new Error('update ohne unitId');
         unit.id = change.unitId; // bestehende ID beibehalten (sonst wäre es inhaltlich ein add)
       }
-      return { op: change.op, dayKey, unitId: change.unitId || null, unit, newExercise };
+      return { op: change.op, dayKey, unitId: change.unitId || null, unit, newExercise, reusedExercises };
     }
 
     function validateWorkoutBuilderResult(parsed) {
@@ -11229,10 +11108,18 @@ Regeln:
       return `<div style="font-size:13px;"><span style="font-weight:600;">${planEsc(label)}</span>${detail ? ' – ' + planEsc(detail) : ''}${unit.notiz ? '<div style="font-size:12px;color:var(--fo-text-3);margin-top:2px;">' + planEsc(unit.notiz) + '</div>' : ''}</div>`;
     }
 
+    // reusedExercises (Übungen, die der Builder als "__new__" vorschlug, die aber per resolveExerciseIdPreview
+    // schon unter einem bestehenden Namen existieren) werden explizit ausgewiesen, damit nicht fälschlich
+    // der Eindruck entsteht, es würde eine neue Übung angelegt (ID-Bereinigung 30.10.2026).
+    function workoutBuilderReusedExerciseNoteHtml(c) {
+      if (!c.reusedExercises?.length) return '';
+      return `<div style="font-size:11px;color:var(--fo-text-3);margin-top:4px;">Bestehende Übung verwendet: ${c.reusedExercises.map(planEsc).join(', ')}</div>`;
+    }
+
     function workoutBuilderChangeCardHtml(c) {
       const dayLabel = PLAN_DAYS.find(d => d.key === c.dayKey)?.label || c.dayKey;
       if (c.op === 'add') {
-        return `<div class="fo-card" style="margin-bottom:8px;"><div style="font-size:11px;color:var(--fo-text-3);margin-bottom:4px;">${dayLabel} · <span style="color:var(--fo-ok, #22c55e);font-weight:600;">neu</span></div>${workoutBuilderUnitSummaryHtml(c.unit)}</div>`;
+        return `<div class="fo-card" style="margin-bottom:8px;"><div style="font-size:11px;color:var(--fo-text-3);margin-bottom:4px;">${dayLabel} · <span style="color:var(--fo-ok, #22c55e);font-weight:600;">neu</span></div>${workoutBuilderUnitSummaryHtml(c.unit)}${workoutBuilderReusedExerciseNoteHtml(c)}</div>`;
       }
       const oldUnit = (trainingPlan[c.dayKey] || []).find(u => u.id === c.unitId);
       if (c.op === 'remove') {
@@ -11243,6 +11130,7 @@ Regeln:
           <div><div style="font-size:10px;color:var(--fo-text-3);">vorher</div>${workoutBuilderUnitSummaryHtml(oldUnit)}</div>
           <div><div style="font-size:10px;color:var(--fo-text-3);">nachher</div>${workoutBuilderUnitSummaryHtml(c.unit)}</div>
         </div>
+        ${workoutBuilderReusedExerciseNoteHtml(c)}
       </div>`;
     }
 
@@ -12356,7 +12244,7 @@ Regeln:
     function newZirkelTemplateDraft() {
       return {
         id: null, name: '', runden: 3, pauseSec: 60, prepSec: 10, sideSwitchSec: 5,
-        uebungen: [{ typ: 'custom_plank', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 10, perSide: zirkelDefaultPerSide('custom_plank', ''), metClass: zirkelDefaultMetClass('custom_plank', '') }]
+        uebungen: [{ typ: 'custom_gerade_planks', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 10, perSide: zirkelDefaultPerSide('custom_gerade_planks', ''), metClass: zirkelDefaultMetClass('custom_gerade_planks', '') }]
       };
     }
 
@@ -12573,6 +12461,49 @@ Regeln:
       return customTrainingTypes.find(t => t.id === typ)?.label || entry?.typLabel || deriveCustomLabel(typ);
     }
 
+    // ── Zentrale Übungs-ID-Auflösung (ID-Bereinigung 30.10.2026) ───────────────────────────────────
+    // Einzige verbleibende Stelle, die über eine neue custom_-ID entscheidet (Workout-Builder,
+    // ensureZirkelExerciseCatalog). Manuelle Anlagewege (addCustomType, zirkelCreateUebungType,
+    // PLAN_CUSTOM_OPTION) entfallen ersatzlos – neue Übungen entstehen nur noch hierüber.
+    function normalizeExerciseLabel(label) {
+      return String(label || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function findExistingExerciseByLabel(label) {
+      const norm = normalizeExerciseLabel(label);
+      if (!norm) return null;
+      return customTrainingTypes.find(t => normalizeExerciseLabel(t.label) === norm) || null;
+    }
+
+    function slugifyExerciseLabel(label) {
+      const slug = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      return 'custom_' + (slug || newPlanUnitId());
+    }
+
+    // Reine Lookup-Logik ohne Seiteneffekt (kein Firestore-Zugriff) – liefert dieselbe ID wie
+    // resolveExerciseId(), ohne etwas anzulegen. Für die Workout-Builder-Vorschau, die vor "Übernehmen"
+    // nichts schreiben darf (siehe applyWorkoutBuilderChanges).
+    function resolveExerciseIdPreview(label) {
+      const cleanLabel = String(label || '').trim();
+      if (!cleanLabel) throw new Error('Kein Übungsname angegeben');
+      const existing = findExistingExerciseByLabel(cleanLabel);
+      if (existing) return { id: existing.id, label: existing.label, created: false };
+      return { id: slugifyExerciseLabel(cleanLabel), label: cleanLabel, created: true };
+    }
+
+    // Prüft vor jeder Neuanlage, ob eine Übung mit demselben normalisierten Anzeigenamen schon
+    // existiert (customTrainingTypes) – wenn ja, wird deren ID zurückgegeben statt eine neue zu
+    // erzeugen. Legt sonst ein neues Typ-Dokument an (wie früher addCustomType/zirkelCreateUebungType).
+    async function resolveExerciseId(label) {
+      const r = resolveExerciseIdPreview(label);
+      if (!r.created) return r;
+      await setDoc(doc(globalTrainingTypesCol(), r.id), { id: r.id, label: r.label, addedBy: userId });
+      customTrainingTypes.push({ id: r.id, label: r.label });
+      customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
+      cachePut('customTrainingTypes', customTrainingTypes);
+      return r;
+    }
+
     // Einmalige Migration: legt für Custom-Arten, die in Einträgen vorkommen, aber kein Typ-Dokument
     // haben, ein Dokument im Standardformat an ({id, label, addedBy}). Bestehende Labels bleiben unverändert.
     // Historische Einträge werden nicht angefasst.
@@ -12628,9 +12559,9 @@ Regeln:
     // Vorbelegung beim allerersten Laden (nur wenn noch kein Dokument existiert). Die custom_-IDs müssen
     // dafür schon existieren – siehe ensureZirkelExerciseCatalog(), läuft vorher.
     const ZIRKEL_EXERCISE_SETTINGS_SEED = {
-      custom_plank: { metClass: 'mittel', perSideDefault: false },
-      custom_seitplank: { metClass: 'mittel', perSideDefault: true },
-      custom_glute_bridge: { metClass: 'leicht', perSideDefault: false },
+      custom_gerade_planks: { metClass: 'mittel', perSideDefault: false },
+      custom_seitliche_planks: { metClass: 'mittel', perSideDefault: true },
+      custom_glute_bridges: { metClass: 'leicht', perSideDefault: false },
       custom_bird_dog: { metClass: 'leicht', perSideDefault: true },
       lunges: { metClass: 'mittel', perSideDefault: true },
       custom_split_squats: { metClass: 'intensiv', perSideDefault: true },
@@ -12654,31 +12585,21 @@ Regeln:
     }
 
     // Übungen, die als eigenständige Trainingsart existieren müssen (nur fehlende anlegen, Abgleich über
-    // das Label, case-insensitiv – keine Duplikate, egal unter welcher ID eine gleichnamige Art schon
-    // existiert). Lunges/Pull-ups/Push-ups/Theraband Knie sind bereits feste Typen, brauchen keinen Eintrag.
+    // resolveExerciseId – keine Duplikate, egal unter welcher ID eine gleichnamige Art schon existiert).
+    // Lunges/Pull-ups/Push-ups/Theraband Knie sind bereits feste Typen, brauchen keinen Eintrag.
     const ZIRKEL_REQUIRED_EXERCISES = [
-      { id: 'custom_plank', label: 'Plank' },
-      { id: 'custom_seitplank', label: 'Seitplank' },
-      { id: 'custom_glute_bridge', label: 'Glute Bridge' },
-      { id: 'custom_bird_dog', label: 'Bird Dog' },
-      { id: 'custom_split_squats', label: 'Split Squats' },
-      { id: 'custom_bulgarian_split_squats', label: 'Bulgarian Split Squats' }
+      'Gerade Planks', 'Seitliche Planks', 'Glute Bridges', 'Bird Dog', 'Split Squats', 'Bulgarian Split Squats'
     ];
 
     async function ensureZirkelExerciseCatalog() {
-      const existingLabels = new Set(customTrainingTypes.map(t => t.label.trim().toLowerCase()));
-      const missing = ZIRKEL_REQUIRED_EXERCISES.filter(r => !existingLabels.has(r.label.toLowerCase()));
-      if (!missing.length) return;
-      try {
-        for (const r of missing) {
-          await setDoc(doc(globalTrainingTypesCol(), r.id), { id: r.id, label: r.label, addedBy: userId });
-          customTrainingTypes.push({ id: r.id, label: r.label });
-        }
-        customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
-        cachePut('customTrainingTypes', customTrainingTypes);
-        renderCustomTypes();
-        updateTrainingTypeSelect();
-      } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
+      let anyCreated = false;
+      for (const label of ZIRKEL_REQUIRED_EXERCISES) {
+        try {
+          const r = await resolveExerciseId(label);
+          if (r.created) anyCreated = true;
+        } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
+      }
+      if (anyCreated) { renderCustomTypes(); updateTrainingTypeSelect(); }
     }
 
     function getExerciseSetting(typ) {
@@ -12942,17 +12863,14 @@ Regeln:
       return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
     }
 
-    // Eine Auswahlliste für das Loggen-Formular: eingebaute Optionen (statisch im HTML, vorn),
-    // dann Custom-Übungen, zuletzt "Neue Übung anlegen". Aufruf jederzeit möglich, auch vor dem Laden
-    // der Typ-Dokumente; die Auswahl bleibt dabei erhalten.
-    const NEW_EXERCISE_OPTION = '__new_exercise__';
-    let pendingNewExerciseSelect = false; // true, wenn der Anlege-Ablauf über die Liste gestartet wurde
-
+    // Eine Auswahlliste für das Loggen-Formular: eingebaute Optionen (statisch im HTML, vorn), dann
+    // Custom-Übungen. Keine "Neue Übung anlegen"-Option mehr (ID-Bereinigung 30.10.2026) – neue Übungen
+    // entstehen nur noch über den Workout-Builder (resolveExerciseId).
     function updateTrainingTypeSelect() {
       const select = document.getElementById('training-type');
       if (!select) return;
       const current = select.value;
-      Array.from(select.options).forEach(o => { if (o.dataset.custom || o.dataset.newExercise) o.remove(); });
+      Array.from(select.options).forEach(o => { if (o.dataset.custom) o.remove(); });
       getCustomExerciseOptions().forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
@@ -12960,60 +12878,13 @@ Regeln:
         opt.dataset.custom = '1';
         select.appendChild(opt);
       });
-      const newOpt = document.createElement('option');
-      newOpt.value = NEW_EXERCISE_OPTION;
-      newOpt.textContent = 'Neue Übung anlegen';
-      newOpt.dataset.newExercise = '1';
-      select.appendChild(newOpt);
       if (current && Array.from(select.options).some(o => o.value === current)) select.value = current;
       populateWorkoutTypeSelect();
     }
 
     window.onTrainingTypeChange = function(select) {
-      if (select.value === NEW_EXERCISE_OPTION) {
-        // Anlege-Ablauf: vorherige Auswahl bleibt stehen, Name wird im Feld "Eigene Trainingsarten" eingegeben
-        select.value = select.dataset.last || select.options[0].value;
-        pendingNewExerciseSelect = true;
-        const input = document.getElementById('custom-type-name');
-        input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        input?.focus();
-        return;
-      }
       trainingFormHoldForced = false;
       window.updateVariantOptions();
-    };
-
-    function selectTrainingType(id) {
-      pendingNewExerciseSelect = false;
-      const select = document.getElementById('training-type');
-      if (!select || !Array.from(select.options).some(o => o.value === id)) return;
-      select.value = id;
-      window.updateVariantOptions();
-    }
-
-    window.addCustomType = async function() {
-      const input = document.getElementById('custom-type-name');
-      const name = input.value.trim();
-      if (!name) { showToast('Bitte einen Namen eingeben'); return; }
-      const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      if (customTrainingTypes.find(t => t.id === id)) {
-        showToast('Art existiert bereits');
-        if (pendingNewExerciseSelect) selectTrainingType(id);
-        return;
-      }
-      const metClass = document.getElementById('custom-type-metclass')?.value || ZIRKEL_MET_DEFAULT_CLASS;
-      const perSideDefault = !!document.getElementById('custom-type-perside')?.checked;
-      await setDoc(doc(globalTrainingTypesCol(), id), { id, label: name, addedBy: userId });
-      customTrainingTypes.push({ id, label: name });
-      customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label));
-      await setExerciseSetting(id, { metClass, perSideDefault });
-      input.value = '';
-      const metSel = document.getElementById('custom-type-metclass'); if (metSel) metSel.value = ZIRKEL_MET_DEFAULT_CLASS;
-      const sideChk = document.getElementById('custom-type-perside'); if (sideChk) sideChk.checked = false;
-      renderCustomTypes();
-      updateTrainingTypeSelect();
-      if (pendingNewExerciseSelect) selectTrainingType(id);
-      showToast(name + ' hinzugefügt', 'ok');
     };
 
     window.removeCustomType = async function(index) {

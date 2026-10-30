@@ -2361,7 +2361,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-24 09:00';
+    const APP_BUILD = '2026-10-30 11:03';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8087,6 +8087,15 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
     const SUBJECTIVE_STATUS_LABELS = { angeschlagen: 'angeschlagen', krank: 'krank' };
     const userSubjectiveStatusDoc = () => doc(db, 'users', userId, 'settings', 'subjectiveStatus');
 
+    // Bugreport (Teil A): "Leicht angeschlagen"/"Krank" antippen löste bisher SOFORT generateDailyCheck
+    // aus; während des (mehrsekündigen) KI-Calls kollabierte die ganze Karte (dailyCheckGenerating ->
+    // toggleable=false in renderDailyCheckCard), wodurch das Freitextfeld komplett aus dem DOM verschwand
+    // - per echtem Headless-Test reproduziert (siehe Bericht), nicht nur aus dem Code abgeleitet. Fix
+    // (zugleich Teil B, "Status zuerst, dann EIN Call"): ein Statuswechsel zu angeschlagen/krank zeigt nur
+    // noch lokal das Freitextfeld + "Speichern" (dailyCheckPendingChoice) - committet/generiert wird
+    // ausschließlich über saveSubjectiveStatusPending. 'angeschlagen'|'krank'|null.
+    let dailyCheckPendingChoice = null;
+
     function subjectiveStatusForDate(dateStr) {
       return subjectiveStatusHistory.find(e => e.von <= dateStr && (e.bis == null || dateStr <= e.bis)) || null;
     }
@@ -8104,11 +8113,23 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       cachePut('subjectiveStatusHistory', subjectiveStatusHistory).catch(() => {});
     }
 
-    // Statuswechsel (Button Fit/Leicht angeschlagen/Krank) – schließt eine offene Periode und eröffnet
-    // ggf. eine neue; löst genau EINE Regenerierung der heutigen Karte aus (Vorgabe Teil 2.1). Eine
-    // reine Notiz-Änderung (updateSubjectiveStatusNotiz) ändert den Status nicht und regeneriert daher
-    // NICHT automatisch.
-    window.setSubjectiveStatus = async function(status) {
+    // Protokolliert JEDEN tatsächlichen Tagescheck-KI-Call (Teil B, Zähler-Vorgabe) - eigene, rein
+    // additive Subcollection, blockiert den eigentlichen Call nicht (fire-and-forget).
+    async function logDailyCheckCall(dateStr, trigger) {
+      try {
+        const id = dateStr + '_' + Date.now();
+        await setDoc(doc(collection(db, 'users', userId, 'dailyCheckCallLog'), id), { date: dateStr, atMs: Date.now(), trigger });
+      } catch (e) { console.warn('Tagescheck-Call-Log schreiben fehlgeschlagen:', e); }
+    }
+
+    // Einzige Stelle, die subjectiveStatusHistory ändert UND über einen KI-Call entscheidet (Teil B:
+    // Status zuerst, höchstens EIN Call pro Entscheidung). Eligibility:
+    // - Existiert für heute schon eine ECHTE Analyse (nicht statusPending/Fehler) -> bewusste spätere
+    //   Änderung (Teil B Punkt 4): immer sofort genau EIN neuer Call, unabhängig vom Oura-Stand.
+    // - Sonst (erste Entscheidung des Tages) -> nur anfordern, wenn die Oura-Nachtdaten schon vollständig
+    //   sind; andernfalls Status als statusPending speichern und warten - tryOuraAutoSync löst dann
+    //   genau EINEN automatischen Call aus, sobald die Daten vollständig sind (Teil B Punkt 3b).
+    async function commitSubjectiveStatus(status, notiz) {
       if (!['fit', 'angeschlagen', 'krank'].includes(status)) return;
       const todayStr = berlinTodayStr();
       const cur = subjectiveStatusHistory[subjectiveStatusHistory.length - 1];
@@ -8117,31 +8138,69 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         else cur.bis = dailyCheckShiftDate(todayStr, -1);
       }
       if (status !== 'fit') {
-        subjectiveStatusHistory.push({ status, von: todayStr, bis: null, notiz: '' });
+        subjectiveStatusHistory.push({ status, von: todayStr, bis: null, notiz: String(notiz || '').trim().slice(0, 80) });
       }
+      dailyCheckPendingChoice = null;
       try { await persistSubjectiveStatusHistory(); } catch (e) { console.error('Subjektiven Status speichern fehlgeschlagen:', e); }
-      await generateDailyCheck(true);
-    };
-    window.updateSubjectiveStatusNotiz = async function(value) {
-      const cur = subjectiveStatusHistory[subjectiveStatusHistory.length - 1];
-      if (!cur || cur.bis != null) return; // keine aktive (nicht-fit) Periode -> nichts zu speichern
-      cur.notiz = String(value || '').trim().slice(0, 80);
-      try { await persistSubjectiveStatusHistory(); } catch (e) { console.error('Notiz speichern fehlgeschlagen:', e); }
+
+      const hasRealCardToday = dailyCheckState && dailyCheckState.date === todayStr && !!dailyCheckState.headline && !dailyCheckState.statusPending;
+      if (hasRealCardToday) {
+        await generateDailyCheck(true, 'status_changed');
+        return;
+      }
+      if (ouraNightDataComplete(todayStr)) {
+        await generateDailyCheck(true, 'status_set');
+      } else {
+        const pending = { date: todayStr, statusPending: true, createdAtMs: Date.now() };
+        dailyCheckState = pending;
+        try { await setDoc(doc(userDailyCheckCol(), todayStr), pending); } catch (e) { console.error('Status (pending) speichern fehlgeschlagen:', e); }
+        cachePut('dailyCheck_' + todayStr, pending).catch(() => {});
+        renderDailyCheckCard();
+      }
+    }
+
+    // Fit/"Unverändert" committen sofort (kein Freitext einzugeben). Leicht angeschlagen/Krank zeigen
+    // zuerst nur das Freitextfeld + "Speichern" (subjectiveStatusBlockHtml) - committet wird erst über
+    // saveSubjectiveStatusPending, NIE direkt beim Antippen des Buttons (behebt Teil A).
+    window.setSubjectiveStatus = function(status) {
+      if (status === 'fit') { commitSubjectiveStatus('fit', ''); return; }
+      if (!['angeschlagen', 'krank'].includes(status)) return;
+      dailyCheckPendingChoice = status;
       renderDailyCheckCard();
     };
+    window.saveSubjectiveStatusPending = function() {
+      if (!dailyCheckPendingChoice) return;
+      const val = document.getElementById('subj-status-notiz')?.value || '';
+      commitSubjectiveStatus(dailyCheckPendingChoice, val);
+    };
+    window.useYesterdayStatusUnchanged = function() {
+      const cur = currentSubjectiveStatus();
+      if (!cur) return;
+      commitSubjectiveStatus(cur.status, cur.notiz || '');
+    };
 
-    function subjectiveStatusSelectorHtml(cur) {
+    // Button-Zeile + ggf. Freitext/Speichern. `cur` = aktiver Status (heute bereits committet ODER aus
+    // einer noch offenen Vortagesperiode übernommen), `showCarryOver` = true nur, wenn diese Periode noch
+    // NICHT für heute bestätigt wurde (zeigt dann zusätzlich "Unverändert").
+    function subjectiveStatusBlockHtml(cur, showCarryOver) {
       const activeStyle = 'background:var(--fo-primary);color:#fff;';
+      const highlight = dailyCheckPendingChoice || (cur ? cur.status : 'fit');
       const btn = (status, label) => {
-        const isActive = (status === 'fit' && !cur) || (cur && cur.status === status);
+        const isActive = highlight === status;
         return `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" style="${isActive ? activeStyle : ''}" onclick="setSubjectiveStatus('${status}')">${label}</button>`;
       };
+      const carryOverBtn = showCarryOver
+        ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="useYesterdayStatusUnchanged()">Unverändert</button>` : '';
+      const pendingHtml = dailyCheckPendingChoice ? `
+        <input id="subj-status-notiz" type="text" maxlength="80" placeholder="Kurze Notiz (z.B. Erkältung)" value=""
+          style="width:100%;margin-top:8px;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--fo-line);background:transparent;color:var(--fo-text-1);box-sizing:border-box;" />
+        <button class="fo-btn fo-btn--primary fo-btn--sm" type="button" style="margin-top:6px;" onclick="saveSubjectiveStatusPending()">Speichern</button>` : '';
+      const curNotizHtml = (!dailyCheckPendingChoice && cur && cur.notiz) ? `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">${planEsc(cur.notiz)}</div>` : '';
       return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">
         <div style="font-size:12px;color:var(--fo-text-3);margin-bottom:6px;">Wie fühlst du dich?</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">${btn('fit', 'Fit')}${btn('angeschlagen', 'Leicht angeschlagen')}${btn('krank', 'Krank')}</div>
-        <input id="subj-status-notiz" type="text" maxlength="80" placeholder="Kurze Notiz (z.B. Erkältung)" value="${planEsc(cur?.notiz || '')}"
-          style="width:100%;margin-top:6px;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--fo-line);background:transparent;color:var(--fo-text-1);box-sizing:border-box;"
-          onchange="updateSubjectiveStatusNotiz(this.value)"${!cur ? ' disabled' : ''} />
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${btn('fit', 'Fit')}${btn('angeschlagen', 'Leicht angeschlagen')}${btn('krank', 'Krank')}${carryOverBtn}</div>
+        ${pendingHtml}
+        ${curNotizHtml}
       </div>`;
     }
 
@@ -8505,12 +8564,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // Jeder Schritt einzeln abgesichert (A.5): ein Fehler hier darf nie loadAllData/den Rest der
     // Übersicht mitreißen. generateDailyCheck selbst hat sein eigenes try/catch; initDailyCheck wird
     // bewusst "fire and forget" (ohne await) aus dem App-Start aufgerufen.
-    async function generateDailyCheck(force = false) {
+    async function generateDailyCheck(force = false, trigger = 'unknown') {
       if (dailyCheckGenerating) return;
       const todayStr = berlinTodayStr();
-      if (!force && dailyCheckState && dailyCheckState.date === todayStr && !dailyCheckState.error && !dailyCheckState.waiting) return;
+      if (!force && dailyCheckState && dailyCheckState.date === todayStr && !dailyCheckState.error && !dailyCheckState.statusPending) return;
       dailyCheckGenerating = true;
       renderDailyCheckCard();
+      logDailyCheckCall(todayStr, trigger); // fire-and-forget, siehe Funktionskommentar oben bei logDailyCheckCall
       try {
         const payload = buildDailyCheckPayload(todayStr);
         const { parsed, rawText } = await callDailyCheckModel(payload);
@@ -8551,8 +8611,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         renderDailyCheckCard();
       }
     }
-    window.regenerateDailyCheck = function() { generateDailyCheck(true); };
-    window.createDailyCheckNow = function() { generateDailyCheck(false); };
+    window.regenerateDailyCheck = function() { generateDailyCheck(true, 'manual_retry'); };
+    window.createDailyCheckNow = function() { generateDailyCheck(false, 'manual_create'); };
 
     // "Vollständig genug" für den Tagescheck (Bugreport 2026-10-21, verschärft ggü. der ursprünglichen
     // Fassung): Schlaf-Score UND Readiness-Score für die Nacht müssen vorhanden sein – entspricht
@@ -8601,8 +8661,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       if (ouraAutoSyncState.attempts > OURA_AUTOSYNC_RETRY_DELAYS_MS.length) return; // 1 initial + 3 Retries verbraucht
 
       ouraAutoSyncState.inProgress = true;
-      const cardWasWaiting = dailyCheckState?.waiting && dailyCheckState.date === todayStr;
-      if (cardWasWaiting) { ouraAutoSyncInProgress = true; renderDailyCheckCard(); }
+      const cardWasPending = dailyCheckState?.statusPending && dailyCheckState.date === todayStr;
+      if (cardWasPending) { ouraAutoSyncInProgress = true; renderDailyCheckCard(); }
       try {
         const syncFn = httpsCallable(fbFunctionsEU, 'syncOuraManual');
         await syncFn({ days: 2 }); // letzte Nacht + Vortag reichen hier, kein 7-Tage-Backfill nötig
@@ -8611,18 +8671,13 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         renderOuraDailyCard(currentDate);
         ouraAutoSyncState.attempts++;
         if (ouraNightDataComplete(todayStr)) {
-          // Nur automatisch generieren, wenn für heute noch nichts Gültiges vorliegt (null/anderes
-          // Datum/waiting) – ein bereits bestehender Fehler-Zustand bleibt bewusst manuell ("Erneut
-          // versuchen"), damit ein Oura-unabhängiger Fehler nicht automatisch wiederholt wird.
-          if (!dailyCheckState || dailyCheckState.date !== todayStr || dailyCheckState.waiting) {
-            await generateDailyCheck(false); // Guard gegen Doppel-Generierung ist bereits in generateDailyCheck selbst
-          } else if (dailyCheckState.incompleteOura) {
-            // Karte wurde zuvor über "Trotzdem erstellen" mit unvollständigen Oura-Daten erzeugt –
-            // jetzt sind die Daten vollständig da: genau einmal automatisch neu erstellen (force:
-            // true, da der Dedupe-Guard in generateDailyCheck sonst einen vorhandenen, fehlerfreien
-            // Stand überspringen würde). Selbstbegrenzend: der neue Stand hat incompleteOura=false,
-            // ein erneuter Treffer hier kann also nicht mehr vorkommen.
-            await generateDailyCheck(true);
+          // Teil B, Punkt 3b/5: NUR auslösen, wenn heute bereits eine Statusentscheidung committet wurde,
+          // der Call aber noch auf vollständige Oura-Daten gewartet hat (statusPending). Ohne
+          // Statusentscheidung passiert hier bewusst NICHTS (kein automatischer Call ohne getippten
+          // Status). Selbstbegrenzend: der neue Stand hat statusPending nicht mehr, ein erneuter Treffer
+          // hier kann also nicht mehr vorkommen.
+          if (dailyCheckState && dailyCheckState.date === todayStr && dailyCheckState.statusPending) {
+            await generateDailyCheck(true, 'oura_complete');
           }
         } else {
           scheduleOuraAutoSyncRetry();
@@ -8633,7 +8688,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         scheduleOuraAutoSyncRetry();
       } finally {
         ouraAutoSyncState.inProgress = false;
-        if (cardWasWaiting) { ouraAutoSyncInProgress = false; renderDailyCheckCard(); }
+        if (cardWasPending) { ouraAutoSyncInProgress = false; renderDailyCheckCard(); }
       }
     }
     document.addEventListener('visibilitychange', () => {
@@ -8658,18 +8713,14 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
             cachePut('dailyCheck_' + todayStr, fromFirestore).catch(() => {});
             renderDailyCheckCard();
           }
+          // Heute wurde bereits eine Statusentscheidung committet, aber der Call wartet noch auf
+          // vollständige Oura-Daten (statusPending) - aktiv nachfragen statt nur passiv zu warten.
+          if (dailyCheckState?.statusPending) tryOuraAutoSync('init');
           return;
         }
-        if (dailyCheckState && dailyCheckState.date === todayStr) {
-          return; // aus dem Cache geladen (z.B. ein Fehler-Zustand), aber noch nichts in Firestore – kein Auto-Retry
-        }
-        if (ouraNightDataComplete(todayStr)) {
-          await generateDailyCheck(false);
-        } else {
-          dailyCheckState = { date: todayStr, waiting: true };
-          renderDailyCheckCard();
-          tryOuraAutoSync('init');
-        }
+        // Kein Dokument für heute: noch KEINE Statusentscheidung getroffen (Teil B, Punkt 1) - die Karte
+        // zeigt nur die Frage, ohne automatischen Call und ohne Oura-Autosync (der wird erst relevant,
+        // sobald commitSubjectiveStatus eine Entscheidung speichert).
       } catch (e) {
         console.error('initDailyCheck fehlgeschlagen:', e);
       }
@@ -8731,19 +8782,35 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }
       el.style.display = 'block';
 
+      // Teil B, Punkt 1/2: für HEUTE, solange noch KEINE Statusentscheidung committet wurde (weder eine
+      // echte Analyse noch ein statusPending-Platzhalter existiert) und auch kein Call gerade läuft,
+      // zeigt die Karte NUR die Frage - kein KI-Call, keine Oura-Wartemeldung, kein "wird erstellt".
+      // Eigene, nicht einklappbare Mini-Karte statt der üblichen Zeilen-/Chevron-Struktur.
+      if (!readOnly && (!s || s.date !== todayStr) && !dailyCheckGenerating) {
+        const cur = currentSubjectiveStatus(); // kann nur aus einer noch offenen Vortagesperiode stammen, siehe Kommentar oben bei commitSubjectiveStatus
+        const question = cur
+          ? `Gestern: ${SUBJECTIVE_STATUS_LABELS[cur.status]} – wie heute?`
+          : 'Wie fühlst du dich heute?';
+        el.innerHTML = `<div class="fo-card" style="padding:14px 16px;margin-bottom:12px;">
+          <div style="font-size:14px;font-weight:600;margin-bottom:2px;">${planEsc(question)}</div>
+          ${subjectiveStatusBlockHtml(cur, !!cur)}
+        </div>`;
+        return;
+      }
+
       let dotColor, headlineHtml, badges = '', toggleable = true, expandedBodyHtml = '';
 
       if (!readOnly && (dailyCheckGenerating || !s)) {
         dotColor = 'var(--fo-text-3)';
         headlineHtml = `<span style="color:var(--fo-text-3);">Tagescheck wird erstellt …</span>`;
         toggleable = false;
-      } else if (s.waiting) {
-        // Kommt nur für "heute" vor (waiting-Zustände werden nie nach Firestore geschrieben, siehe
-        // generateDailyCheck/initDailyCheck) – readOnly kann hier nie true sein.
+      } else if (s.statusPending) {
+        // Kommt nur für "heute" vor (statusPending-Zustände existieren nur für den aktuellen Tag,
+        // siehe commitSubjectiveStatus) – readOnly kann hier nie true sein.
         dotColor = 'var(--fo-text-3)';
         headlineHtml = ouraAutoSyncInProgress
-          ? `<span style="color:var(--fo-text-3);">Oura-Daten werden abgerufen …</span>`
-          : `<span style="color:var(--fo-text-3);">Oura-Daten der Nacht noch nicht vollständig</span>`;
+          ? `<span style="color:var(--fo-text-3);">Status gespeichert – Oura-Daten werden abgerufen …</span>`
+          : `<span style="color:var(--fo-text-3);">Status gespeichert – Analyse folgt, sobald die Schlafdaten vollständig sind</span>`;
         expandedBodyHtml = `<div class="fo-daily-expanded">
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Trotzdem erstellen</button>
         </div>`;
@@ -8827,7 +8894,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }
       if (toggleable) {
         if (!readOnly) {
-          expandedBodyHtml += subjectiveStatusSelectorHtml(subjStatusForRow);
+          expandedBodyHtml += subjectiveStatusBlockHtml(subjStatusForRow, false);
         } else if (subjStatusForRow) {
           expandedBodyHtml += `<div style="font-size:12px;color:var(--fo-text-3);margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">Status an diesem Tag: ${SUBJECTIVE_STATUS_LABELS[subjStatusForRow.status]}${subjStatusForRow.notiz ? ' – ' + planEsc(subjStatusForRow.notiz) : ''}</div>`;
         }

@@ -399,9 +399,10 @@
     @media (prefers-reduced-motion: reduce) { .fo-toggle-chev { transition: none; } }
     /* Tagescheck-Karte: zugeklappt zeigt der chevD nach unten (tippen = mehr), aufgeklappt per
        180°-Drehung nach oben (tippen = schließen) – andere Richtung als .fo-toggle-chev oben, bewusst
-       so gewünscht (siehe Bugreport 2026-10-18). Eine Zeile fester Höhe für jeden Kartenzustand. */
+       so gewünscht (siehe Bugreport 2026-10-18). Headline bricht um (kein Abschneiden per ellipsis,
+       siehe Bugreport 2026-10-31: eine lange Headline war in beiden Zuständen nur noch "Text…" lesbar). */
     .fo-daily-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-    .fo-daily-headline-text { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fo-daily-headline-text { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; }
     .fo-daily-chev { display: inline-flex; flex-shrink: 0; transition: transform .15s; color: var(--fo-text-3); }
     .fo-daily-chev.is-open { transform: rotate(180deg); }
     .fo-daily-expanded { border-top: 1px solid var(--fo-line); margin-top: 2px; padding: 10px 0 14px; }
@@ -2346,7 +2347,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-30 18:44';
+    const APP_BUILD = '2026-10-31 17:14';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8372,7 +8373,7 @@ Regeln:
 Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
 {
   "status": "gruen" | "gelb" | "rot",
-  "headline": string (max. 60 Zeichen),
+  "headline": string (max. 40 Zeichen),
   "actions": [string, string?] (1-2 Einträge, je ein Satz),
   "reason": string (max. 250 Zeichen, welche Daten zu der Einschätzung geführt haben),
   "confidence": "hoch" | "mittel" | "niedrig",
@@ -12466,13 +12467,77 @@ Regeln:
     // ensureZirkelExerciseCatalog). Manuelle Anlagewege (addCustomType, zirkelCreateUebungType,
     // PLAN_CUSTOM_OPTION) entfallen ersatzlos – neue Übungen entstehen nur noch hierüber.
     function normalizeExerciseLabel(label) {
-      return String(label || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      return String(label || '').trim().toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    // Strippt genau EIN Plural-Suffix von einem einzelnen (bereits normalisierten) Wort: Englisch -s
+    // (nicht bei -ss), Deutsch -en nur wenn der verbleibende Wortstamm mind. 4 Zeichen hat. Bewusst
+    // OHNE bare -e/-n: ein alleinstehendes -e würde bei englischen "silent e"-Wörtern wie
+    // "glute"/"bridge"/"lunge" fälschlich greifen und genau die laut Testtabelle geforderten Treffer
+    // ("Glute Bridge", "Lunge") zerstören – diese Wörter haben in der Singular-Eingabe kein -s zum
+    // Stripping, der Katalog-Pluralname ("Bridges"/"Lunges") wird aber bereits über die Englisch-Regel
+    // korrekt zu "bridge"/"lunge"; ein zusätzliches -e-Stripping auf der Singular-Seite ergäbe "bridg"/
+    // "lung" statt "bridge"/"lunge" und die beiden Seiten würden nicht mehr übereinstimmen (siehe
+    // verify-plural.js-Testlauf, Bugreport/Auftrag 2026-10-31).
+    function stripPluralWord(word) {
+      if (word.length > 2 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+      if (word.endsWith('en') && word.length - 2 >= 4) return word.slice(0, -2);
+      return word;
+    }
+
+    // Vergleichsschlüssel für den exakten Übungsabgleich: wie normalizeExerciseLabel, zusätzlich pro
+    // Wort ein Plural-Suffix entfernt und danach ALLE Leerzeichen entfernt – letzteres bewusst, damit
+    // z.B. "Pushup" (ohne Trenner) exakt auf "Push-ups" (Katalogname) matcht, nicht nur getrennt
+    // geschriebene Varianten. Nur für den Abgleich gedacht, nie zur Anzeige.
+    function pluralMatchKey(label) {
+      return normalizeExerciseLabel(label).split(' ').filter(Boolean).map(stripPluralWord).join('');
+    }
+
+    // Vollständiger Übungskatalog für den deterministischen Namensabgleich: feste Zirkel-Übungen
+    // (ZIRKEL_FIXED_EXERCISE_TYPES) + eigene Übungen (customTrainingTypes), indiziert nach pluralMatchKey.
+    function buildExerciseCatalogIndex() {
+      const entries = [
+        ...ZIRKEL_FIXED_EXERCISE_TYPES.map(typ => ({ id: typ, label: TYP_LABELS[typ] || typ })),
+        ...customTrainingTypes.map(t => ({ id: t.id, label: t.label })),
+      ];
+      const byKey = {};
+      for (const e of entries) {
+        const key = pluralMatchKey(e.label);
+        (byKey[key] = byKey[key] || []).push(e);
+      }
+      return byKey;
+    }
+
+    // Kollisionsschutz: mappen zwei verschiedene Übungen auf denselben pluralMatchKey, wird dafür NIE
+    // automatisch zugeordnet (fällt auf die bisherige LLM-Zuordnung zurück) – verhindert eine falsche
+    // automatische Zuordnung. Wird einmalig beim ersten Laden des Katalogs (loadCustomTypes) geloggt.
+    let exerciseCatalogCollisionsLogged = false;
+    function logExerciseCatalogCollisionsOnce() {
+      if (exerciseCatalogCollisionsLogged) return;
+      exerciseCatalogCollisionsLogged = true;
+      const collisions = Object.entries(buildExerciseCatalogIndex()).filter(([, list]) => list.length > 1);
+      if (collisions.length) {
+        console.warn('Übungskatalog: mehrdeutige Namensformen ohne automatischen Abgleich:',
+          collisions.map(([key, list]) => `${key} (${list.map(e => e.id).join(', ')})`).join('; '));
+      }
     }
 
     function findExistingExerciseByLabel(label) {
       const norm = normalizeExerciseLabel(label);
       if (!norm) return null;
-      return customTrainingTypes.find(t => normalizeExerciseLabel(t.label) === norm) || null;
+      const exact = customTrainingTypes.find(t => normalizeExerciseLabel(t.label) === norm);
+      if (exact) return exact;
+      // Plural-normalisierter Abgleich gegen den vollständigen Katalog (fest + eigen) – nur bei genau
+      // einem Treffer (kein Kollisionsfall, siehe logExerciseCatalogCollisionsOnce).
+      logExerciseCatalogCollisionsOnce();
+      const key = pluralMatchKey(label);
+      if (!key) return null;
+      const candidates = buildExerciseCatalogIndex()[key];
+      if (!candidates || candidates.length !== 1) return null;
+      const match = candidates[0];
+      return customTrainingTypes.find(t => t.id === match.id) || { id: match.id, label: match.label };
     }
 
     function slugifyExerciseLabel(label) {

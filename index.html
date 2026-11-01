@@ -2353,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-01 13:30';
+    const APP_BUILD = '2026-11-01 15:14';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -7847,7 +7847,7 @@
               ${hrLabel ? `<span style="color:var(--fo-text-3);margin-left:6px;">${hrLabel}</span>` : ''}
               ${unclearNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${unclearNote}</span>` : ''}
             </div>
-            ${linkedGarminNote ? `<div class="fo-row__sub" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
+            ${linkedGarminNote ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
@@ -12354,7 +12354,7 @@ Regeln:
       const meta = [g.zeit, entryStepsLabel(g.schritte), garminHrLabel(g)].filter(Boolean).join(' · ');
       return `<div class="fo-card" style="margin-top:6px;padding:10px 12px;">
         <div class="fo-row__title" style="font-size:13px;">${foIcon('clock', 'fo-i--sm')} Uhr-Aufzeichnung</div>
-        ${meta ? `<div class="fo-row__sub">${meta}</div>` : ''}
+        ${meta ? `<div class="fo-row__sub fo-row__sub--wrap">${meta}</div>` : ''}
         <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" style="margin-top:6px;" onclick="event.stopPropagation(); unlinkGarminFromZirkel('${g.activityId}')">Zuordnung lösen</button>
       </div>`;
     }

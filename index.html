@@ -2353,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-01 06:20';
+    const APP_BUILD = '2026-11-01 08:15';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2881,6 +2881,7 @@
         document.getElementById('user-email').textContent = user.email;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app-container').classList.add('show');
+        startGarminPollTimer(); // App startet sichtbar - periodischer Garmin-Reload läuft ab jetzt (siehe autoSyncGarmin)
 
         // Cache-first: sofort aus IndexedDB rendern, dann Firestore im Hintergrund
         const hasCachedData = await loadFromCache();
@@ -3050,6 +3051,7 @@
         // Load Garmin (Phase 1b, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
         try {
           await refreshGarminData();
+          garminLastSyncAt = Date.now(); // zählt für die 5-Minuten-Drosselung des Auto-Reloads mit (siehe autoSyncGarmin)
         } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
 
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
@@ -9557,6 +9559,60 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // Rückkehr aus dem Hintergrund: Handler wird nur hier, einmalig, registriert
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') autoSyncGoogleFit('visible');
+    });
+
+    // ── Automatischer Garmin-Reload (Rückkehr + periodisch, solange sichtbar, 01.11.2026) ──────
+    // Diagnose vom selben Tag: refreshGarminData() lief bisher nur einmal beim Start (in
+    // loadAllData) - Oura und Google Fit laden dagegen bei visibilitychange('visible') automatisch
+    // neu, Garmin nicht. Die App zeigte dadurch stundenlang einen veralteten Schrittwert, obwohl
+    // Firestore längst aktuell war (Garmin-Sync auf dem Server läuft alle 15 Min). Gemeinsame
+    // Drosselung (GARMIN_AUTOSYNC_MIN_INTERVAL_MS) gilt für Rückkehr UND Timer zusammen, damit ein
+    // Tab-Wechsel kurz nach einem Timer-Tick nicht sofort nochmal liest. Reiner Lesevorgang -
+    // ingestGarmin/garminHealthCheck schreiben weiterhin ausschließlich serverseitig.
+    const GARMIN_AUTOSYNC_MIN_INTERVAL_MS = 5 * 60 * 1000;
+    const GARMIN_POLL_INTERVAL_MS = 15 * 60 * 1000; // deckt sich mit dem Server-Sync-Intervall
+    let garminAutoSyncInProgress = false;
+    let garminLastSyncAt = 0; // nur im Speicher, nicht in Firestore - zählt für beide Auslöser gemeinsam
+    let garminPollTimer = null;
+
+    async function autoSyncGarmin(grund) {
+      if (!userId || auth.currentUser?.isAnonymous) return;
+      if (!navigator.onLine) return;
+      if (document.visibilityState !== 'visible') return; // ein im Hintergrund feuernder Timer-Tick verfällt ungenutzt
+      if (garminAutoSyncInProgress) return;
+      if (Date.now() - garminLastSyncAt < GARMIN_AUTOSYNC_MIN_INTERVAL_MS) return;
+      garminAutoSyncInProgress = true;
+      try {
+        await refreshGarminData();
+        garminLastSyncAt = Date.now();
+        saveToCache();
+        // Nur die von Garmin-Daten abhängigen Ansichten - kein renderAll(), das würde auch
+        // unbeteiligte Bereiche (Lebensmitteldatenbank, Rezepte, Analyse-Charts) unnötig neu
+        // rendern. Beide Funktionen rendern nur ihre eigenen Container, kein Zirkel-Timer-Modal
+        // oder anderes Modal liegt in diesem DOM-Teilbaum (siehe Playwright-Verifikation Teil 2).
+        renderFoodLog();          // Schrittanzeige + Quellen-Label + Tagesbilanz/Kalorienbudget
+        renderTrainingHistory();  // Aktivitätsliste im Training-Tab
+        renderGarminStaleNotice(); // Warnbanner
+      } catch (e) {
+        console.warn('Garmin Auto-Sync (' + grund + ') fehlgeschlagen:', e); // letzter Stand bleibt sichtbar, kein Fehlerzustand in der UI
+      } finally {
+        garminAutoSyncInProgress = false;
+      }
+    }
+    function startGarminPollTimer() {
+      if (garminPollTimer) return; // läuft schon
+      garminPollTimer = setInterval(() => autoSyncGarmin('timer'), GARMIN_POLL_INTERVAL_MS);
+    }
+    function stopGarminPollTimer() {
+      if (garminPollTimer) { clearInterval(garminPollTimer); garminPollTimer = null; }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        autoSyncGarmin('visible');
+        startGarminPollTimer();
+      } else {
+        stopGarminPollTimer();
+      }
     });
 
     async function loadGoogleFitStatus() {

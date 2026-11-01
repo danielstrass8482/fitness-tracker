@@ -2353,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-01 16:42';
+    const APP_BUILD = '2026-11-01 21:42';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2391,6 +2391,16 @@
     let garminUnlinkedIds = new Set(); // activityId-Set aus garminLinks/{activityId} mit unlinked:true (Zirkel-Zusammenführung, 01.11.2026) - "Zuordnung lösen"
     let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
     let showHiddenGarmin = false;  // UI-Toggle "Ausgeblendete anzeigen" im Training-Tab
+
+    // ciqSteps/{heute} (Phase 1c, Connect-IQ-Proof-of-Concept, 01.11.2026): Tagesschritte, die eine
+    // eigene Connect-IQ-App direkt von der Uhr sendet (ingestCiqSteps, alle 5 Min), an Garmin Connects
+    // oft stundenlang hängendem Hintergrund-Sync vorbei. NUR für den heutigen Tag relevant (siehe
+    // ciqStepsForDate) - vergangene Tage bleiben ausschließlich bei garminDaily/Google Fit. date ist
+    // das Datum, für das das Dokument beim letzten Lesen tatsächlich galt (= berlinTodayStr() zum
+    // Zeitpunkt des Lesens) - nach Mitternacht ohne erneutes Lesen stimmt date nicht mehr mit dem
+    // dann aktuellen Tag überein und das Dokument wird ignoriert (Mitternachtsfall).
+    let ciqStepsToday = null; // { date, steps, receivedAt } oder null
+    window.ciqStepsToday = ciqStepsToday;
 
     window.foodDB = foodDB;
     window.recipes = recipes;
@@ -2447,6 +2457,7 @@
     const userGarminActivitiesCol = () => collection(db, 'users', userId, 'garminActivities'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminHiddenCol = () => collection(db, 'users', userId, 'garminHidden'); // einzige neue Schreibquelle der App für Garmin-Daten (Korrektur 3, 01.11.2026): {activityId}: {hiddenAt}
     const userGarminLinksCol = () => collection(db, 'users', userId, 'garminLinks'); // zweite Schreibquelle (Zirkel-Zusammenführung, 01.11.2026): {activityId}: {unlinked:true, at} für "Zuordnung lösen"
+    const userCiqStepsDoc = date => doc(db, 'users', userId, 'ciqSteps', date); // von ingestCiqSteps (Cloud Function) befüllt, nur gelesen - nur das Tagesdokument, nie die samples-Subcollection (R6)
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
     // zwischen 00:00 und 02:00 Berlin noch den Vortag.
@@ -2538,6 +2549,15 @@
       linksSnap.forEach(d => { if (d.data()?.unlinked) nextUnlinked.add(d.id); });
       garminUnlinkedIds = nextUnlinked;
       window.garminUnlinkedIds = garminUnlinkedIds;
+
+      // ciqSteps/{heute} (R6: im selben Zyklus wie oben, nur das eine Tagesdokument). date = der
+      // heutige Tag ZUM ZEITPUNKT DIESES LESENS - siehe ciqStepsForDate für den Mitternachtsfall.
+      const ciqDateStr = berlinTodayStr();
+      try {
+        const ciqSnap = await getDoc(userCiqStepsDoc(ciqDateStr));
+        ciqStepsToday = ciqSnap.exists() ? { date: ciqDateStr, steps: ciqSnap.data().steps || 0, receivedAt: ciqSnap.data().receivedAt } : null;
+      } catch (e) { console.warn('ciqSteps load error:', e); ciqStepsToday = null; } // bei Fehler: ignorieren, fällt auf garminDaily/Google Fit zurück
+      window.ciqStepsToday = ciqStepsToday;
     }
 
     // Erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität. Vor diesem Datum bleibt ein Tag
@@ -2766,20 +2786,57 @@
       return best;
     }
 
+    // ciqSteps-Wert für ein Datum – NUR wenn das zuletzt gelesene ciqSteps-Dokument tatsächlich für
+    // genau dieses Datum galt (ciqStepsToday.date, gesetzt beim Lesen in refreshGarminData). Für jedes
+    // vergangene Datum ist das automatisch 0, weil ciqStepsToday.date immer der Tag des letzten Lesens
+    // ist (R2/R3) - auch nach Mitternacht ohne erneutes Lesen (Mitternachtsfall: date ist dann noch
+    // "gestern", passt also nicht mehr zum inzwischen neuen "heute").
+    function ciqStepsForDate(date) {
+      return (ciqStepsToday && ciqStepsToday.date === date) ? (ciqStepsToday.steps || 0) : 0;
+    }
+    window.ciqStepsForDate = ciqStepsForDate;
+
+    // Firestore-Timestamp (hat .toDate()) oder Date/ISO-String -> ms seit Epoch, sonst null.
+    function ciqReceivedAtMs(ts) {
+      if (!ts) return null;
+      const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+      const ms = d.getTime();
+      return Number.isFinite(ms) ? ms : null;
+    }
+
+    // "Uhr live · HH:MM" (R5) für das Datum, wenn der ciqSteps-Wert heute strikt höher ist als
+    // garminDaily und deshalb der tatsächlich genutzte ist (R1: max(...)) - sonst null (Aufrufer
+    // zeigt dann das bisherige Garmin-Label). Bei fehlendem/ungültigem receivedAt ebenfalls null,
+    // damit nie "Uhr live · Invalid Date" angezeigt wird.
+    function ciqLiveLabel(date) {
+      if (getStepsSourceForDate(date) !== 'garmin') return null;
+      const ciqVal = ciqStepsForDate(date);
+      if (ciqVal <= (garminDailyByDate[date]?.steps || 0)) return null;
+      const ms = ciqReceivedAtMs(ciqStepsToday?.receivedAt);
+      if (ms == null) return null;
+      return `Uhr live · ${new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date(ms))}`;
+    }
+    window.ciqLiveLabel = ciqLiveLabel;
+
     // Welche Quelle liefert die Tagesschritte UND welche Aktivitäten werden davon abgezogen – nie
     // gemischt (Korrektur 2, 01.11.2026). Vor garminActivityCutoff immer Google Fit, sonst Garmin
-    // sobald garminDaily echte Schritte hat, sonst Google-Fit-Fallback.
+    // sobald garminDaily ODER ciqSteps (nur heute, R1) echte Schritte hat, sonst Google-Fit-Fallback.
+    // ciqSteps bleibt dabei Teil der "Garmin-Familie" (keine eigene dritte Quelle) - die Aktivitäts-
+    // Abzugsliste in getActivityStepsForDate bleibt deshalb unverändert bei den Garmin-Aktivitäten (R4).
     function getStepsSourceForDate(date) {
       if (garminActivityCutoff && date < garminActivityCutoff) return 'googlefit';
       const garminSteps = garminDailyByDate[date]?.steps || 0;
-      return garminSteps > 0 ? 'garmin' : 'googlefit';
+      const steps = Math.max(garminSteps, ciqStepsForDate(date));
+      return steps > 0 ? 'garmin' : 'googlefit';
     }
     window.getStepsSourceForDate = getStepsSourceForDate;
 
     // Rohe Tagesschritte aus genau der Quelle, die getStepsSourceForDate für das Datum bestimmt hat.
+    // R1: für heute der höhere Wert aus garminDaily/ciqSteps; für alle anderen Tage liefert
+    // ciqStepsForDate ohnehin immer 0 (siehe dort), Math.max ändert dort also nichts.
     function getRawStepsForDate(date, dayLog) {
       return getStepsSourceForDate(date) === 'garmin'
-        ? (garminDailyByDate[date]?.steps || 0)
+        ? Math.max(garminDailyByDate[date]?.steps || 0, ciqStepsForDate(date))
         : (dayLog?.steps || 0);
     }
 
@@ -2823,8 +2880,16 @@
         if (lastSync) {
           const ageMs = now.getTime() - new Date(lastSync).getTime();
           if (ageMs > 3 * 3600 * 1000) {
-            const hoursAgo = Math.floor(ageMs / 3600000);
-            return { text: `Uhr seit ${hoursAgo} Std. nicht synchronisiert – Garmin Connect auf dem Handy öffnen.` };
+            // R5: kein Banner, wenn ciqStepsToday.date === todayStr (Dokument gilt für den Tag, den
+            // dieser Aufruf als "heute" behandelt - todayStr kommt oben aus `now`/nowOverride, nicht
+            // aus berlinTodayStr(), damit das bei nowOverride-Tests konsistent bleibt) UND die
+            // ciqSteps-Übertragung jünger als 30 Min ist (now - ciqReceivedAtMs(receivedAt) < 30*60*1000).
+            const recvMs = (ciqStepsToday && ciqStepsToday.date === todayStr) ? ciqReceivedAtMs(ciqStepsToday.receivedAt) : null;
+            const ciqFreshMs = recvMs != null ? now.getTime() - recvMs : Infinity;
+            if (ciqFreshMs >= 30 * 60 * 1000) {
+              const hoursAgo = Math.floor(ageMs / 3600000);
+              return { text: `Uhr seit ${hoursAgo} Std. nicht synchronisiert – Garmin Connect auf dem Handy öffnen.` };
+            }
           }
         }
       }
@@ -5540,9 +5605,10 @@
 
         let html = '<ul class="fo-list">';
 
-        // Schritte (Quelle sichtbar machen, Teil 2a)
+        // Schritte (Quelle sichtbar machen, Teil 2a). "Uhr live · HH:MM" (R5, siehe ciqLiveLabel),
+        // sonst bisheriges Garmin-/Google-Fit-Label.
         if (steps > 0) {
-          const sourceText = getStepsSourceForDate(currentDate) === 'garmin' ? 'Garmin' : 'Google Fit';
+          const sourceText = ciqLiveLabel(currentDate) || (getStepsSourceForDate(currentDate) === 'garmin' ? 'Garmin' : 'Google Fit');
           html += `<li><div class="fo-row">
             <span class="fo-row__icon">${foIcon('steps')}</span>
             <div class="fo-row__main">

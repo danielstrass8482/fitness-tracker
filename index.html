@@ -1288,7 +1288,10 @@
 
       <!-- Training History -->
       <div class="fo-card">
-        <div class="fo-card__head"><h3 class="fo-card__title">Letzte Einträge</h3></div>
+        <div class="fo-card__head" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3 class="fo-card__title">Letzte Einträge</h3>
+          <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" id="garmin-hidden-toggle-btn" onclick="toggleShowHiddenGarmin()">Ausgeblendete anzeigen</button>
+        </div>
         <div id="training-history" style="max-height:400px;overflow-y:auto;border-top:1px solid var(--fo-line);"></div>
       </div>
       </div><!-- /training-log-subtab -->
@@ -1347,6 +1350,9 @@
 
       <!-- Hinweis bei fehlgeschlagenem Hintergrund-Sync (siehe showLoadErrorNotice) -->
       <div id="load-error-notice" class="fo-card" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;cursor:pointer;font-size:13px;" onclick="retryLoadAfterError()"></div>
+
+      <!-- Hinweis bei nicht aktuellen Garmin-Daten (siehe renderGarminStaleNotice) -->
+      <div id="garmin-stale-notice" class="fo-card" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;font-size:13px;"></div>
 
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" class="fo-card" style="margin-bottom:12px;"></div>
@@ -2347,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-10-31 17:14';
+    const APP_BUILD = '2026-11-01 06:20';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2373,6 +2379,18 @@
     let intervalTemplates = [];   // Intervall-Zirkel-Vorlagen aus users/{uid}/intervalTemplates (+ IndexedDB-Cache)
     let ouraStatus = { connected: false, lastSyncAtMs: null, lastSyncDays: null, lastSyncError: null }; // Verbindungsstatus aus users/{uid}/integrations/oura, für Tagesüberblick-Karte + Settings
 
+    // ── Garmin (Phase 1b, 01.11.2026): nur lesend, siehe refreshGarminData ───────
+    // ingestGarmin/garminHealthCheck (Cloud Functions, nicht Teil dieses Auftrags) schreiben
+    // garminDaily/{date}, garminActivities/{activityId} und integrations/garminHealth. Die App führt
+    // diese Daten beim Anzeigen/Rechnen mit Google Fit zusammen (siehe getStepsSourceForDate,
+    // getEffectiveTrainingEntries) – entries/-Dokumente bleiben dabei unverändert.
+    let garminDailyByDate = {};    // { [date]: { steps, garminLastSync, fetchedAt, source } }
+    let garminActivitiesAll = [];  // [{ id, mappedTyp, garminType, startLocal, steps, durationSec, distanceM, avgHr, maxHr, garminKcal }]
+    let garminHealth = null;       // { ok, reason, checkedAt, staleSince } aus integrations/garminHealth (nur diese 4 Felder)
+    let garminHiddenIds = new Set(); // activityId-Set aus garminHidden/{activityId} (Korrektur 3, 01.11.2026)
+    let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
+    let showHiddenGarmin = false;  // UI-Toggle "Ausgeblendete anzeigen" im Training-Tab
+
     window.foodDB = foodDB;
     window.recipes = recipes;
     window.foodLog = foodLog;
@@ -2380,6 +2398,10 @@
     window.dayLogs = dayLogs;
     window.ouraDaily = ouraDaily;
     window.ouraStatus = ouraStatus;
+    window.garminDailyByDate = garminDailyByDate;
+    window.garminActivitiesAll = garminActivitiesAll;
+    window.garminHealth = garminHealth;
+    window.garminHiddenIds = garminHiddenIds;
 
     // ── Icons (Sprite im <body>) ─────────────────────────────────────────────
     // Dekoratives Sprite-Icon als HTML; Texte stehen immer daneben (Icon-only-Buttons haben aria-label)
@@ -2419,6 +2441,9 @@
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
     const userIntervalTemplateCol = () => collection(db, 'users', userId, 'intervalTemplates'); // Intervall-Zirkel-Vorlagen, Doc-ID = Vorlagen-ID
     const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte fließen nur als Kalorien-Fallback ein (siehe getKcalStepsForDate)
+    const userGarminDailyCol = () => collection(db, 'users', userId, 'garminDaily'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
+    const userGarminActivitiesCol = () => collection(db, 'users', userId, 'garminActivities'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
+    const userGarminHiddenCol = () => collection(db, 'users', userId, 'garminHidden'); // einzige neue Schreibquelle der App für Garmin-Daten (Korrektur 3, 01.11.2026): {activityId}: {hiddenAt}
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
     // zwischen 00:00 und 02:00 Berlin noch den Vortag.
@@ -2466,6 +2491,232 @@
       ouraDaily = next;
       window.ouraDaily = ouraDaily;
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GARMIN (Phase 1b, 01.11.2026) – read-only Zusammenführung mit Google Fit
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Lädt garminDaily, garminActivities, integrations/garminHealth (nur ok/reason/checkedAt/
+    // staleSince, nie das ganze Dokument) und garminHidden frisch aus Firestore. Alle drei
+    // Collections sind klein (garminDaily max. 1 Dok./Tag, garminActivities wenige/Woche,
+    // garminHidden nur manuell befüllt) – deshalb ohne Datums-Cutoff, anders als die 365-Tage-
+    // Grenze bei entries/logEntries.
+    async function refreshGarminData() {
+      const dailySnap = await getDocs(userGarminDailyCol());
+      const nextDaily = {};
+      dailySnap.forEach(d => { nextDaily[d.id] = d.data(); });
+      garminDailyByDate = nextDaily;
+      window.garminDailyByDate = garminDailyByDate;
+
+      const actSnap = await getDocs(userGarminActivitiesCol());
+      const nextActivities = [];
+      actSnap.forEach(d => nextActivities.push({ id: d.id, ...d.data() }));
+      garminActivitiesAll = nextActivities;
+      window.garminActivitiesAll = garminActivitiesAll;
+      garminActivityCutoff = computeGarminActivityCutoff(garminActivitiesAll);
+
+      const healthSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'garminHealth'));
+      garminHealth = healthSnap.exists() ? {
+        ok: healthSnap.data().ok,
+        reason: healthSnap.data().reason,
+        checkedAt: healthSnap.data().checkedAt,
+        staleSince: healthSnap.data().staleSince,
+      } : null;
+      window.garminHealth = garminHealth;
+
+      const hiddenSnap = await getDocs(userGarminHiddenCol());
+      const nextHidden = new Set();
+      hiddenSnap.forEach(d => nextHidden.add(d.id));
+      garminHiddenIds = nextHidden;
+      window.garminHiddenIds = garminHiddenIds;
+    }
+
+    // Erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität. Vor diesem Datum bleibt ein Tag
+    // komplett bei Google Fit (Schritte UND Aktivitäten), auch wenn garminDaily für den Tag schon
+    // existiert – sonst würde eine Google-Fit-Aktivität an den (dann als "Garmin" geltenden)
+    // Tagesschritten vorbei nicht abgezogen und doppelt zählen (Korrektur 2, 01.11.2026).
+    function computeGarminActivityCutoff(activities) {
+      const dates = activities.map(garminActivityDateKey).filter(Boolean);
+      return dates.length ? dates.sort()[0] : null;
+    }
+
+    // "2026-10-29T19:17:55+01:00" -> "2026-10-29"
+    function garminActivityDateKey(activity) {
+      return (activity.startLocal || '').slice(0, 10) || null;
+    }
+
+    const GARMIN_MATCH_TOLERANCE_MS = 5 * 60 * 1000; // ±5 Min., siehe Teil 1 (alle 3 echten Paare matchen exakt)
+
+    function garminActivityStartMs(activity) {
+      const t = Date.parse(activity.startLocal || '');
+      return Number.isFinite(t) ? t : null;
+    }
+
+    // entry.garminTime ist eine lokale Uhrzeit ohne Datum/Zone ("19:17:55", wie startLocal ohne Offset).
+    // Als lokale Wanduhrzeit mit new Date(y,m,d,...) interpretieren (nicht als UTC-String, siehe
+    // CLAUDE.md Datum-Handling) – das stimmt mit dem Offset in startLocal überein, solange Browser/
+    // Uhr beide in Europe/Berlin laufen (bei Daniel immer der Fall).
+    function gfitEntryGarminStartMs(entry) {
+      if (!entry.garminTime || !entry.datum) return null;
+      const [hh, mm, ss] = entry.garminTime.split(':').map(Number);
+      const [y, mo, d] = entry.datum.split('-').map(Number);
+      if (!y || !mo || !d || Number.isNaN(hh) || Number.isNaN(mm)) return null;
+      return new Date(y, mo - 1, d, hh, mm, ss || 0).getTime();
+    }
+
+    function secToZeitStr(sec) {
+      const total = Math.max(0, Math.round(sec || 0));
+      const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    // Ø/Max-HF-Anzeigetext für eine Aktivitätszeile (nur Garmin liefert HF, siehe Teil 1 - Google Fit hf:null)
+    function garminHrLabel(e) {
+      if (!e.avgHr && !e.maxHr) return '';
+      return [e.avgHr ? `Ø ${e.avgHr}` : '', e.maxHr ? `Max ${e.maxHr}` : ''].filter(Boolean).join(' / ') + ' bpm';
+    }
+
+    // Garmin-Aktivität -> "virtueller" Trainingseintrag, kompatibel mit den bestehenden Aktivitäts-
+    // Funktionen (isAutoActivity/countsAsActivity/calcActivityKcal erkennen source:'garmin' bereits).
+    // garminLive markiert: kein echtes entries/-Dokument (nicht editierbar, "Ausblenden" statt "Löschen").
+    // strength_training ist serverseitig "unmapped" (ingestGarmin kennt die Zirkel-Regel nicht) – hier
+    // auf 'kraft' umgebogen (Entscheidung 4); andere unmapped Typen -> 'sonstiges_garmin' (sichtbar als
+    // "Sonstiges" mit dem rohen garminType als Notiz, nichts wird stillschweigend verworfen).
+    function garminActivityToEntry(a) {
+      const datum = garminActivityDateKey(a);
+      if (!datum) return null;
+      const isStrength = a.garminType === 'strength_training';
+      const typ = isStrength ? 'kraft' : (a.mappedTyp && a.mappedTyp !== 'unmapped') ? a.mappedTyp : 'sonstiges_garmin';
+      const gehoertZuZirkel = isStrength && trainingEntries.some(e => e.typ === 'zirkel' && e.datum === datum);
+      const entry = {
+        id: 'garmin_' + a.id,
+        garminLive: true,
+        garminActivityId: a.id,
+        garminType: a.garminType,
+        typ, datum,
+        garminTime: (a.startLocal || '').slice(11, 19),
+        zeit: a.durationSec > 0 ? secToZeitStr(a.durationSec) : '',
+        distanz: a.distanceM > 0 ? Math.round(a.distanceM) / 1000 : 0,
+        schritte: a.steps || 0,
+        source: 'garmin',
+        avgHr: a.avgHr || null,
+        maxHr: a.maxHr || null,
+        gehoertZuZirkel,
+        notiz: typ === 'sonstiges_garmin' ? a.garminType : '',
+      };
+      entry.act_kcal_calc = calcActivityKcal(entry); // dieselbe Formel wie für Google-Fit-Einträge (Entscheidung 5); gibt 0 bei gehoertZuZirkel
+      return entry;
+    }
+
+    // Einzige Stelle, die trainingEntries (echte Firestore-Dokumente, unverändert) mit den live aus
+    // Garmin gelesenen Aktivitäten zusammenführt: + sichtbare (nicht ausgeblendete) Garmin-Aktivitäten
+    // als virtuelle Einträge, − die dazu passenden gfit_-Einträge (±5 Min.). Ein ausgeblendetes Garmin-
+    // Gegenstück blendet den gfit-Eintrag NICHT wieder ein, beide bleiben aus (Korrektur 3, 01.11.2026).
+    // Alle Lese-/Render-Pfade nutzen diese Funktion statt trainingEntries direkt.
+    function getEffectiveTrainingEntries() {
+      const suppressedGfitIds = new Set();
+      const liveEntries = [];
+      garminActivitiesAll.forEach(a => {
+        const datum = garminActivityDateKey(a);
+        if (!datum) return;
+        const matchedGfit = findMatchingGfitEntry(a, datum);
+        if (matchedGfit) suppressedGfitIds.add(matchedGfit.id);
+        if (garminHiddenIds.has(String(a.id))) return; // ausgeblendet: zählt nirgends mehr
+        const entry = garminActivityToEntry(a);
+        if (entry) liveEntries.push(entry);
+      });
+      return trainingEntries.filter(e => !suppressedGfitIds.has(e.id)).concat(liveEntries);
+    }
+    window.getEffectiveTrainingEntries = getEffectiveTrainingEntries;
+
+    function findMatchingGfitEntry(activity, datum) {
+      const activityMs = garminActivityStartMs(activity);
+      if (activityMs === null) return null;
+      let best = null, bestDiff = Infinity;
+      for (const e of trainingEntries) {
+        if (e.datum !== datum || !e.garminTime) continue;
+        const gfitMs = gfitEntryGarminStartMs(e);
+        if (gfitMs === null) continue;
+        const diff = Math.abs(gfitMs - activityMs);
+        if (diff <= GARMIN_MATCH_TOLERANCE_MS && diff < bestDiff) { best = e; bestDiff = diff; }
+      }
+      return best;
+    }
+
+    // Welche Quelle liefert die Tagesschritte UND welche Aktivitäten werden davon abgezogen – nie
+    // gemischt (Korrektur 2, 01.11.2026). Vor garminActivityCutoff immer Google Fit, sonst Garmin
+    // sobald garminDaily echte Schritte hat, sonst Google-Fit-Fallback.
+    function getStepsSourceForDate(date) {
+      if (garminActivityCutoff && date < garminActivityCutoff) return 'googlefit';
+      const garminSteps = garminDailyByDate[date]?.steps || 0;
+      return garminSteps > 0 ? 'garmin' : 'googlefit';
+    }
+    window.getStepsSourceForDate = getStepsSourceForDate;
+
+    // Rohe Tagesschritte aus genau der Quelle, die getStepsSourceForDate für das Datum bestimmt hat.
+    function getRawStepsForDate(date, dayLog) {
+      return getStepsSourceForDate(date) === 'garmin'
+        ? (garminDailyByDate[date]?.steps || 0)
+        : (dayLog?.steps || 0);
+    }
+
+    // Aktuelle Stunde (0-23) in Europe/Berlin, für die Banner-Zeitfenster unten.
+    function berlinHour(now) {
+      return parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', hour12: false }).format(now), 10);
+    }
+
+    // Letzter bekannter garminLastSync-Wert: heutiges Dokument, sonst das jüngste vorherige
+    // (Mitternachtsfall - "leer" ist weder "alles gut" noch automatisch "Problem", siehe Teil 2f/Korrektur 1).
+    function latestKnownGarminLastSync(todayStr) {
+      if (garminDailyByDate[todayStr]?.garminLastSync) return garminDailyByDate[todayStr].garminLastSync;
+      const priorDates = Object.keys(garminDailyByDate).filter(d => d < todayStr).sort();
+      const prev = priorDates[priorDates.length - 1];
+      return prev ? garminDailyByDate[prev]?.garminLastSync : null;
+    }
+
+    // Warnbanner-Entscheidung (Teil 2f, verschärft durch Korrektur 1, 01.11.2026):
+    // - garminHealth.ok === false UND einziger Grund "garminDaily/{heute} existiert nicht":
+    //   zwischen 00:00-08:00 normal (kein Banner), ab 08:00 gilt das fehlende Tagesdokument als Problem.
+    // - garminHealth.ok === false aus jedem ANDEREN Grund: Banner zu jeder Uhrzeit.
+    // - sonst (ok !== false): zwischen 08:00-22:00 Banner, wenn der letzte bekannte garminLastSync
+    //   älter als 3 Std. ist.
+    // nowOverride nur für Tests (siehe Teil 3) - im Betrieb immer new Date().
+    function garminStaleBannerInfo(nowOverride) {
+      const now = nowOverride || new Date();
+      const hour = berlinHour(now);
+      const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+
+      if (garminHealth && garminHealth.ok === false) {
+        const onlyMissingTodayDoc = garminHealth.reason === `garminDaily/${todayStr} existiert nicht`;
+        if (onlyMissingTodayDoc) {
+          if (hour < 8) return null;
+          return { text: 'Noch keine Garmin-Tagesdaten für heute – Garmin Connect auf dem Handy öffnen.' };
+        }
+        return { text: `Garmin-Sync gestört (${garminHealth.reason || 'unbekannter Grund'}) – Garmin Connect auf dem Handy öffnen.` };
+      }
+
+      if (hour >= 8 && hour < 22) {
+        const lastSync = latestKnownGarminLastSync(todayStr);
+        if (lastSync) {
+          const ageMs = now.getTime() - new Date(lastSync).getTime();
+          if (ageMs > 3 * 3600 * 1000) {
+            const hoursAgo = Math.floor(ageMs / 3600000);
+            return { text: `Uhr seit ${hoursAgo} Std. nicht synchronisiert – Garmin Connect auf dem Handy öffnen.` };
+          }
+        }
+      }
+      return null;
+    }
+
+    function renderGarminStaleNotice() {
+      const el = document.getElementById('garmin-stale-notice');
+      if (!el) return;
+      const info = garminStaleBannerInfo();
+      if (!info) { el.style.display = 'none'; return; }
+      el.style.display = 'flex';
+      el.textContent = info.text;
+    }
+
     // Weekly stats state
     let weeklyStats = {};
 
@@ -2522,6 +2773,9 @@
           cacheGet('ouraDaily'),
           cacheGet('ouraStatus'),
         ]);
+        const [cachedGarminDaily, cachedGarminActivities, cachedGarminHealth, cachedGarminHidden] = await Promise.all([
+          cacheGet('garminDaily'), cacheGet('garminActivities'), cacheGet('garminHealth'), cacheGet('garminHidden'),
+        ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings, cachedSubjectiveStatusHistory] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings'), cacheGet('subjectiveStatusHistory')]);
         // Tagescheck für heute synchron mitladen, damit die Karte im SELBEN ersten Render wie der Rest
@@ -2567,6 +2821,21 @@
           window.ouraDaily = ouraDaily;
         }
         if (cachedOuraStatus) { ouraStatus = cachedOuraStatus; window.ouraStatus = ouraStatus; }
+        if (cachedGarminDaily?.length) {
+          garminDailyByDate = {};
+          for (const d of cachedGarminDaily) { if (d.date) garminDailyByDate[d.date] = d; }
+          window.garminDailyByDate = garminDailyByDate;
+        }
+        if (cachedGarminActivities?.length) {
+          garminActivitiesAll = cachedGarminActivities;
+          window.garminActivitiesAll = garminActivitiesAll;
+          garminActivityCutoff = computeGarminActivityCutoff(garminActivitiesAll);
+        }
+        if (cachedGarminHealth) { garminHealth = cachedGarminHealth; window.garminHealth = garminHealth; }
+        if (Array.isArray(cachedGarminHidden)) {
+          garminHiddenIds = new Set(cachedGarminHidden);
+          window.garminHiddenIds = garminHiddenIds;
+        }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -2588,6 +2857,10 @@
         cachePut('trainingplan_from', trainingPlanFrom),
         cachePut('ouraDaily', Object.values(ouraDaily)),
         cachePut('ouraStatus', ouraStatus),
+        cachePut('garminDaily', Object.entries(garminDailyByDate).map(([date, v]) => ({ date, ...v }))),
+        cachePut('garminActivities', garminActivitiesAll),
+        cachePut('garminHealth', garminHealth),
+        cachePut('garminHidden', [...garminHiddenIds]),
         cachePut('customTrainingTypes', customTrainingTypes),
         cachePut('intervalTemplates', intervalTemplates),
         cachePut('exerciseSettings', exerciseSettings),
@@ -2774,6 +3047,11 @@
           await refreshOuraDaily();
         } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
 
+        // Load Garmin (Phase 1b, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
+        try {
+          await refreshGarminData();
+        } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
+
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
         // bereits try/catch-geschützt (fällt auf settings/trainingplan zurück), kann nicht mehr werfen
         await loadCurrentTrainingPlan();
@@ -2814,14 +3092,14 @@
     const ACTIVITY_FACTOR = 1.375;
 
     // Einzige Auflösung von Alltagsschritten pro Datum für das Kalorienziel:
-    // 1. Garmin (tageslog.steps > 0) hat immer Vorrang.
-    // 2. Fallback: Oura (oura_daily/{date}.steps), nur wenn kein Garmin-Wert vorliegt UND das Datum
-    //    vor heute liegt (Berlin). Oura liefert den Tageswert erst nach Mitternacht, daher nie für heute.
-    // Garmin und Oura werden nie addiert. Die Oura-Werte und der Platzhalter sind ausschließlich für
-    // das Kalorienziel – Anzeigen nutzen stattdessen getDisplaySchritteForDate (nur echte Garmin-Werte).
+    // 1. getRawStepsForDate (Garmin direkt, sonst Google Fit – nie gemischt, siehe getStepsSourceForDate) hat Vorrang.
+    // 2. Fallback: Oura (oura_daily/{date}.steps), nur wenn weder Garmin noch Google Fit einen Wert
+    //    liefern UND das Datum vor heute liegt (Berlin). Oura liefert den Tageswert erst nach Mitternacht, daher nie für heute.
+    // Garmin/Google Fit und Oura werden nie addiert. Die Oura-Werte und der Platzhalter sind ausschließlich für
+    // das Kalorienziel – Anzeigen nutzen stattdessen getDisplaySchritteForDate (nur echte Garmin-/Google-Fit-Werte).
     function getKcalStepsForDate(date, dayLog) {
-      const garminSteps = dayLog?.steps || 0;
-      if (garminSteps > 0) return garminSteps;
+      const raw = getRawStepsForDate(date, dayLog);
+      if (raw > 0) return raw;
       if (date < berlinTodayStr()) {
         const ouraSteps = ouraDaily[date]?.steps || 0;
         if (ouraSteps > 0) return ouraSteps;
@@ -2852,14 +3130,22 @@
       return daySteps <= 0 && date === berlinTodayStr();
     }
 
-    // Aktivitäts-Schritte eines Tages: Summe aller Trainingseinträge (ohne Tageslog/Phonesteps) mit
-    // Schritten, die von den Gesamtschritten abgezogen werden (Laufen, Gehen, Wandern, etc. – siehe
-    // calcHistoricalKcalGoal). Einzige Stelle für diese Abzugsliste, genutzt von Kalorienziel UND Anzeigen.
+    // Aktivitäts-Schritte eines Tages, die von den Gesamtschritten abgezogen werden (Laufen, Gehen,
+    // Wandern, etc. – siehe calcHistoricalKcalGoal). Einzige Stelle für diese Abzugsliste, genutzt von
+    // Kalorienziel UND Anzeigen. Quelle richtet sich NACH getStepsSourceForDate (nie gemischt, Korrektur
+    // 2, 01.11.2026): bei 'garmin' nur sichtbare (nicht ausgeblendete) Garmin-Aktivitäten dieses Tages,
+    // bei 'googlefit' wie bisher die Trainingseinträge (ohne Tageslog/Phonesteps) mit Schritten.
     function getActivityStepsForDate(date) {
+      if (getStepsSourceForDate(date) === 'garmin') {
+        return garminActivitiesAll
+          .filter(a => garminActivityDateKey(a) === date && !garminHiddenIds.has(String(a.id)))
+          .reduce((sum, a) => sum + (a.steps || 0), 0);
+      }
       return trainingEntries
         .filter(e => e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && (e.schritte || 0) > 0)
         .reduce((sum, e) => sum + (e.schritte || 0), 0);
     }
+    window.getActivityStepsForDate = getActivityStepsForDate;
 
     // Alltagsschritte eines Tages = genau der Wert, den calcHistoricalKcalGoal für die Schritt-Kalorien
     // verwendet: Gesamtschritte (Garmin, sonst Oura-Fallback, heute ggf. Platzhalter) minus Aktivitätsschritte.
@@ -2873,15 +3159,16 @@
     window.getAlltagsschritteForDate = getAlltagsschritteForDate;
 
     // Alltagsschritte NUR für Anzeigen (Dashboard, Tagesansicht, Charts/Kacheln, Analyse-Tab-Export):
-    // ausschließlich echte Garmin-Tagesschritte, ohne Oura-Fallback und ohne den Platzhalter für den
-    // laufenden Tag (anders als getAlltagsschritteForDate, das Kalorienziel nutzt beides weiter).
-    // null, solange für den Tag keine Garmin-Tagesschritte vorliegen (z.B. heute vor dem Sync) – damit
-    // zeigt die Anzeige nie den Platzhalter oder einen Oura-Wert als "Garmin"-Schrittzahl an.
+    // ausschließlich echte Garmin- oder Google-Fit-Tagesschritte (getRawStepsForDate), ohne Oura-
+    // Fallback und ohne den Platzhalter für den laufenden Tag (anders als getAlltagsschritteForDate,
+    // das Kalorienziel nutzt beides weiter). null, solange für den Tag keine echten Tagesschritte
+    // vorliegen (z.B. heute vor dem Sync) – damit zeigt die Anzeige nie den Platzhalter oder einen
+    // Oura-Wert als Schrittzahl an.
     function getDisplaySchritteForDate(date) {
       const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
-      const garminSteps = dayLog?.steps || 0;
-      if (garminSteps <= 0) return null;
-      return Math.max(0, garminSteps - getActivityStepsForDate(date));
+      const raw = getRawStepsForDate(date, dayLog);
+      if (raw <= 0) return null;
+      return Math.max(0, raw - getActivityStepsForDate(date));
     }
     window.getDisplaySchritteForDate = getDisplaySchritteForDate;
 
@@ -2906,7 +3193,7 @@
 
         const base = Math.round(bmr * ACTIVITY_FACTOR);
 
-        const actList = allTrainingEntries || trainingEntries;
+        const actList = allTrainingEntries || getEffectiveTrainingEntries();
         const dayActivity = actList
           .filter(e => e.datum === date)
           .reduce((sum, e) => sum + activityKcalForGoal(e, actList), 0);
@@ -2968,16 +3255,17 @@
         }
         const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
         if (dayLog?.weight) weights.push(dayLog.weight);
-        if (dayLog?.steps) steps_total += parseInt(String(dayLog.steps).replace(/\D/g, '')) || 0;
+        const rawSteps = getRawStepsForDate(wd, dayLog);
+        if (rawSteps > 0) steps_total += rawSteps;
 
-        trainingEntries.filter(e => e.datum === wd && countsAsActivity(e)).forEach(e => {
+        getEffectiveTrainingEntries().filter(e => e.datum === wd && countsAsActivity(e)).forEach(e => {
           act_kcal_calc += calcActivityKcal(e);
           act_kcal_garmin += e.kalorien || 0;
           if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
           trainings++;
-          // Alle Aktivitätsschritte abziehen
-          steps_activity += parseInt(String(e.schritte || '0').replace(/\D/g, '')) || 0;
         });
+        // Aktivitätsschritte konsistent aus derselben Quelle wie rawSteps (nie gemischt, Korrektur 2, 01.11.2026)
+        steps_activity += getActivityStepsForDate(wd);
       });
 
       const stat = {
@@ -3002,6 +3290,7 @@
       const activeTab = document.querySelector('.tab.active');
       if (!activeTab) showTabPanel(START_TAB);
       renderFoodLog(); // ruft renderDailyCheckCard() selbst als Erstes auf – im selben ersten Render, kein Nachrücken
+      renderGarminStaleNotice();
       renderDataStats();
       renderFoodDB();
       renderRecipes();
@@ -3126,15 +3415,19 @@
         days[date].kcal_goal = calcHistoricalKcalGoal(date).total || 0;
       });
 
-      // Day logs (weight + steps)
+      // Day logs (weight + Tagesschritte, Garmin direkt oder Google Fit – nie gemischt, s. getRawStepsForDate)
       trainingEntries.filter(e => e.typ === 'tageslog').forEach(e => {
         if (!days[e.datum]) return;
         if (e.weight) days[e.datum].weight = e.weight;
-        if (e.steps) days[e.datum].steps_total = parseInt(String(e.steps).replace(/\D/g, '')) || 0;
+      });
+      Object.keys(days).forEach(date => {
+        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+        const rawSteps = getRawStepsForDate(date, dayLog);
+        if (rawSteps > 0) days[date].steps_total = rawSteps;
       });
 
-      // Garmin training
-      trainingEntries.filter(e => countsAsActivity(e)).forEach(e => {
+      // Training (inkl. live Garmin-Aktivitäten, exkl. ausgeblendete/durch Garmin ersetzte gfit-Einträge)
+      getEffectiveTrainingEntries().filter(e => countsAsActivity(e)).forEach(e => {
         if (!days[e.datum]) return;
         const calcKcal = calcActivityKcal(e);
         days[e.datum].act_kcal_calc += calcKcal;
@@ -4736,7 +5029,7 @@
       kraft: 'Kraft', yoga: 'Yoga', cardio: 'Cardio',
       pullups: 'Pull-ups', pushups: 'Push-ups',
       lunges: 'Lunges', terraband_knie: 'Terraband Knie',
-      zirkel: 'Zirkel'
+      zirkel: 'Zirkel', sonstiges_garmin: 'Sonstiges'
     };
 
     // ── Aktivitätskalorien-Berechnung ────────────────────────────────────────
@@ -4763,6 +5056,9 @@
     }
 
     function calcActivityKcal(entry) {
+      // Kraft von der Uhr, die am selben Tag zu einem Zirkel gehört (Entscheidung 4, 01.11.2026):
+      // Kalorien kommen ausschließlich aus dem Zirkel-Eintrag, nicht zusätzlich von hier.
+      if (entry.gehoertZuZirkel) return 0;
       // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
       if (entry.source === 'plan') return calcPlanActivityKcal(entry);
 
@@ -5087,15 +5383,15 @@
       if (activityContainer) {
         const steps = getDisplaySchritteForDate(currentDate);
 
-        const dayActivities = trainingEntries.filter(e =>
+        const dayActivities = getEffectiveTrainingEntries().filter(e =>
           e.datum === currentDate && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
         ).sort((a, b) => (a.garminTime || '').localeCompare(b.garminTime || ''));
 
         let html = '<ul class="fo-list">';
 
-        // Schritte
+        // Schritte (Quelle sichtbar machen, Teil 2a)
         if (steps > 0) {
-          const sourceText = 'Garmin';
+          const sourceText = getStepsSourceForDate(currentDate) === 'garmin' ? 'Garmin' : 'Google Fit';
           html += `<li><div class="fo-row">
             <span class="fo-row__icon">${foIcon('steps')}</span>
             <div class="fo-row__main">
@@ -5129,7 +5425,8 @@
           // entryStepsLabel nur innerhalb von autoMeta, das a.sets (fast immer gesetzt) nie erreichte
           // (Bugreport 2026-10-17: Übersicht zeigte deshalb nie Schritte für Garmin-Aktivitäten).
           const baseMeta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
-          const meta = [baseMeta, entryStepsLabel(a.schritte)].filter(Boolean).join(' · ');
+          const meta = [baseMeta, entryStepsLabel(a.schritte), a.garminLive ? garminHrLabel(a) : '', a.gehoertZuZirkel ? 'gehört zum Zirkel' : '']
+            .filter(Boolean).join(' · ');
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
           return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
             ${!child && emoji ? `<span class="fo-row__icon">${emoji}</span>` : ''}
@@ -7314,11 +7611,25 @@
       }
     };
     
+    // UI-Toggle "Ausgeblendete anzeigen" (Korrektur 3, 01.11.2026) – zeigt zusätzlich die ausgeblendeten
+    // Garmin-Aktivitäten (gedimmt, nur "Wiederherstellen"), zählt aber nirgends mit.
+    window.toggleShowHiddenGarmin = function() {
+      showHiddenGarmin = !showHiddenGarmin;
+      const btn = document.getElementById('garmin-hidden-toggle-btn');
+      if (btn) btn.textContent = showHiddenGarmin ? 'Ausgeblendete ausblenden' : 'Ausgeblendete anzeigen';
+      renderTrainingHistory();
+    };
+
     function renderTrainingHistory() {
       const container = document.getElementById('training-history');
       if (!container) return;
-      
-      const sorted = [...trainingEntries]
+
+      const hiddenEntries = showHiddenGarmin
+        ? garminActivitiesAll.filter(a => garminHiddenIds.has(String(a.id)))
+            .map(a => ({ ...garminActivityToEntry(a), garminHiddenEntry: true }))
+        : [];
+
+      const sorted = [...getEffectiveTrainingEntries(), ...hiddenEntries]
         .filter(e => e.typ !== 'tageslog')
         .sort((a, b) => {
           const aKey = (a.datum || '') + 'T' + (a.garminTime || a.timestamp?.split('T')[1] || '00:00:00');
@@ -7340,7 +7651,7 @@
         rad: typIcon('rad') + ' Rad', rad_ebike: typIcon('rad_ebike') + ' E-Bike', rad_indoor: typIcon('rad_indoor') + ' Rad Indoor',
         schwimmen: typIcon('schwimmen') + ' Schwimmen', kraft: typIcon('kraft') + ' Krafttraining',
         yoga: typIcon('yoga') + ' Yoga', crosstraining: typIcon('crosstraining') + ' Crosstraining', cardio: typIcon('cardio') + ' Cardio',
-        zirkel: typIcon('zirkel') + ' Zirkel'
+        zirkel: typIcon('zirkel') + ' Zirkel', sonstiges_garmin: 'Sonstiges'
       };
       container.innerHTML = sorted.map((e, idx) => {
         // Support old format (type: 'push'/'pull') and new format (typ: 'pushups'/'pullups')
@@ -7376,8 +7687,13 @@
         // ältere Zirkel-Einträge ohne details zeigen nur die normale Zeile, ohne Fehler.
         const isZirkelEntry = typ === 'zirkel' && Array.isArray(e.details) && e.details.length > 0;
         const zirkelOpen = isZirkelEntry && getHistoryZirkelState(e.id).open;
+        // Garmin-Live-Aktivität (Phase 1b, 01.11.2026): kein echtes entries/-Dokument, daher nicht
+        // bearbeitbar und über "Ausblenden" statt "Löschen" entfernbar (garminHidden, Korrektur 3).
+        const isGarminLive = !!e.garminLive;
+        const hrLabel = isGarminLive ? garminHrLabel(e) : '';
+        const zirkelNote = e.gehoertZuZirkel ? 'gehört zum Zirkel' : '';
         return `
-        <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}${isZirkelEntry ? 'cursor:pointer;' : ''}"${isZirkelEntry ? ` onclick="toggleHistoryZirkel('${e.id}')"` : ''}>
+        <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}${isZirkelEntry ? 'cursor:pointer;' : ''}${e.garminHiddenEntry ? 'opacity:0.5;' : ''}"${isZirkelEntry ? ` onclick="toggleHistoryZirkel('${e.id}')"` : ''}>
           ${isZirkelEntry ? `<span class="fo-row__icon">${foIcon(zirkelOpen ? 'chevD' : 'chevR', 'fo-i--sm')}</span>` : ''}
           <div class="fo-row__main">
             <div class="fo-row__title">${timeDisplay}${title}${sourceBadge}</div>
@@ -7386,18 +7702,55 @@
               ${setsTotal > 0 ? `<span style="color:var(--fo-primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
               ${entryStepsLabel(e.schritte) ? `<span style="color:var(--fo-text-3);margin-left:6px;">${entryStepsLabel(e.schritte)}</span>` : ''}
+              ${hrLabel ? `<span style="color:var(--fo-text-3);margin-left:6px;">${hrLabel}</span>` : ''}
+              ${zirkelNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${zirkelNote}</span>` : ''}
             </div>
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) : ''}
           </div>
           <div class="fo-row__actions" onclick="event.stopPropagation()">
-            ${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
-            <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>
+            ${e.garminHiddenEntry ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="unhideGarminActivity('${e.garminActivityId}')">Wiederherstellen</button>`
+              : isGarminLive ? `<button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="hideGarminActivity('${e.garminActivityId}')">Ausblenden</button>`
+              : `${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
+                 <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>`}
           </div>
         </div>
       `}).join('');
       renderTrainingPlan();
     }
+
+    // Garmin-Aktivität ausblenden/wiederherstellen (Korrektur 3, 01.11.2026): einzige neue Schreibquelle
+    // der App für Garmin-Daten, bewusste Ausnahme von Harter Regel 2 dieses Auftrags. Schreibt/löscht
+    // ausschließlich users/{uid}/garminHidden/{activityId} – nie garminDaily/garminActivities selbst.
+    window.hideGarminActivity = async function(activityId) {
+      if (!await showConfirm('Garmin-Aktivität ausblenden?', 'Sie zählt danach nirgends mehr (Kalorien, Schritte, Listen). Über "Ausgeblendete anzeigen" wiederherstellbar.')) return;
+      try {
+        await setDoc(doc(db, 'users', userId, 'garminHidden', String(activityId)), { hiddenAt: new Date().toISOString() });
+        garminHiddenIds.add(String(activityId));
+        window.garminHiddenIds = garminHiddenIds;
+        renderTrainingHistory();
+        renderFoodLog();
+        renderDataStats();
+        showToast('Ausgeblendet', 'ok');
+      } catch (err) {
+        console.error('hideGarminActivity error:', err);
+        showToast('Ausblenden fehlgeschlagen', 'bad');
+      }
+    };
+    window.unhideGarminActivity = async function(activityId) {
+      try {
+        await deleteDoc(doc(db, 'users', userId, 'garminHidden', String(activityId)));
+        garminHiddenIds.delete(String(activityId));
+        window.garminHiddenIds = garminHiddenIds;
+        renderTrainingHistory();
+        renderFoodLog();
+        renderDataStats();
+        showToast('Wiederhergestellt', 'ok');
+      } catch (err) {
+        console.error('unhideGarminActivity error:', err);
+        showToast('Wiederherstellen fehlgeschlagen', 'bad');
+      }
+    };
     
 
     window.editTraining = function(id) {
@@ -7823,8 +8176,8 @@
       });
 
       // Tageslog: Gewicht, Alltagsschritte & Aktivitätsschritte, letzte analysisWindowDays Tage.
-      // Alltagsschritte NUR aus echten Garmin-Tagesschritten (getDisplaySchritteForDate, wie alle
-      // anderen Anzeigen) – '-' statt Platzhalter/Oura-Wert, solange für den Tag keine Garmin-
+      // Alltagsschritte NUR aus echten Garmin- oder Google-Fit-Tagesschritten (getDisplaySchritteForDate,
+      // wie alle anderen Anzeigen) – '-' statt Platzhalter/Oura-Wert, solange für den Tag keine echten
       // Tagesschritte vorliegen. Aktivitätsschritte wie gewohnt (getActivityStepsForDate).
       const dayLogRows = trainingEntries
         .filter(e => e.typ === 'tageslog' && e.datum >= cutoffNutritionStr)

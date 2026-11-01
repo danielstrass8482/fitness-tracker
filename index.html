@@ -2353,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-01 08:15';
+    const APP_BUILD = '2026-11-01 13:30';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2388,6 +2388,7 @@
     let garminActivitiesAll = [];  // [{ id, mappedTyp, garminType, startLocal, steps, durationSec, distanceM, avgHr, maxHr, garminKcal }]
     let garminHealth = null;       // { ok, reason, checkedAt, staleSince } aus integrations/garminHealth (nur diese 4 Felder)
     let garminHiddenIds = new Set(); // activityId-Set aus garminHidden/{activityId} (Korrektur 3, 01.11.2026)
+    let garminUnlinkedIds = new Set(); // activityId-Set aus garminLinks/{activityId} mit unlinked:true (Zirkel-Zusammenführung, 01.11.2026) - "Zuordnung lösen"
     let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
     let showHiddenGarmin = false;  // UI-Toggle "Ausgeblendete anzeigen" im Training-Tab
 
@@ -2402,6 +2403,7 @@
     window.garminActivitiesAll = garminActivitiesAll;
     window.garminHealth = garminHealth;
     window.garminHiddenIds = garminHiddenIds;
+    window.garminUnlinkedIds = garminUnlinkedIds;
 
     // ── Icons (Sprite im <body>) ─────────────────────────────────────────────
     // Dekoratives Sprite-Icon als HTML; Texte stehen immer daneben (Icon-only-Buttons haben aria-label)
@@ -2444,6 +2446,7 @@
     const userGarminDailyCol = () => collection(db, 'users', userId, 'garminDaily'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminActivitiesCol = () => collection(db, 'users', userId, 'garminActivities'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminHiddenCol = () => collection(db, 'users', userId, 'garminHidden'); // einzige neue Schreibquelle der App für Garmin-Daten (Korrektur 3, 01.11.2026): {activityId}: {hiddenAt}
+    const userGarminLinksCol = () => collection(db, 'users', userId, 'garminLinks'); // zweite Schreibquelle (Zirkel-Zusammenführung, 01.11.2026): {activityId}: {unlinked:true, at} für "Zuordnung lösen"
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
     // zwischen 00:00 und 02:00 Berlin noch den Vortag.
@@ -2529,6 +2532,12 @@
       hiddenSnap.forEach(d => nextHidden.add(d.id));
       garminHiddenIds = nextHidden;
       window.garminHiddenIds = garminHiddenIds;
+
+      const linksSnap = await getDocs(userGarminLinksCol());
+      const nextUnlinked = new Set();
+      linksSnap.forEach(d => { if (d.data()?.unlinked) nextUnlinked.add(d.id); });
+      garminUnlinkedIds = nextUnlinked;
+      window.garminUnlinkedIds = garminUnlinkedIds;
     }
 
     // Erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität. Vor diesem Datum bleibt ein Tag
@@ -2580,14 +2589,16 @@
     // Funktionen (isAutoActivity/countsAsActivity/calcActivityKcal erkennen source:'garmin' bereits).
     // garminLive markiert: kein echtes entries/-Dokument (nicht editierbar, "Ausblenden" statt "Löschen").
     // strength_training ist serverseitig "unmapped" (ingestGarmin kennt die Zirkel-Regel nicht) – hier
-    // auf 'kraft' umgebogen (Entscheidung 4); andere unmapped Typen -> 'sonstiges_garmin' (sichtbar als
-    // "Sonstiges" mit dem rohen garminType als Notiz, nichts wird stillschweigend verworfen).
-    function garminActivityToEntry(a) {
+    // auf 'kraft' umgebogen; andere unmapped Typen -> 'sonstiges_garmin' (sichtbar als "Sonstiges" mit
+    // dem rohen garminType als Notiz, nichts wird stillschweigend verworfen). unclear markiert eine
+    // strength_training-Aktivität, die trotz mehrerer Kandidaten keinem Zirkel eindeutig zugeordnet
+    // werden konnte (Entscheidung 5, Zirkel-Zusammenführung 01.11.2026) - bleibt eigene Zeile, zählt
+    // normal (wie jede andere Garmin-Kraftaktivität ohne Zirkel-Bezug).
+    function garminActivityToEntry(a, unclear = false) {
       const datum = garminActivityDateKey(a);
       if (!datum) return null;
       const isStrength = a.garminType === 'strength_training';
       const typ = isStrength ? 'kraft' : (a.mappedTyp && a.mappedTyp !== 'unmapped') ? a.mappedTyp : 'sonstiges_garmin';
-      const gehoertZuZirkel = isStrength && trainingEntries.some(e => e.typ === 'zirkel' && e.datum === datum);
       const entry = {
         id: 'garmin_' + a.id,
         garminLive: true,
@@ -2601,31 +2612,143 @@
         source: 'garmin',
         avgHr: a.avgHr || null,
         maxHr: a.maxHr || null,
-        gehoertZuZirkel,
+        ...(isStrength && unclear ? { zuordnungUnklar: true } : {}),
         notiz: typ === 'sonstiges_garmin' ? a.garminType : '',
       };
-      entry.act_kcal_calc = calcActivityKcal(entry); // dieselbe Formel wie für Google-Fit-Einträge (Entscheidung 5); gibt 0 bei gehoertZuZirkel
+      entry.act_kcal_calc = calcActivityKcal(entry);
       return entry;
+    }
+
+    // "2026-11-01T19:17:55" (lokale Wanduhrzeit, siehe saveZirkelTimer timestamp) -> ms. Wie
+    // gfitEntryGarminStartMs/garminActivityStartMs: new Date(y,m,d,...) statt Date.parse auf dem
+    // ganzen String, da Date.parse einen String ohne Zeitzone browserabhängig behandeln könnte.
+    function zirkelStartMs(entry) {
+      if (!entry.timestamp) return null;
+      const [datePart, timePart] = entry.timestamp.split('T');
+      if (!datePart || !timePart) return null;
+      const [y, mo, d] = datePart.split('-').map(Number);
+      const [hh, mm, ss] = timePart.split(':').map(Number);
+      if (!y || !mo || !d || Number.isNaN(hh) || Number.isNaN(mm)) return null;
+      return new Date(y, mo - 1, d, hh, mm, ss || 0).getTime();
+    }
+
+    // Zuordnung Garmin-Kraftaktivität <-> Zirkel-Eintrag für ein Datum (Zirkel-Zusammenführung,
+    // 01.11.2026, Entscheidungen 1-5). Eindeutiger Fall (genau 1 Zirkel + 1 strength_training-Aktivität
+    // am Tag) wird immer verknüpft, unabhängig vom Zeitabstand. Bei mehreren Kandidaten auf einer
+    // Seite: Zuordnung nach größter zeitlicher Überschneidung, bei Gleichstand/keiner Überschneidung
+    // nach kleinstem Startzeitabstand (greedy, bester Kandidat zuerst) - ein Kandidat mit einem exakt
+    // gleichwertigen Konkurrenten wird NICHT geraten, sondern bleibt unclear. Manuell gelöste
+    // Zuordnungen (garminUnlinkedIds) werden nie neu vorgeschlagen, ausgeblendete Aktivitäten
+    // (garminHiddenIds) nehmen an der Zuordnung gar nicht teil.
+    function computeZirkelGarminLinksForDate(datum) {
+      const links = new Map();      // activityId (String) -> Zirkel-Eintrag
+      const unclearIds = new Set(); // activityId (String)
+      const zirkelList = trainingEntries.filter(e => e.typ === 'zirkel' && e.datum === datum);
+      const actList = garminActivitiesAll.filter(a =>
+        a.garminType === 'strength_training' &&
+        garminActivityDateKey(a) === datum &&
+        !garminHiddenIds.has(String(a.id)) &&
+        !garminUnlinkedIds.has(String(a.id))
+      );
+      if (!zirkelList.length || !actList.length) return { links, unclearIds };
+
+      if (zirkelList.length === 1 && actList.length === 1) {
+        links.set(String(actList[0].id), zirkelList[0]);
+        return { links, unclearIds };
+      }
+
+      function zirkelRange(e) {
+        const startMs = zirkelStartMs(e);
+        if (startMs === null) return null;
+        const durMs = parseHours(e.zeit || '') * 3600000;
+        return [startMs, startMs + durMs];
+      }
+      function actRange(a) {
+        const startMs = garminActivityStartMs(a);
+        if (startMs === null) return null;
+        return [startMs, startMs + (a.durationSec || 0) * 1000];
+      }
+
+      const pairs = [];
+      for (const z of zirkelList) {
+        const zr = zirkelRange(z);
+        if (!zr) continue;
+        for (const a of actList) {
+          const ar = actRange(a);
+          if (!ar) continue;
+          const overlap = Math.max(0, Math.min(zr[1], ar[1]) - Math.max(zr[0], ar[0]));
+          const dist = Math.abs(zr[0] - ar[0]);
+          pairs.push({ z, a, overlap, dist });
+        }
+      }
+      pairs.sort((p1, p2) => (p2.overlap - p1.overlap) || (p1.dist - p2.dist));
+
+      const usedZ = new Set(), usedA = new Set();
+      for (const p of pairs) {
+        const aKey = String(p.a.id);
+        if (usedZ.has(p.z.id) || usedA.has(aKey)) continue;
+        const rival = pairs.find(q => q !== p && !usedZ.has(q.z.id) && !usedA.has(String(q.a.id)) &&
+          (q.z.id === p.z.id || String(q.a.id) === aKey) && q.overlap === p.overlap && q.dist === p.dist);
+        usedZ.add(p.z.id); usedA.add(aKey);
+        if (rival) unclearIds.add(aKey); else links.set(aKey, p.z);
+      }
+      actList.forEach(a => { const k = String(a.id); if (!links.has(k) && !usedA.has(k)) unclearIds.add(k); });
+      return { links, unclearIds };
     }
 
     // Einzige Stelle, die trainingEntries (echte Firestore-Dokumente, unverändert) mit den live aus
     // Garmin gelesenen Aktivitäten zusammenführt: + sichtbare (nicht ausgeblendete) Garmin-Aktivitäten
-    // als virtuelle Einträge, − die dazu passenden gfit_-Einträge (±5 Min.). Ein ausgeblendetes Garmin-
-    // Gegenstück blendet den gfit-Eintrag NICHT wieder ein, beide bleiben aus (Korrektur 3, 01.11.2026).
-    // Alle Lese-/Render-Pfade nutzen diese Funktion statt trainingEntries direkt.
+    // als virtuelle Einträge, − die dazu passenden gfit_-Einträge (±5 Min.), − strength_training-
+    // Aktivitäten, die einem Zirkel zugeordnet sind (deren Daten hängen stattdessen als linkedGarmin
+    // am jeweiligen Zirkel-Eintrag, als neues Objekt - der Original-Eintrag in trainingEntries bleibt
+    // unverändert, siehe Harte Regel 3). Ein ausgeblendetes Garmin-Gegenstück blendet den gfit-Eintrag
+    // NICHT wieder ein, beide bleiben aus (Korrektur 3, 01.11.2026). Alle Lese-/Render-Pfade (Übersicht,
+    // Trainingsliste, Tagesbilanz, Wochenansicht) nutzen diese Funktion statt trainingEntries direkt.
     function getEffectiveTrainingEntries() {
       const suppressedGfitIds = new Set();
+      const suppressedGarminActivityIds = new Set();
+      const unclearActivityIds = new Set();
+      const zirkelLinkByEntryId = new Map(); // zirkelEntry.id -> { activityId, avgHr, maxHr, zeit, schritte }
+
+      const strengthDates = new Set();
+      garminActivitiesAll.forEach(a => { if (a.garminType === 'strength_training') { const d = garminActivityDateKey(a); if (d) strengthDates.add(d); } });
+      strengthDates.forEach(datum => {
+        const { links, unclearIds } = computeZirkelGarminLinksForDate(datum);
+        unclearIds.forEach(id => unclearActivityIds.add(id));
+        links.forEach((zirkelEntry, activityId) => {
+          const a = garminActivitiesAll.find(x => String(x.id) === activityId);
+          if (!a) return;
+          suppressedGarminActivityIds.add(activityId);
+          zirkelLinkByEntryId.set(zirkelEntry.id, {
+            activityId,
+            avgHr: a.avgHr || null,
+            maxHr: a.maxHr || null,
+            zeit: a.durationSec > 0 ? secToZeitStr(a.durationSec) : '',
+            schritte: a.steps || 0,
+          });
+        });
+      });
+
       const liveEntries = [];
       garminActivitiesAll.forEach(a => {
         const datum = garminActivityDateKey(a);
         if (!datum) return;
+        const aId = String(a.id);
         const matchedGfit = findMatchingGfitEntry(a, datum);
         if (matchedGfit) suppressedGfitIds.add(matchedGfit.id);
-        if (garminHiddenIds.has(String(a.id))) return; // ausgeblendet: zählt nirgends mehr
-        const entry = garminActivityToEntry(a);
+        if (garminHiddenIds.has(aId)) return; // ausgeblendet: zählt nirgends mehr
+        if (suppressedGarminActivityIds.has(aId)) return; // jetzt Teil eines Zirkel-Eintrags, keine eigene Zeile mehr
+        const entry = garminActivityToEntry(a, unclearActivityIds.has(aId));
         if (entry) liveEntries.push(entry);
       });
-      return trainingEntries.filter(e => !suppressedGfitIds.has(e.id)).concat(liveEntries);
+
+      return trainingEntries
+        .filter(e => !suppressedGfitIds.has(e.id))
+        .map(e => {
+          const link = zirkelLinkByEntryId.get(e.id);
+          return link ? { ...e, linkedGarmin: link } : e;
+        })
+        .concat(liveEntries);
     }
     window.getEffectiveTrainingEntries = getEffectiveTrainingEntries;
 
@@ -2773,8 +2896,8 @@
           cacheGet('ouraDaily'),
           cacheGet('ouraStatus'),
         ]);
-        const [cachedGarminDaily, cachedGarminActivities, cachedGarminHealth, cachedGarminHidden] = await Promise.all([
-          cacheGet('garminDaily'), cacheGet('garminActivities'), cacheGet('garminHealth'), cacheGet('garminHidden'),
+        const [cachedGarminDaily, cachedGarminActivities, cachedGarminHealth, cachedGarminHidden, cachedGarminUnlinked] = await Promise.all([
+          cacheGet('garminDaily'), cacheGet('garminActivities'), cacheGet('garminHealth'), cacheGet('garminHidden'), cacheGet('garminUnlinked'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings, cachedSubjectiveStatusHistory] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings'), cacheGet('subjectiveStatusHistory')]);
@@ -2836,6 +2959,10 @@
           garminHiddenIds = new Set(cachedGarminHidden);
           window.garminHiddenIds = garminHiddenIds;
         }
+        if (Array.isArray(cachedGarminUnlinked)) {
+          garminUnlinkedIds = new Set(cachedGarminUnlinked);
+          window.garminUnlinkedIds = garminUnlinkedIds;
+        }
         return hasCache;
       } catch(e) {
         console.warn('Cache load error:', e);
@@ -2861,6 +2988,7 @@
         cachePut('garminActivities', garminActivitiesAll),
         cachePut('garminHealth', garminHealth),
         cachePut('garminHidden', [...garminHiddenIds]),
+        cachePut('garminUnlinked', [...garminUnlinkedIds]),
         cachePut('customTrainingTypes', customTrainingTypes),
         cachePut('intervalTemplates', intervalTemplates),
         cachePut('exerciseSettings', exerciseSettings),
@@ -5058,9 +5186,6 @@
     }
 
     function calcActivityKcal(entry) {
-      // Kraft von der Uhr, die am selben Tag zu einem Zirkel gehört (Entscheidung 4, 01.11.2026):
-      // Kalorien kommen ausschließlich aus dem Zirkel-Eintrag, nicht zusätzlich von hier.
-      if (entry.gehoertZuZirkel) return 0;
       // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
       if (entry.source === 'plan') return calcPlanActivityKcal(entry);
 
@@ -5427,15 +5552,22 @@
           // entryStepsLabel nur innerhalb von autoMeta, das a.sets (fast immer gesetzt) nie erreichte
           // (Bugreport 2026-10-17: Übersicht zeigte deshalb nie Schritte für Garmin-Aktivitäten).
           const baseMeta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
-          const meta = [baseMeta, entryStepsLabel(a.schritte), a.garminLive ? garminHrLabel(a) : '', a.gehoertZuZirkel ? 'gehört zum Zirkel' : '']
+          const meta = [baseMeta, entryStepsLabel(a.schritte), a.garminLive ? garminHrLabel(a) : '', a.zuordnungUnklar ? 'Zuordnung unklar' : '']
             .filter(Boolean).join(' · ');
           const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
+          // Zirkel mit zugeordneter Garmin-Kraftaktivität (Zirkel-Zusammenführung, 01.11.2026): eine
+          // zusätzliche Zeile mit der HF der Uhr + Uhr-Symbol als Hinweis auf die Verknüpfung
+          // (Entscheidung 2) - die Garmin-Aktivität selbst erscheint nicht mehr als eigene Zeile.
+          const linkedGarminLine = a.linkedGarmin
+            ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${foIcon('clock', 'fo-i--sm')} ${garminHrLabel(a.linkedGarmin) || 'Uhr-Aufzeichnung verknüpft'}</div>`
+            : '';
           return `<li><div class="fo-row${child ? ' fo-row--child' : ''}">
             ${!child && emoji ? `<span class="fo-row__icon">${emoji}</span>` : ''}
             <div class="fo-row__main">
               <div class="fo-row__title">${displayName}</div>
               ${meta ? `<div class="fo-row__sub fo-row__sub--wrap">${meta}</div>` : ''}
               ${details ? `<div class="fo-row__sub fo-row__sub--wrap">${details}</div>` : ''}
+              ${linkedGarminLine}
             </div>
             ${kcal > 0 ? kcalEndHtml(kcal) : ''}
           </div></li>`;
@@ -7685,15 +7817,23 @@
         // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
         const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
         const timeDisplay = e.garminTime ? `<span style="color:var(--fo-text-3);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
-        // Zirkel-Einträge mit details sind aufklappbar (Runden wie im Abschluss-Screen, Teil 3.1);
-        // ältere Zirkel-Einträge ohne details zeigen nur die normale Zeile, ohne Fehler.
-        const isZirkelEntry = typ === 'zirkel' && Array.isArray(e.details) && e.details.length > 0;
+        // Zirkel-Einträge mit details ODER einer verknüpften Garmin-Aufzeichnung sind aufklappbar
+        // (Runden wie im Abschluss-Screen, Teil 3.1, bzw. die Uhr-Aufzeichnung, Zirkel-Zusammenführung
+        // 01.11.2026); ältere Zirkel-Einträge ohne beides zeigen nur die normale Zeile, ohne Fehler.
+        const hasLinkedGarmin = !!e.linkedGarmin;
+        const isZirkelEntry = typ === 'zirkel' && ((Array.isArray(e.details) && e.details.length > 0) || hasLinkedGarmin);
         const zirkelOpen = isZirkelEntry && getHistoryZirkelState(e.id).open;
         // Garmin-Live-Aktivität (Phase 1b, 01.11.2026): kein echtes entries/-Dokument, daher nicht
         // bearbeitbar und über "Ausblenden" statt "Löschen" entfernbar (garminHidden, Korrektur 3).
         const isGarminLive = !!e.garminLive;
         const hrLabel = isGarminLive ? garminHrLabel(e) : '';
-        const zirkelNote = e.gehoertZuZirkel ? 'gehört zum Zirkel' : '';
+        // Zirkel mit verknüpfter Garmin-Kraftaktivität: HF-Zeile + Uhr-Symbol statt der früheren
+        // "gehört zum Zirkel"-Zeile auf der (jetzt nicht mehr existierenden) Garmin-eigenen Zeile.
+        const linkedGarminNote = hasLinkedGarmin ? `${foIcon('clock', 'fo-i--sm')} ${garminHrLabel(e.linkedGarmin) || 'Uhr-Aufzeichnung verknüpft'}` : '';
+        const unclearNote = e.zuordnungUnklar ? 'Zuordnung unklar' : '';
+        // Manuell gelöste Zuordnung (Entscheidung 4): die Garmin-Kraftaktivität ist wieder eine eigene
+        // Zeile, bekommt hier aber zusätzlich "Wieder verknüpfen" statt nur "Ausblenden".
+        const isUnlinkedStrength = isGarminLive && e.garminType === 'strength_training' && garminUnlinkedIds.has(String(e.garminActivityId));
         return `
         <div class="fo-row" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}${isZirkelEntry ? 'cursor:pointer;' : ''}${e.garminHiddenEntry ? 'opacity:0.5;' : ''}"${isZirkelEntry ? ` onclick="toggleHistoryZirkel('${e.id}')"` : ''}>
           ${isZirkelEntry ? `<span class="fo-row__icon">${foIcon(zirkelOpen ? 'chevD' : 'chevR', 'fo-i--sm')}</span>` : ''}
@@ -7705,14 +7845,15 @@
               ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
               ${entryStepsLabel(e.schritte) ? `<span style="color:var(--fo-text-3);margin-left:6px;">${entryStepsLabel(e.schritte)}</span>` : ''}
               ${hrLabel ? `<span style="color:var(--fo-text-3);margin-left:6px;">${hrLabel}</span>` : ''}
-              ${zirkelNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${zirkelNote}</span>` : ''}
+              ${unclearNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${unclearNote}</span>` : ''}
             </div>
+            ${linkedGarminNote ? `<div class="fo-row__sub" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
-            ${zirkelOpen ? historyZirkelRoundsHtml(e) : ''}
+            ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
           <div class="fo-row__actions" onclick="event.stopPropagation()">
             ${e.garminHiddenEntry ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="unhideGarminActivity('${e.garminActivityId}')">Wiederherstellen</button>`
-              : isGarminLive ? `<button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="hideGarminActivity('${e.garminActivityId}')">Ausblenden</button>`
+              : isGarminLive ? `<button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="hideGarminActivity('${e.garminActivityId}')">Ausblenden</button>${isUnlinkedStrength ? ` <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="relinkGarminActivity('${e.garminActivityId}')">Wieder verknüpfen</button>` : ''}`
               : `${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
                  <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>`}
           </div>
@@ -7753,7 +7894,40 @@
         showToast('Wiederherstellen fehlgeschlagen', 'bad');
       }
     };
-    
+
+    // Zirkel-Zusammenführung lösen/wiederherstellen (01.11.2026, Entscheidung 4): zweite neue
+    // Schreibquelle der App für Garmin-Daten, ausschließlich users/{uid}/garminLinks/{activityId} -
+    // nie garminDaily/garminActivities/entries selbst. unlinked:true nimmt die Aktivität dauerhaft aus
+    // der automatischen Zuordnung (computeZirkelGarminLinksForDate), bis das Dokument gelöscht wird.
+    window.unlinkGarminFromZirkel = async function(activityId) {
+      if (!await showConfirm('Zuordnung lösen?', 'Die Uhr-Aufzeichnung erscheint danach wieder als eigene Zeile und zählt nach der normalen Regel für Garmin-Aktivitäten.')) return;
+      try {
+        await setDoc(doc(db, 'users', userId, 'garminLinks', String(activityId)), { unlinked: true, at: new Date().toISOString() });
+        garminUnlinkedIds.add(String(activityId));
+        window.garminUnlinkedIds = garminUnlinkedIds;
+        renderTrainingHistory();
+        renderFoodLog();
+        renderDataStats();
+        showToast('Zuordnung gelöst', 'ok');
+      } catch (err) {
+        console.error('unlinkGarminFromZirkel error:', err);
+        showToast('Zuordnung lösen fehlgeschlagen', 'bad');
+      }
+    };
+    window.relinkGarminActivity = async function(activityId) {
+      try {
+        await deleteDoc(doc(db, 'users', userId, 'garminLinks', String(activityId)));
+        garminUnlinkedIds.delete(String(activityId));
+        window.garminUnlinkedIds = garminUnlinkedIds;
+        renderTrainingHistory();
+        renderFoodLog();
+        renderDataStats();
+        showToast('Wieder verknüpft', 'ok');
+      } catch (err) {
+        console.error('relinkGarminActivity error:', err);
+        showToast('Wieder verknüpfen fehlgeschlagen', 'bad');
+      }
+    };
 
     window.editTraining = function(id) {
       const entry = trainingEntries.find(e => String(e.id) === String(id));
@@ -12169,6 +12343,20 @@ Regeln:
       return `<ol class="fo-card fo-list zk-rounds" style="margin-top:6px;">${rounds.map(r =>
         zirkelRoundRowHtml(st.rounds, `toggleHistoryZirkelRound('${e.id}', ${r.round})`, r)
       ).join('')}</ol>`;
+    }
+
+    // "Uhr-Aufzeichnung"-Abschnitt eines aufgeklappten Zirkel-Eintrags (Zirkel-Zusammenführung,
+    // 01.11.2026, Entscheidung 4): Dauer/Schritte/HF der verknüpften Garmin-Aktivität + "Zuordnung
+    // lösen". Ohne linkedGarmin kein Abschnitt (kein leerer Rahmen bei Zirkeln ohne Uhr-Daten).
+    function historyZirkelGarminHtml(e) {
+      const g = e.linkedGarmin;
+      if (!g) return '';
+      const meta = [g.zeit, entryStepsLabel(g.schritte), garminHrLabel(g)].filter(Boolean).join(' · ');
+      return `<div class="fo-card" style="margin-top:6px;padding:10px 12px;">
+        <div class="fo-row__title" style="font-size:13px;">${foIcon('clock', 'fo-i--sm')} Uhr-Aufzeichnung</div>
+        ${meta ? `<div class="fo-row__sub">${meta}</div>` : ''}
+        <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" style="margin-top:6px;" onclick="event.stopPropagation(); unlinkGarminFromZirkel('${g.activityId}')">Zuordnung lösen</button>
+      </div>`;
     }
 
     function renderZirkelTimerIntro() {

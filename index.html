@@ -2353,7 +2353,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-01 15:14';
+    const APP_BUILD = '2026-11-01 16:42';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -5284,9 +5284,21 @@
       const unit = { runden: entry.runden, pauseSec: entry.pauseSec, prepSec: entry.prepSec, sideSwitchSec: entry.sideSwitchSec, uebungen: entry.uebungen || [] };
       const details = Array.isArray(entry.details) ? entry.details : null;
       if (details && details.length) {
-        const workSecFor = (x, r) => details
-          .filter(d => d.round === r && d.typ === x.typ && (d.variant || '') === (x.variant || ''))
-          .reduce((sum, d) => sum + (d.sec || 0), 0);
+        // Slot-Identität: details[].exIdx (Index in uebungen, siehe saveZirkelTimer) ordnet jede Detail-Zeile
+        // eindeutig ihrer Übung zu, auch wenn zwei Übungen im selben Zirkel denselben typ+variant haben.
+        // Ältere Einträge ohne exIdx: Detail-Zeilen mit gleichem round+typ+variant werden in Auftretens-
+        // Reihenfolge den gleichnamigen uebungen-Slots in Reihenfolge zugeordnet (n-tes Vorkommen des
+        // typs in uebungen → n-te passende Detail-Zeile). Vorher bekam bei solchen Dubletten jeder Slot
+        // die KOMBINIERTE Zeit aller passenden Zeilen (Bug, siehe Audit zu Commit 99f3bc8).
+        const hasExIdx = details.some(d => d.exIdx != null);
+        const workSecFor = hasExIdx
+          ? (x, r, i) => details.filter(d => d.round === r && d.exIdx === i).reduce((sum, d) => sum + (d.sec || 0), 0)
+          : (x, r, i) => {
+              const occurrence = unit.uebungen.slice(0, i + 1)
+                .filter(u => u.typ === x.typ && (u.variant || '') === (x.variant || '')).length - 1;
+              const matches = details.filter(d => d.round === r && d.typ === x.typ && (d.variant || '') === (x.variant || ''));
+              return matches[occurrence]?.sec || 0;
+            };
         return calcZirkelKcal(unit, weight, workSecFor);
       }
       return calcZirkelKcal(unit, weight, x => zirkelEstimateWorkSec(x));
@@ -5332,6 +5344,18 @@
       const kcal = calcActivityKcal(e);
       if (isAutoActivity(e)) return kcal;
       return kcal >= MIN_MANUAL_KCAL ? kcal : 0;
+    }
+
+    // Anzeige-Kalorien für Zirkel-Einträge (Übersicht, Trainingsverlauf): dieselbe Live-Berechnung wie
+    // calcHistoricalKcalGoal (calcActivityKcal, rechnet mit weightForDate des Eintragsdatums), damit die
+    // angezeigte Zahl nie von der ins Kalorienziel eingerechneten abweicht (siehe Audit zu Commit 99f3bc8,
+    // Klärungen B1/B2 - Ursache war ein Dubletten-Bug in calcZirkelEntryKcal, seitdem behoben). Für andere
+    // Trainingsarten unverändert der gespeicherte Wert (dort keine bekannte Divergenz, nicht Teil dieses
+    // Fixes). Fallback auf den gespeicherten Wert nur, wenn die Neuberechnung mangels details/uebungen 0
+    // liefert (z.B. sehr alte, unvollständige Einträge) - betrifft keinen der aktuell bekannten Einträge.
+    function displayActivityKcal(e) {
+      if (e.typ === 'zirkel') return calcActivityKcal(e) || e.act_kcal_calc || e.kalorien || 0;
+      return e.act_kcal_calc || e.kalorien || 0;
     }
 
     // Render Food Log
@@ -5528,9 +5552,9 @@
           </div></li>`;
         }
 
-        // Angezeigte Kalorien einer Aktivitätszeile: nur wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal),
-        // Wert wie bisher der gespeicherte act_kcal_calc bzw. kalorien
-        const activityRowKcal = a => activityKcalForGoal(a) > 0 ? (a.act_kcal_calc || a.kalorien || 0) : 0;
+        // Angezeigte Kalorien einer Aktivitätszeile: nur wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal).
+        // Wert über displayActivityKcal (Zirkel: live wie calcHistoricalKcalGoal, sonst wie bisher).
+        const activityRowKcal = a => activityKcalForGoal(a) > 0 ? displayActivityKcal(a) : 0;
 
         // Kalorienspalte einer Zeile (.fo-row__end, Flammen-Symbol als Aktivitäts-Akzent)
         const kcalEndHtml = kcal => `<div class="fo-row__end"><span class="fo-kcal">${foIcon('flame')}${fmt(kcal)}</span><small>kcal</small></div>`;
@@ -7814,8 +7838,10 @@
           : isPlan ? '<span class="fo-tag" style="margin-left:6px;">Plan</span>' : '';
         if (isPlan && !e.sets) setsDisplay = [e.runden > 0 ? e.runden + ' Runden' : '', e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || ''].filter(Boolean).join(' · ');
         if (isHoldEntry(e)) setsDisplay = `<span style="color:var(--fo-text);">${foIcon('clock', 'fo-i--sm')} ${fmtHoldSets(e.holdSec)}</span>`;
-        // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); gespeichertes act_kcal_calc bleibt unverändert
+        // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt (activityKcalForGoal); Wert über
+        // displayActivityKcal (Zirkel: live wie calcHistoricalKcalGoal, sonst wie bisher).
         const showKcal = activityKcalForGoal(e) > 0 && (e.act_kcal_calc > 0 || e.kalorien > 0);
+        const displayKcal = displayActivityKcal(e);
         const timeDisplay = e.garminTime ? `<span style="color:var(--fo-text-3);font-size:11px;">${e.garminTime.slice(0,5)}</span> ` : '';
         // Zirkel-Einträge mit details ODER einer verknüpften Garmin-Aufzeichnung sind aufklappbar
         // (Runden wie im Abschluss-Screen, Teil 3.1, bzw. die Uhr-Aufzeichnung, Zirkel-Zusammenführung
@@ -7842,7 +7868,7 @@
             <div class="fo-row__sub fo-row__sub--wrap">
               ${setsDisplay}
               ${setsTotal > 0 ? `<span style="color:var(--fo-primary);margin-left:6px;">${setsTotal} Wdh.</span>` : ''}
-              ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(e.act_kcal_calc || e.kalorien)} kcal</span>` : ''}
+              ${showKcal ? `<span style="color:var(--fo-text);margin-left:6px;">${fmt(displayKcal)} kcal</span>` : ''}
               ${entryStepsLabel(e.schritte) ? `<span style="color:var(--fo-text-3);margin-left:6px;">${entryStepsLabel(e.schritte)}</span>` : ''}
               ${hrLabel ? `<span style="color:var(--fo-text-3);margin-left:6px;">${hrLabel}</span>` : ''}
               ${unclearNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${unclearNote}</span>` : ''}
@@ -11893,15 +11919,17 @@ Regeln:
         // Manuell ohne Live-Timer: mode 'time' nimmt die Zielzeit (holdSec, je Seite bei perSide), mode
         // 'reps' schätzt 3s/Wdh (ZIRKEL_SEC_PER_WDH), bei perSide-reps ebenfalls je Seite. Gleiche Detail-
         // Form wie beim Live-Timer: time+perSide zwei Zeilen mit side, reps+perSide eine Zeile mit perSide:true.
+        // exIdx = Index in uebungen, macht die Zuordnung in calcZirkelEntryKcal auch bei zwei Übungen mit
+        // gleichem typ+variant im selben Zirkel eindeutig (wie beim Live-Timer, siehe saveZirkelTimer).
         const details = [];
         for (let r = 1; r <= runden; r++) {
-          uebungen.forEach(x => {
+          uebungen.forEach((x, exIdx) => {
             if (x.mode === 'time' && x.perSide) {
-              details.push({ round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'links' });
-              details.push({ round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'rechts' });
+              details.push({ round: r, exIdx, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'links' });
+              details.push({ round: r, exIdx, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh, sec: x.holdSec, side: 'rechts' });
             } else {
               details.push({
-                round: r, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh,
+                round: r, exIdx, typ: x.typ, variant: x.variant, mode: x.mode, wdh: x.wdh,
                 sec: zirkelEstimateWorkSec(x),
                 ...(x.mode === 'reps' && x.perSide ? { perSide: true } : {})
               });
@@ -12741,10 +12769,12 @@ Regeln:
       const zeit = planMinToZeit(elapsedSec / 60);
       const datum = ds || planYmd(new Date());
       const uebungen = unit.uebungen.map(x => ({ typ: x.typ, variant: x.variant, mode: x.mode, holdSec: x.holdSec, wdh: x.wdh, pauseSec: x.pauseSec, perSide: x.perSide, metClass: x.metClass }));
-      // details: eine Zeile je abgeschlossener Übung/Seite (Runde, Typ, Variante, mode, Zielwert, gemessene
-      // Dauer, bei perSide side bzw. perSide:true) – damit bleibt die Auswertung je Übung über die Zeit möglich.
+      // details: eine Zeile je abgeschlossener Übung/Seite (Runde, Index in uebungen, Typ, Variante, mode,
+      // Zielwert, gemessene Dauer, bei perSide side bzw. perSide:true) – damit bleibt die Auswertung je
+      // Übung über die Zeit möglich. exIdx macht die Zuordnung auch bei zwei Übungen mit gleichem
+      // typ+variant im selben Zirkel eindeutig (siehe calcZirkelEntryKcal).
       const details = done.map(h => ({
-        round: h.round, typ: h.typ, variant: h.variant, mode: h.mode, wdh: h.wdh, sec: h.sec,
+        round: h.round, exIdx: h.exIdx, typ: h.typ, variant: h.variant, mode: h.mode, wdh: h.wdh, sec: h.sec,
         ...(h.side ? { side: h.side } : {}), ...(h.perSide ? { perSide: true } : {})
       }));
       const autoNotiz = `${unit.runden}× ` + uebungen.map(planUebungShort).join(' / ');

@@ -6074,6 +6074,13 @@
         label = `${selectedRecipe.name} (${grams}g)`;
       }
 
+      const previewKcal = Math.round((selectedRecipe.kcal || 0) * portionFactor * 10) / 10;
+      const previewPortions = recipeInputMode === 'portions' ? parseFloat(document.getElementById('recipe-portions').value) || 1 : null;
+      const previewGrams = recipeInputMode === 'grams'
+        ? parseFloat(document.getElementById('recipe-grams').value) || 0
+        : (totalWeight > 0 ? Math.round(portionFactor * totalWeight * 10) / 10 : null);
+      if (!await confirmImplausibleEntry(previewKcal, previewPortions, previewGrams)) return;
+
       try {
         if (!foodLog[currentDate]) foodLog[currentDate] = [];
 
@@ -6647,19 +6654,39 @@
       document.getElementById('calc-fat').textContent = fmt(fat, 1);
     };
     
+    // Plausibilitätsbremse beim Speichern eines einzelnen Lebensmittel-Eintrags (Teil C, Phase 1d,
+    // 02.11.2026): Schutz vor Tippfehlern wie "250" im Portionen- statt Gramm-Feld (siehe Bericht
+    // Teil B - genau das hat schon einmal zu einem ~10.000-kcal-Eintrag geführt). EINE Stelle, von
+    // saveFood UND saveRecipeEntry genutzt. Schwellen zentral:
+    const ENTRY_PLAUSIBILITY_MAX_KCAL = 1500;
+    const ENTRY_PLAUSIBILITY_MAX_PORTIONS = 20;
+    async function confirmImplausibleEntry(kcal, portions, grams) {
+      const kcalOver = kcal > ENTRY_PLAUSIBILITY_MAX_KCAL;
+      const portionsOver = portions != null && portions > ENTRY_PLAUSIBILITY_MAX_PORTIONS;
+      if (!kcalOver && !portionsOver) return true;
+      const parts = [];
+      if (portions != null) parts.push(`${fmt(portions)} Portionen`);
+      if (grams != null) parts.push(`${fmt(grams)} g`);
+      const amountText = parts.length ? ` (${parts.join(' / ')})` : '';
+      return await showConfirm(`Wirklich ${fmt(kcal)} kcal${amountText} eintragen?`, '', 'alertCircle', 'Ja, speichern', false, 'Korrigieren');
+    }
+
     window.saveFood = async function() {
       if (!selectedFood) return;
-      
+
       const amount = parseFloat(document.getElementById('food-amount').value) || 0;
       const time = document.getElementById('food-time').value;
       const meal = document.getElementById('food-meal').value || mealFromHour(parseInt((time || '12:00').split(':')[0]));
-      
+
       if (amount <= 0) {
         showToast('Menge muss größer als 0 sein', 'bad');
         return;
       }
-      
+
       const factor = amount / 100;
+      const previewKcal = Math.round((selectedFood.kcal || 0) * factor * 10) / 10;
+      if (!await confirmImplausibleEntry(previewKcal, null, amount)) return;
+
       const entry = {
         id: editingEntryId || (Date.now() + '_' + Math.random().toString(36).substr(2, 9)),
         datum: currentDate,

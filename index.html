@@ -6116,6 +6116,10 @@
             datum: currentDate, date: currentDate, time, meal,
             name: label, foodId: selectedRecipe.id, recipeId: selectedRecipe.id,
             amount: recipeInputMode === 'grams' ? parseFloat(document.getElementById('recipe-grams').value) || 0 : parseFloat(document.getElementById('recipe-portions').value) || 1,
+            // unit (Phase 1d, 02.11.2026): hält fest, ob "amount" Gramm oder Portionen ist - ohne dieses
+            // Feld ist "amount" sonst mehrdeutig, was beim Bearbeiten alter Einträge zum Portionen/Gramm-
+            // Verwechslungsbug führte (siehe editEntry/recipeEntryAmountUnit, Bericht Teil B).
+            unit: recipeInputMode,
             kcal, protein, carbs, fat
           };
           await setDoc(doc(userLogCol(), String(entry.id)), entry);
@@ -6712,7 +6716,27 @@
         showToast('Speichern fehlgeschlagen', 'bad');
       }
     };
-    
+
+    // Welche Einheit hat ein gespeicherter Rezept-Tagebucheintrag tatsächlich (Gramm oder Portionen)?
+    // Neue Einträge tragen seit Phase 1d (02.11.2026) das Feld "unit" (siehe saveRecipeEntry) - das wird
+    // bevorzugt. Ältere Einträge ohne "unit" haben kein solches Feld; dafür wird zurückgerechnet, welche
+    // der beiden Interpretationen von "amount" zu den GESPEICHERTEN Kalorien des Eintrags passt (der
+    // kcal-Anteil impliziert einen Faktor, aus dem sich sowohl eine Portionen- als auch eine Gramm-Zahl
+    // herleiten lässt - nur eine der beiden passt zum gespeicherten amount). Ohne Rezept oder ohne
+    // Rezept-kcal nicht bestimmbar: 'portions' (bisheriges Verhalten).
+    function recipeEntryAmountUnit(entry, recipe) {
+      if (entry.unit === 'grams' || entry.unit === 'portions') return entry.unit;
+      if (!recipe || !(recipe.kcal > 0)) return 'portions';
+      const impliedFactor = (entry.kcal || 0) / recipe.kcal;
+      const asPortions = impliedFactor * (recipe.portions || 1);
+      const totalWeight = recipe.totalWeight || 0;
+      const asGrams = totalWeight > 0 ? impliedFactor * totalWeight : null;
+      const portionsDiff = Math.abs(asPortions - (entry.amount || 0));
+      const gramsDiff = asGrams != null ? Math.abs(asGrams - (entry.amount || 0)) : Infinity;
+      return gramsDiff < portionsDiff ? 'grams' : 'portions';
+    }
+    window.recipeEntryAmountUnit = recipeEntryAmountUnit;
+
     window.editEntry = function(id) {
       // Find entry
       let entry = null;
@@ -6739,10 +6763,22 @@
         const tw = recipeEntry.totalWeight || 0;
         document.getElementById('selected-recipe-info').textContent =
           `${recipeEntry.portions || 1} Portion(en)${tw > 0 ? ' · ' + fmt(tw) + 'g gesamt' : ''} · ${fmt(recipeEntry.kcal || 0)} kcal gesamt`;
-        document.getElementById('recipe-portions').value = entry.amount || 1;
         document.getElementById('recipe-form').style.display = 'block';
         document.getElementById('recipe-search-results').innerHTML = '';
-        setRecipeInputMode('portions');
+        // Beim Bearbeiten IMMER Gramm (Teil B, Phase 1d, 02.11.2026) - vorher sprang die Einheit immer
+        // auf Portionen, auch wenn ursprünglich in Gramm gespeichert (Verwechslungsgefahr, siehe Bericht).
+        // Ohne totalWeight ist keine Gramm-Umrechnung möglich - dann bleibt es bei Portionen (Teil B3).
+        const savedUnit = recipeEntryAmountUnit(entry, recipeEntry);
+        const recipePortionsCount = recipeEntry.portions || 1;
+        if (tw > 0) {
+          const grams = savedUnit === 'grams' ? (entry.amount || 0) : (entry.amount || 1) * (tw / recipePortionsCount);
+          document.getElementById('recipe-grams').value = Math.round(grams * 10) / 10;
+          document.getElementById('recipe-portions').value = 1;
+          setRecipeInputMode('grams');
+        } else {
+          document.getElementById('recipe-portions').value = entry.amount || 1;
+          setRecipeInputMode('portions');
+        }
         const entryTime = entry.time || '12:00';
         document.getElementById('food-time').value = entryTime;
         const entryHour = parseInt(entryTime.split(':')[0]);

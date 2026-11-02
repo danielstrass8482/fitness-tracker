@@ -2745,6 +2745,11 @@
             maxHr: a.maxHr || null,
             zeit: a.durationSec > 0 ? secToZeitStr(a.durationSec) : '',
             schritte: a.steps || 0,
+            // Fuer die Puls-Kalorien-Mischung (applyGarminPulseToZirkel, Phase 1d, 02.11.2026):
+            // garminKcal ist der einzige in Firestore vorliegende Kalorienwert der Aktivitaet
+            // (brutto, inkl. Grundumsatz - siehe A1a im Bericht), durationSec die Rohdauer in Sekunden.
+            garminKcal: a.garminKcal || 0,
+            durationSec: a.durationSec || 0,
           });
         });
       });
@@ -3280,6 +3285,31 @@
       return age;
     }
 
+    // Mifflin-St.-Jeor-Grundumsatz (reiner BMR, OHNE Aktivitätsfaktor) - einzige Stelle mit dieser
+    // Formel. calcHistoricalKcalGoal (dort weiter mit eigener weight/age-Auflösung inkl. der
+    // allDayLogs/allTrainingEntries-Overrides) und calcBmrForDate (einfache Datums-Abfrage, u.a.
+    // für applyGarminPulseToZirkel) nutzen beide diese Funktion.
+    function mifflinStJeorBmr(gender, weight, height, age) {
+      return gender === 'male'
+        ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+        : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+    }
+
+    // Grundumsatz (BMR) für ein Datum - NICHT der Tages-Basiswert (calcHistoricalKcalGoal().base),
+    // der zusätzlich den Aktivitätsfaktor (ACTIVITY_FACTOR, Alltagsaktivität) einrechnet. null, wenn
+    // Körperdaten (Größe/Alter) fehlen - Aufrufer fallen dann auf ihr bisheriges Verhalten zurück.
+    function calcBmrForDate(date) {
+      const s = settings;
+      const height = s?.height;
+      if (!height) return null;
+      const gender = s?.gender || 'male';
+      const weight = weightForDate(date);
+      const age = s?.birthday ? calcAgeAtDate(s.birthday, date) : s?.age;
+      if (!age) return null;
+      return mifflinStJeorBmr(gender, weight, height, age);
+    }
+    window.calcBmrForDate = calcBmrForDate;
+
     // Aktivitätsfaktor für den Grundumsatz im Tagesziel und im TDEE-Rechner der Einstellungen.
     // Fest "leicht aktiv" (×1,375): Training und Alltagsschritte kommen im Tagesziel separat als
     // Aktivitäts- bzw. Schrittkalorien dazu. Ersetzt das frühere Dropdown "Aktivitätslevel";
@@ -3382,9 +3412,7 @@
         const age = s?.birthday ? calcAgeAtDate(s.birthday, date) : s?.age;
         if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-        let bmr = gender === 'male'
-          ? (10 * weight) + (6.25 * height) - (5 * age) + 5
-          : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+        const bmr = mifflinStJeorBmr(gender, weight, height, age);
 
         const base = Math.round(bmr * ACTIVITY_FACTOR);
 
@@ -5250,9 +5278,42 @@
       return logsWithWeight[0]?.weight || settings.weight || 75;
     }
 
+    // Puls-Kalorien für Zirkel mit verknüpfter Garmin-Kraftaktivität (Phase 1d, 02.11.2026): die
+    // Zirkel-Formel kennt den Puls nicht, Garmins pulsbasierter Wert ist dafür brutto (inkl.
+    // Grundumsatz während der Aktivität) und in Einzelfällen deutlich höher als die Formel. Deshalb
+    // weder reine Formel noch reiner Garmin-Wert, sondern Mittelwert aus Formel und Garmin-NETTO,
+    // gedeckelt auf das 1,5-Fache der Formel. Konstanten zentral hier:
+    const ZIRKEL_PULSE_GEWICHTUNG = 0.5;    // Gewichtung Garmin-Netto im Mittelwert (0,5 = einfacher Durchschnitt)
+    const ZIRKEL_PULSE_DECKEL_FAKTOR = 1.5; // gezählt nie mehr als das 1,5-Fache der Formel
+
+    // garminNetto = garminKcal (einziger in Firestore vorliegender Wert, brutto) minus der auf die
+    // Aktivitätsdauer entfallende Grundumsatz-Anteil (BMR/1440 × Dauer in Minuten) - Näherung, da
+    // Garmins eigene brutto/netto-Aufteilung (bmrCalories) nicht nach Firestore übertragen wird
+    // (siehe Bericht, A1a/A1d). Liefert null, wenn die Mischung nicht greift (fehlendes garminKcal,
+    // fehlender BMR oder garminNetto ≤ 0) - EINZIGE Stelle mit dieser Entscheidung, sowohl für die
+    // Berechnung (calcActivityKcal) als auch die Anzeige (historyZirkelGarminHtml) genutzt.
+    function zirkelPulseBreakdown(entry, formelKcal) {
+      const g = entry.linkedGarmin;
+      if (!g || !g.garminKcal) return null;
+      const bmr = calcBmrForDate(entry.datum);
+      if (!bmr) return null;
+      const durationMin = (g.durationSec || 0) / 60;
+      const garminNetto = g.garminKcal - (bmr / 1440) * durationMin;
+      if (garminNetto <= 0) return null;
+      const gewichtet = Math.round(formelKcal * (1 - ZIRKEL_PULSE_GEWICHTUNG) + garminNetto * ZIRKEL_PULSE_GEWICHTUNG);
+      const deckel = Math.round(formelKcal * ZIRKEL_PULSE_DECKEL_FAKTOR);
+      return { formel: formelKcal, garminNetto, gezaehlt: Math.min(gewichtet, deckel) };
+    }
+    window.zirkelPulseBreakdown = zirkelPulseBreakdown;
+
     function calcActivityKcal(entry) {
       // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
-      if (entry.source === 'plan') return calcPlanActivityKcal(entry);
+      if (entry.source === 'plan') {
+        const formelKcal = calcPlanActivityKcal(entry);
+        if (entry.typ !== 'zirkel') return formelKcal;
+        const breakdown = zirkelPulseBreakdown(entry, formelKcal);
+        return breakdown ? breakdown.gezaehlt : formelKcal;
+      }
 
       const weight = weightForDate(entry.datum);
       const hours = parseHours(entry.zeit || '');
@@ -5341,6 +5402,7 @@
       const met = isStrengthTyp ? zirkelMetForClass(zirkelDefaultMetClass(entry.typ, entry.variant)) : (PLAN_MET[entry.typ] ?? PLAN_MET_DEFAULT);
       return hours > 0 ? Math.round(met * weight * hours) : 0;
     }
+    window.calcPlanActivityKcal = calcPlanActivityKcal;
 
     // Zirkel-Kalorien für einen gespeicherten/vorläufigen Eintrag (manuelles Nachtragen, Vorschau, sowie
     // bei der Aggregation in Statistiken/Kalorienziel): Arbeitszeit je Übung aus den Detail-Zeilen (details),
@@ -5422,6 +5484,8 @@
       if (e.typ === 'zirkel') return calcActivityKcal(e) || e.act_kcal_calc || e.kalorien || 0;
       return e.act_kcal_calc || e.kalorien || 0;
     }
+    window.displayActivityKcal = displayActivityKcal;
+    window.calcActivityKcal = calcActivityKcal;
 
     // Render Food Log
     // ── Farbregeln der Tageskacheln (einzige Stelle, jederzeit änderbar) ───────
@@ -12446,9 +12510,18 @@ Regeln:
       const g = e.linkedGarmin;
       if (!g) return '';
       const meta = [g.zeit, entryStepsLabel(g.schritte), garminHrLabel(g)].filter(Boolean).join(' · ');
+      // Puls-Kalorien-Mischung (Phase 1d, 02.11.2026): gleiche Formel-Berechnung + zirkelPulseBreakdown
+      // wie calcActivityKcal, nur für die transparente Anzeige "Zirkel X · Uhr Y netto · gezählt Z"
+      // noch einmal einzeln aufgeschlüsselt - keine eigene Entscheidungslogik hier.
+      const formelKcal = calcPlanActivityKcal(e);
+      const pulse = zirkelPulseBreakdown(e, formelKcal);
+      const pulseLine = pulse
+        ? `Zirkel ${fmt(pulse.formel)} · Uhr ${fmt(Math.round(pulse.garminNetto))} netto · gezählt ${fmt(pulse.gezaehlt)}`
+        : '';
       return `<div class="fo-card" style="margin-top:6px;padding:10px 12px;">
         <div class="fo-row__title" style="font-size:13px;">${foIcon('clock', 'fo-i--sm')} Uhr-Aufzeichnung</div>
         ${meta ? `<div class="fo-row__sub fo-row__sub--wrap">${meta}</div>` : ''}
+        ${pulseLine ? `<div class="fo-row__sub fo-row__sub--wrap">${pulseLine} kcal</div>` : ''}
         <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" style="margin-top:6px;" onclick="event.stopPropagation(); unlinkGarminFromZirkel('${g.activityId}')">Zuordnung lösen</button>
       </div>`;
     }

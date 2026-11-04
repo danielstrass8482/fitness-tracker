@@ -18,12 +18,12 @@
 - Zuerst gcloud-Auth prüfen (gcloud auth list, Token holbar). Abgelaufen → STOPP, Befehl für Daniel nennen.
 - App: index.html über GitHub Pages, Android-WebView-Hülle. Nach App-Änderungen: APP_BUILD auf aktuelle Zeit (Europe/Berlin), commit, push, Pages-Build abwarten, ausgeliefertes APP_BUILD per curl belegen.
 - UI-Tests: Playwright mit echter index.html, Auth gestubbt, Read-only-Proxy auf echte Daten, alle Schreibzugriffe blockiert und mit Payload protokolliert, Viewport 360 px. Kein window.alert/confirm in der App, App-Dialoge (showConfirm) nutzen.
-- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1. Deploy nur mit --only functions:<name>. Jede Löschfrage (dartTTS, createCustomToken u. a.) mit "No" beantworten; createCustomToken nie löschen.
+- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions, dartTTS und dartCoach in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage (dartTTS, createCustomToken u. a.) mit "No" beantworten; createCustomToken nie löschen.
 - VPS 185.117.250.246 (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
 - Cloud-Shell-Home-Disk ist knapp: vor größeren Downloads/Builds df -h ~ prüfen; nichts außerhalb des Auftrags löschen.
 
 ## Bekannte Fallstricke
-- Einträge tragen `datum` und `date` (gleicher Wert); Lesecode nutzt `entry.datum || entry.date` – beide Felder beibehalten.
+- `logEntries` tragen `datum` und `date` (gleicher Wert; 1.715 Alt-Einträge nur `date`), `entries` nur `datum`; Lesecode nutzt `entry.datum || entry.date` – vorhandene Felder beibehalten.
 - `new Date("yyyy-mm-dd")` ist UTC → Off-by-one; lokale Daten mit `new Date(y, m-1, d)` bilden.
 - `calcHistoricalKcalGoal` (auch als `window.`) gibt immer `{base, activity, daily, total}` zurück, nie eine Zahl.
 - Aktivitätsschritte werden von Tagesschritten abgezogen, nur über `getActivityStepsForDate`; Quelle je Tag per `getStepsSourceForDate`, nie gemischt.

@@ -1826,6 +1826,7 @@
                   <p class="fo-help" id="gdrive-backup-status" style="margin-bottom:12px;">Status wird geladen...</p>
                   <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="backupToGoogleDrive()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Jetzt in Google Drive sichern</button>
                   <p class="fo-help" style="margin-top:10px;">Letzte Sicherung: <span id="last-backup-time">—</span></p>
+                  <div class="fo-row__sub fo-row__sub--wrap" id="gdrive-backup-attempt-info" style="margin-top:6px;"></div>
                   <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectGoogleDrive()" style="border-color:transparent;margin-top:10px;">Google Drive trennen</button>
                 </div>
               </div>
@@ -2353,7 +2354,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-02 21:31';
+    const APP_BUILD = '2026-11-04 21:00';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -3188,22 +3189,16 @@
         cutoff.setDate(cutoff.getDate() - 365);
         const cutoffStr = cutoff.toISOString().split('T')[0];
 
-        const diarySnap = await getDocs(query(userLogCol(), where('datum', '>=', cutoffStr)));
+        // Eine Abfrage über 'date' (04.11.2026): Count-Prüfung ergab, dass ALLE logEntries 'date'
+        // tragen (31.354 von 31.354) und pro Tag datum ⊆ date gilt. Die frühere zweite Abfrage über
+        // 'datum' lieferte nur Dokumente, die diese Abfrage ohnehin enthält (≈10.000 Reads pro Start
+        // gespart). Neue Einträge müssen deshalb weiterhin 'date' UND 'datum' schreiben.
+        const diarySnap = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
           const entryDate = entry.datum || entry.date;
           if (!entryDate || entryDate < cutoffStr) return;
-          if (!foodLog[entryDate]) foodLog[entryDate] = [];
-          foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
-        });
-
-        // Fallback: also load entries with 'date' field for older entries
-        const diarySnapOld = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
-        diarySnapOld.forEach(d => {
-          const entry = d.data();
-          const entryDate = entry.datum || entry.date;
-          if (!entryDate || entryDate < cutoffStr || foodLog[entryDate]?.find(e => e.id === entry.id)) return;
           if (!foodLog[entryDate]) foodLog[entryDate] = [];
           foodLog[entryDate].push({...entry, datum: entryDate, date: entryDate});
         });
@@ -3217,6 +3212,7 @@
         dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
         window.trainingEntries = trainingEntries;
         window.dayLogs = dayLogs;
+        entriesLoadedAt = Date.now(); // zählt für die Tab-Wechsel-Drosselung (siehe tabSyncRecentEntries)
 
         // Load Favorites
         const favSnap = await getDoc(doc(db, 'users', userId, 'settings', 'favorites'));
@@ -7169,15 +7165,8 @@
         if (target === 'analyse') showAnalyseSubtab();
         else uninstallAnalyseComposerSizeObserver(); // KI-Analyse-Ansicht verlassen (Bericht Teil 0a)
         if ((target === 'ernaehrung' || target === 'uebersicht') && userId) {
-          // Silent background sync for last 2 days
-          const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-          if (gfitSnap.exists()) {
-            gfitSyncInProgress = true;
-            runGfitSync()
-              .then(() => { gfitLastSyncAt = Date.now(); })
-              .catch(() => {}) // Silent fail
-              .finally(() => { gfitSyncInProgress = false; });
-          }
+          // Silent background sync for last 2 days (gedrosselt, siehe tabSyncRecentEntries)
+          tabSyncRecentEntries(target);
         }
         // Reload training entries when switching to training tab
         if (target === 'training' && userId) {
@@ -7194,29 +7183,8 @@
             const timeEl = document.getElementById('training-time');
             if (timeEl && !timeEl.value) timeEl.value = hh + ':' + mm;
           }, 50);
-          // Silent 2-day sync
-          getDoc(doc(db, 'users', userId, 'integrations', 'googlefit')).then(gfitSnap => {
-            if (gfitSnap.exists()) {
-              gfitSyncInProgress = true;
-              const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
-              const endMs = Date.now();
-              syncFn({ startMs: endMs - (2 * 24 * 3600 * 1000), endMs })
-                .then(() => { gfitLastSyncAt = Date.now(); })
-                .catch(() => {})
-                .finally(() => { gfitSyncInProgress = false; });
-            }
-          }).catch(() => {});
-          getDocs(userTrainingCol()).then(snap => {
-            const freshEntries = [];
-            snap.forEach(d => freshEntries.push(d.data()));
-            trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
-            dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
-            window.trainingEntries = trainingEntries;
-            window.dayLogs = dayLogs;
-            renderTrainingHistory();
-            renderDashboard();
-            renderFoodLog(); // Übersicht (ggf. im Hintergrund) auf denselben Stand bringen wie der Training-Tab
-          }).catch(e => console.warn('Training reload error:', e));
+          // Silent 2-day sync + Neuladen der entries der letzten Tage (gedrosselt, siehe tabSyncRecentEntries)
+          tabSyncRecentEntries('training');
         }
       });
     });
@@ -9909,22 +9877,74 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     let gfitSyncInProgress = false; // true während irgendein Google-Fit-Sync läuft (Tab-Tipp, Button oder Auto)
     let gfitLastSyncAt = 0; // Zeitpunkt (Date.now()) des letzten gestarteten Syncs, gleich welcher Auslöser
 
-    // Gemeinsame Sync-Routine für Tab-Tipp (Ernährung/Übersicht) und Auto-Sync: ruft googleFitSync
-    // für die letzten 2 Tage auf und lädt danach nur die Trainings-Einträge neu (für die Schritte).
+    // Tab-Wechsel (Übersicht/Ernährung/Training): Mindestabstand zwischen zwei Hintergrund-Syncs
+    // inkl. Neuladen der entries, analog GARMIN_AUTOSYNC_MIN_INTERVAL_MS. Zählt ab dem letzten
+    // gestarteten Google-Fit-Sync (gfitLastSyncAt) oder dem letzten Laden der entries (entriesLoadedAt).
+    const GFIT_TAB_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000;
+    // googleFitSync schreibt nur Tage aus [jetzt − 48 h, jetzt] (Berlin-Kalender: heute, gestern,
+    // vorgestern; Sessions mit datum = Starttag, eine über den Fensterbeginn reichende Session kann
+    // einen Tag früher liegen). Deshalb werden nach dem Sync nur entries mit datum >= heute − 3 neu
+    // gelesen statt der ganzen Collection (vorher ~1.250 Reads pro Aufruf).
+    const GFIT_RELOAD_DAYS = 3;
+    let entriesLoadedAt = 0; // Date.now() des letzten Lesens der entries (loadAllData oder Fenster-Reload)
+
+    // Liest nur entries mit datum >= sinceStr und ersetzt in trainingEntries genau diesen Bereich;
+    // ältere Einträge bleiben unverändert (Stand aus loadAllData). Schritte-Schutz wie bisher.
+    async function reloadRecentTrainingEntries(sinceStr) {
+      entriesLoadedAt = Date.now();
+      const snap = await getDocs(query(userTrainingCol(), where('datum', '>=', sinceStr)));
+      const freshEntries = [];
+      snap.forEach(d => freshEntries.push(d.data()));
+      const merged = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
+      const older = trainingEntries.filter(e => !(e.datum >= sinceStr));
+      trainingEntries = older.concat(merged);
+      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
+      window.trainingEntries = trainingEntries;
+      window.dayLogs = dayLogs;
+    }
+    function gfitReloadSinceStr() {
+      return new Date(Date.now() - GFIT_RELOAD_DAYS * 24 * 3600 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    }
+
+    // Gemeinsame Sync-Routine für Tab-Wechsel und Auto-Sync: ruft googleFitSync für die letzten
+    // 2 Tage auf und lädt danach nur die entries der abgeglichenen Tage neu (für die Schritte).
     async function runGfitSync() {
       const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
       const endMs = Date.now();
       const startMs = endMs - (2 * 24 * 3600 * 1000);
       await syncFn({ startMs, endMs });
-      // Reload only training entries (steps)
-      const snap = await getDocs(userTrainingCol());
-      const freshEntries = [];
-      snap.forEach(d => freshEntries.push(d.data()));
-      trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
-      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
-      window.trainingEntries = trainingEntries;
-      window.dayLogs = dayLogs;
+      await reloadRecentTrainingEntries(gfitReloadSinceStr());
       renderFoodLog(); // Refresh kcal goal
+    }
+
+    // Tab-Wechsel auf Übersicht/Ernährung/Training: höchstens alle GFIT_TAB_SYNC_MIN_INTERVAL_MS.
+    // Mit Google Fit: Sync + Fenster-Reload; ohne Google Fit (nur Training-Tab, wie bisher):
+    // nur Fenster-Reload. Drosselprüfung VOR jedem Firestore-Zugriff.
+    async function tabSyncRecentEntries(target) {
+      if (!userId) return;
+      if (gfitSyncInProgress) return;
+      if (Date.now() - Math.max(gfitLastSyncAt, entriesLoadedAt) < GFIT_TAB_SYNC_MIN_INTERVAL_MS) return;
+      gfitSyncInProgress = true;
+      try {
+        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
+        if (gfitSnap.exists()) {
+          gfitLastSyncAt = Date.now();
+          await runGfitSync();
+        } else if (target === 'training') {
+          await reloadRecentTrainingEntries(gfitReloadSinceStr());
+        } else {
+          return;
+        }
+        if (target === 'training') {
+          renderTrainingHistory();
+          renderDashboard();
+          renderFoodLog(); // Übersicht (ggf. im Hintergrund) auf denselben Stand bringen wie der Training-Tab
+        }
+      } catch (e) {
+        console.warn('Tab-Sync (' + target + ') fehlgeschlagen:', e); // Silent fail wie bisher
+      } finally {
+        gfitSyncInProgress = false;
+      }
     }
 
     // Automatischer Sync beim App-Start (nach dem ersten Laden) und bei Rückkehr aus dem Hintergrund.
@@ -13933,18 +13953,41 @@ Regeln:
       }
     }
 
+    // Fehlertext für settings/backup.lastDriveBackupError: kurz, ohne Token-artige Inhalte
+    // (Bearer-/ya29-/GOCSPX-Strings und lange Base64-Ketten werden entfernt).
+    function sanitizeBackupError(stage, err) {
+      let msg = String(err?.message || err || 'unbekannt');
+      msg = msg.replace(/Bearer\s+\S+/gi, 'Bearer […]')
+               .replace(/ya29\.[\w.-]+/g, '[…]')
+               .replace(/GOCSPX-[\w-]+/g, '[…]')
+               .replace(/[A-Za-z0-9_\-]{40,}/g, '[…]');
+      return (stage + ': ' + msg).slice(0, 160);
+    }
+
     window.backupToGoogleDrive = async function(silent = false) {
       const statusEl = document.getElementById('gdrive-backup-status');
       if (statusEl && !silent) setIconText(statusEl, 'clock', 'Erstelle Backup...');
+      const backupRef = doc(db, 'users', userId, 'settings', 'backup');
+      // Versuch VOR allen anderen Schritten festhalten: auch ein abgebrochener Versuch (App
+      // geschlossen, Netz weg) zählt für die 24-h-Drosselung in checkAutoBackup.
+      try {
+        await setDoc(backupRef, { lastDriveBackupAttempt: new Date().toISOString() }, { merge: true });
+      } catch (e) { console.warn('Backup-Versuch konnte nicht gespeichert werden:', e); }
+      let stage = 'Token';
       try {
         const token = await getValidDriveToken();
-        const backupMeta = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
+        stage = 'Metadaten';
+        const backupMeta = await getDoc(backupRef);
         const existingFileId = backupMeta.exists() ? backupMeta.data().lastDriveFileId : null;
+        stage = 'Daten lesen';
         const json = await buildBackupJson();
+        stage = 'Upload';
         const fileId = await uploadToDrive(token, json, existingFileId);
+        stage = 'Status speichern';
         const now = new Date().toISOString();
-        await setDoc(doc(db, 'users', userId, 'settings', 'backup'), {
-          lastDriveBackup: now, lastDriveFileId: fileId, lastDriveFileName: 'fuelofit-backup.json'
+        await setDoc(backupRef, {
+          lastDriveBackup: now, lastDriveFileId: fileId, lastDriveFileName: 'fuelofit-backup.json',
+          lastDriveBackupError: null
         }, { merge: true });
         if (statusEl) setIconText(statusEl, 'okCircle', `Gesichert: fuelofit-backup.json`, 'fo-i--sm fo-status-ok');
         const el = document.getElementById('last-backup-time');
@@ -13952,10 +13995,37 @@ Regeln:
         if (!silent) showToast('Google Drive Backup erfolgreich', 'ok');
         console.log('Drive backup done', now);
       } catch(e) {
-        if (statusEl && !silent) setIconText(statusEl, 'alertCircle', 'Fehler: ' + e.message, 'fo-i--sm fo-status-bad');
+        const errText = sanitizeBackupError(stage, e);
+        if (statusEl && !silent) setIconText(statusEl, 'alertCircle', 'Fehler: ' + errText, 'fo-i--sm fo-status-bad');
         console.warn('Drive backup error:', e);
+        try {
+          await setDoc(backupRef, { lastDriveBackupError: errText }, { merge: true });
+        } catch (e2) { console.warn('Backup-Fehler konnte nicht gespeichert werden:', e2); }
       }
+      renderBackupAttemptInfo(); // Zeile "Letztes Backup · letzter Versuch · Fehler" aktualisieren
     };
+
+    function fmtBackupTs(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // "Letztes Backup: <Datum> · letzter Versuch: <Datum> · Fehler: <kurz>" (Einstellungen → Export)
+    async function renderBackupAttemptInfo(data) {
+      const el = document.getElementById('gdrive-backup-attempt-info');
+      if (!el) return;
+      try {
+        if (!data) {
+          const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
+          data = snap.exists() ? snap.data() : {};
+        }
+        el.textContent = 'Letztes Backup: ' + fmtBackupTs(data.lastDriveBackup)
+          + ' · letzter Versuch: ' + fmtBackupTs(data.lastDriveBackupAttempt || data.lastDriveBackup)
+          + ' · Fehler: ' + (data.lastDriveBackupError || '—');
+      } catch (e) { console.warn('Backup-Info nicht ladbar:', e); }
+    }
 
     async function loadBackupStatus() {
       try {
@@ -13969,19 +14039,25 @@ Regeln:
         } else {
           if (statusEl) statusEl.textContent = 'Noch kein Google Drive Backup erstellt.';
         }
+        renderBackupAttemptInfo(snap.exists() ? snap.data() : {});
       } catch(e) {}
     }
 
-    // Auto-backup on app start: if last backup > 24h ago, run silently
+    // Auto-backup on app start: nur wenn der letzte VERSUCH (nicht der letzte Erfolg) > 24 h her ist.
+    // Vorher zählte nur lastDriveBackup: schlug das Backup fehl, wurde es bei JEDEM Start erneut
+    // versucht – jedes Mal mit vollem Lesen aller logEntries (~31.000 Reads, Analyse 04.11.2026).
+    const DRIVE_BACKUP_MIN_INTERVAL_MS = 24 * 3600 * 1000;
     async function checkAutoBackup() {
       try {
+        const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
+        const data = snap.exists() ? snap.data() : {};
+        const lastTryMs = Math.max(
+          Date.parse(data.lastDriveBackupAttempt || '') || 0,
+          Date.parse(data.lastDriveBackup || '') || 0
+        );
+        if (Date.now() - lastTryMs < DRIVE_BACKUP_MIN_INTERVAL_MS) return; // letzter Versuch recent enough
         const driveSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
         if (!driveSnap.exists() || !driveSnap.data().refreshToken) return; // Drive not connected
-        const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
-        if (snap.exists() && snap.data().lastDriveBackup) {
-          const hoursSince = (Date.now() - new Date(snap.data().lastDriveBackup).getTime()) / 3600000;
-          if (hoursSince < 24) return; // Backup recent enough
-        }
         console.log('Auto-backup: running silent backup...');
         await backupToGoogleDrive(true); // silent=true
       } catch(e) { console.warn('Auto-backup check failed:', e); }

@@ -280,7 +280,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 |---|---|---|
 | `settings/main` | `activityLevel`, `age`, `assumedDailySteps`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string), `anthropicApiKey` (string) | **`anthropicApiKey`** |
 | `settings/favorites` | `ids` (array) | – |
-| `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName` (string) | – (Drive-Referenzen) |
+| `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName`, `lastDriveBackupAttempt` (ISO-Zeitstempel, seit 04.11.2026), `lastDriveBackupError` (Kurztext oder null, seit 04.11.2026) (string) | – (Drive-Referenzen; Auto-Backup nur wenn letzter Versuch > 24 h) |
 | `settings/exercises` | 11 Übungsschlüssel (`pullups`, `pushups`, `lunges`, `terraband_knie`, `custom_*`) je map | – |
 | `settings/subjectiveStatus` | `history` (array) | – (Gesundheit/Befinden) |
 | `integrations/googlefit` | `accessToken`, `refreshToken` (string), `expiresAt`, `lastSyncActivities`, `lastSyncSteps` (number), `connectedAt`, `lastSyncAt` (timestamp) | **`accessToken`, `refreshToken`** |

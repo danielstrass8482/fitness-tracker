@@ -28,7 +28,7 @@
 - `calcHistoricalKcalGoal` (auch als `window.`) gibt immer `{base, activity, daily, total}` zurück, nie eine Zahl.
 - Aktivitätsschritte werden von Tagesschritten abgezogen, nur über `getActivityStepsForDate`; Quelle je Tag per `getStepsSourceForDate`, nie gemischt.
 - `calcActivityKcal`: Gehen/Wandern (MET 3,5) zählen bewusst zu Aktivitätskalorien – nicht zurückrollen.
-- MET-Werte, BMR-Formel, Kalorien-/Makrologik: höchstens strukturell ändern, Werte und Formeln nie.
+- Formeln (MET, BMR, Zirkel-/Puls-Kalorien, Kalorienziel) nur auf ausdrücklichen Auftrag ändern; Konstanten zentral halten.
 - `loadAllData()` lädt bewusst nur 365 Tage (`datum >= cutoffStr`, Fallback-Query auf `date`) – nicht auf "alles" zurückbauen.
 - Jedes Modal in `MODAL_IDS` eintragen und beim Öffnen `pushModalState()` aufrufen, sonst bricht der `popstate`-Zurück-Handler.
 - Android `onBackPressed()` dispatcht `popstate` in die WebView, statt die App zu schließen.

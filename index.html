@@ -1351,9 +1351,6 @@
       <!-- Hinweis bei fehlgeschlagenem Hintergrund-Sync (siehe showLoadErrorNotice) -->
       <div id="load-error-notice" class="fo-card" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;cursor:pointer;font-size:13px;" onclick="retryLoadAfterError()"></div>
 
-      <!-- Hinweis bei nicht aktuellen Garmin-Daten (siehe renderGarminStaleNotice) -->
-      <div id="garmin-stale-notice" class="fo-card" style="display:none;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;font-size:13px;"></div>
-
       <!-- Schritte & Aktivitäten -->
       <div id="daily-activity-summary" class="fo-card" style="margin-bottom:12px;"></div>
 
@@ -2354,7 +2351,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-04 21:00';
+    const APP_BUILD = '2026-11-05 17:43';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2810,19 +2807,24 @@
       return Number.isFinite(ms) ? ms : null;
     }
 
-    // "Uhr live · HH:MM" (R5) für das Datum, wenn der ciqSteps-Wert heute strikt höher ist als
-    // garminDaily und deshalb der tatsächlich genutzte ist (R1: max(...)) - sonst null (Aufrufer
-    // zeigt dann das bisherige Garmin-Label). Bei fehlendem/ungültigem receivedAt ebenfalls null,
-    // damit nie "Uhr live · Invalid Date" angezeigt wird.
-    function ciqLiveLabel(date) {
-      if (getStepsSourceForDate(date) !== 'garmin') return null;
+    // Schritt-Quellen-Label für das Datum (Teil 2a; Uhrzeit statt Sync-Warnbanner, 05.11.2026/B2):
+    // Google Fit -> 'Google Fit'. Garmin ohne heutiges ciqSteps-Dokument (immer der Fall für
+    // vergangene Tage, da ciqStepsToday.date immer "heute" ist, siehe ciqStepsForDate) -> 'Garmin'
+    // wie bisher. Garmin MIT heutigem ciqSteps-Dokument: ciqSteps gewinnt (R1: max(...), strikt höher)
+    // -> 'Uhr live · HH:MM' wie bisher, sonst (Garmin gewinnt oder Gleichstand) neu -> 'Garmin · Uhr
+    // HH:MM' - die Uhrzeit der letzten Uhr-Übertragung ist so immer sichtbar, unabhängig davon wer
+    // gewinnt. Bei fehlendem/ungültigem receivedAt ohne Zeit-Anhang ('Garmin'), damit nie "Invalid
+    // Date" angezeigt wird.
+    function stepsSourceLabel(date) {
+      if (getStepsSourceForDate(date) !== 'garmin') return 'Google Fit';
+      if (!(ciqStepsToday && ciqStepsToday.date === date)) return 'Garmin';
+      const ms = ciqReceivedAtMs(ciqStepsToday.receivedAt);
+      if (ms == null) return 'Garmin';
+      const uhrzeit = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date(ms));
       const ciqVal = ciqStepsForDate(date);
-      if (ciqVal <= (garminDailyByDate[date]?.steps || 0)) return null;
-      const ms = ciqReceivedAtMs(ciqStepsToday?.receivedAt);
-      if (ms == null) return null;
-      return `Uhr live · ${new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date(ms))}`;
+      return ciqVal > (garminDailyByDate[date]?.steps || 0) ? `Uhr live · ${uhrzeit}` : `Garmin · Uhr ${uhrzeit}`;
     }
-    window.ciqLiveLabel = ciqLiveLabel;
+    window.stepsSourceLabel = stepsSourceLabel;
 
     // Welche Quelle liefert die Tagesschritte UND welche Aktivitäten werden davon abgezogen – nie
     // gemischt (Korrektur 2, 01.11.2026). Vor garminActivityCutoff immer Google Fit, sonst Garmin
@@ -2844,71 +2846,6 @@
       return getStepsSourceForDate(date) === 'garmin'
         ? Math.max(garminDailyByDate[date]?.steps || 0, ciqStepsForDate(date))
         : (dayLog?.steps || 0);
-    }
-
-    // Aktuelle Stunde (0-23) in Europe/Berlin, für die Banner-Zeitfenster unten.
-    function berlinHour(now) {
-      return parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', hour12: false }).format(now), 10);
-    }
-
-    // Letzter bekannter garminLastSync-Wert: heutiges Dokument, sonst das jüngste vorherige
-    // (Mitternachtsfall - "leer" ist weder "alles gut" noch automatisch "Problem", siehe Teil 2f/Korrektur 1).
-    function latestKnownGarminLastSync(todayStr) {
-      if (garminDailyByDate[todayStr]?.garminLastSync) return garminDailyByDate[todayStr].garminLastSync;
-      const priorDates = Object.keys(garminDailyByDate).filter(d => d < todayStr).sort();
-      const prev = priorDates[priorDates.length - 1];
-      return prev ? garminDailyByDate[prev]?.garminLastSync : null;
-    }
-
-    // Warnbanner-Entscheidung (Teil 2f, verschärft durch Korrektur 1, 01.11.2026):
-    // - garminHealth.ok === false UND einziger Grund "garminDaily/{heute} existiert nicht":
-    //   zwischen 00:00-08:00 normal (kein Banner), ab 08:00 gilt das fehlende Tagesdokument als Problem.
-    // - garminHealth.ok === false aus jedem ANDEREN Grund: Banner zu jeder Uhrzeit.
-    // - sonst (ok !== false): zwischen 08:00-22:00 Banner, wenn der letzte bekannte garminLastSync
-    //   älter als 3 Std. ist.
-    // nowOverride nur für Tests (siehe Teil 3) - im Betrieb immer new Date().
-    function garminStaleBannerInfo(nowOverride) {
-      const now = nowOverride || new Date();
-      const hour = berlinHour(now);
-      const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-
-      if (garminHealth && garminHealth.ok === false) {
-        const onlyMissingTodayDoc = garminHealth.reason === `garminDaily/${todayStr} existiert nicht`;
-        if (onlyMissingTodayDoc) {
-          if (hour < 8) return null;
-          return { text: 'Noch keine Garmin-Tagesdaten für heute – Garmin Connect auf dem Handy öffnen.' };
-        }
-        return { text: `Garmin-Sync gestört (${garminHealth.reason || 'unbekannter Grund'}) – Garmin Connect auf dem Handy öffnen.` };
-      }
-
-      if (hour >= 8 && hour < 22) {
-        const lastSync = latestKnownGarminLastSync(todayStr);
-        if (lastSync) {
-          const ageMs = now.getTime() - new Date(lastSync).getTime();
-          if (ageMs > 3 * 3600 * 1000) {
-            // R5: kein Banner, wenn ciqStepsToday.date === todayStr (Dokument gilt für den Tag, den
-            // dieser Aufruf als "heute" behandelt - todayStr kommt oben aus `now`/nowOverride, nicht
-            // aus berlinTodayStr(), damit das bei nowOverride-Tests konsistent bleibt) UND die
-            // ciqSteps-Übertragung jünger als 30 Min ist (now - ciqReceivedAtMs(receivedAt) < 30*60*1000).
-            const recvMs = (ciqStepsToday && ciqStepsToday.date === todayStr) ? ciqReceivedAtMs(ciqStepsToday.receivedAt) : null;
-            const ciqFreshMs = recvMs != null ? now.getTime() - recvMs : Infinity;
-            if (ciqFreshMs >= 30 * 60 * 1000) {
-              const hoursAgo = Math.floor(ageMs / 3600000);
-              return { text: `Uhr seit ${hoursAgo} Std. nicht synchronisiert – Garmin Connect auf dem Handy öffnen.` };
-            }
-          }
-        }
-      }
-      return null;
-    }
-
-    function renderGarminStaleNotice() {
-      const el = document.getElementById('garmin-stale-notice');
-      if (!el) return;
-      const info = garminStaleBannerInfo();
-      if (!info) { el.style.display = 'none'; return; }
-      el.style.display = 'flex';
-      el.textContent = info.text;
     }
 
     // Weekly stats state
@@ -3509,7 +3446,6 @@
       const activeTab = document.querySelector('.tab.active');
       if (!activeTab) showTabPanel(START_TAB);
       renderFoodLog(); // ruft renderDailyCheckCard() selbst als Erstes auf – im selben ersten Render, kein Nachrücken
-      renderGarminStaleNotice();
       renderDataStats();
       renderFoodDB();
       renderRecipes();
@@ -5665,10 +5601,10 @@
 
         let html = '<ul class="fo-list">';
 
-        // Schritte (Quelle sichtbar machen, Teil 2a). "Uhr live · HH:MM" (R5, siehe ciqLiveLabel),
-        // sonst bisheriges Garmin-/Google-Fit-Label.
+        // Schritte (Quelle sichtbar machen, Teil 2a). Uhrzeit der letzten Uhr-Übertragung immer
+        // sichtbar, wenn heute ein ciqSteps-Dokument existiert (siehe stepsSourceLabel).
         if (steps > 0) {
-          const sourceText = ciqLiveLabel(currentDate) || (getStepsSourceForDate(currentDate) === 'garmin' ? 'Garmin' : 'Google Fit');
+          const sourceText = stepsSourceLabel(currentDate);
           html += `<li><div class="fo-row">
             <span class="fo-row__icon">${foIcon('steps')}</span>
             <div class="fo-row__main">
@@ -10005,7 +9941,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         // oder anderes Modal liegt in diesem DOM-Teilbaum (siehe Playwright-Verifikation Teil 2).
         renderFoodLog();          // Schrittanzeige + Quellen-Label + Tagesbilanz/Kalorienbudget
         renderTrainingHistory();  // Aktivitätsliste im Training-Tab
-        renderGarminStaleNotice(); // Warnbanner
       } catch (e) {
         console.warn('Garmin Auto-Sync (' + grund + ') fehlgeschlagen:', e); // letzter Stand bleibt sichtbar, kein Fehlerzustand in der UI
       } finally {

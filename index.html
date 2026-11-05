@@ -2351,7 +2351,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-05 19:26';
+    const APP_BUILD = '2026-11-05 19:41';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -9952,11 +9952,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     function stopGarminPollTimer() {
       if (garminPollTimer) { clearInterval(garminPollTimer); garminPollTimer = null; }
     }
-    // Gemeinsamer Einstieg für alle "App wieder im Vordergrund"-Signale (002c): in der Android-
-    // WebView ist nicht sicher, dass visibilitychange beim Zurückkehren zuverlässig feuert - focus,
-    // pageshow und das von der Android-Hülle gesendete fuelofit:resume laufen deshalb über dieselbe
-    // Funktion. autoSyncGarmin drosselt selbst (GARMIN_AUTOSYNC_MIN_INTERVAL_MS + garminAutoSyncInProgress),
-    // feuern mehrere dieser Ereignisse gleichzeitig, lädt trotzdem nur einer davon tatsächlich neu.
+    // Gemeinsamer Einstieg für alle "App wieder im Vordergrund"-Signale (002c/002d): nicht sicher,
+    // dass visibilitychange beim Zurückkehren zuverlässig feuert - focus, pageshow und resume
+    // (Page Lifecycle API, feuert in Chrome nach dem Auftauen eingefrorener Seiten, auch in
+    // installierten PWAs) laufen deshalb über dieselbe Funktion. autoSyncGarmin drosselt selbst
+    // (GARMIN_AUTOSYNC_MIN_INTERVAL_MS + garminAutoSyncInProgress), feuern mehrere dieser Ereignisse
+    // gleichzeitig, lädt trotzdem nur einer davon tatsächlich neu.
     function handleGarminResumeTrigger(grund) {
       autoSyncGarmin(grund);
       startGarminPollTimer();
@@ -9967,7 +9968,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     });
     window.addEventListener('focus', () => handleGarminResumeTrigger('focus'));
     window.addEventListener('pageshow', () => handleGarminResumeTrigger('pageshow'));
-    window.addEventListener('fuelofit:resume', () => handleGarminResumeTrigger('fuelofit:resume'));
+    document.addEventListener('resume', () => handleGarminResumeTrigger('resume'));
 
     // Fallback ohne jedes Ereignis (002c, B2): beim Rendern der Übersicht (renderFoodLog) prüfen,
     // ob der letzte erfolgreiche Reload schon länger als GARMIN_RENDER_STALE_MS zurückliegt. Nutzt

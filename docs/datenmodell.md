@@ -574,6 +574,52 @@ wenn Echtzeit gebraucht wird. (iii) eignet sich nur für kleine Ad-hoc-Abfragen.
 
 ---
 
+## 8. Analytics-DB (Phase 1a, umgesetzt 2026-11-05)
+
+Umsetzung von Vorschlag 7b(i): Cloud Function `exportAnalytics` (us-central1, Repo
+`fuelofit-functions`) exportiert eine serverseitige Whitelist an Collections per GET,
+Secret-Auth (`X-Analytics-Secret` gegen `ANALYTICS_EXPORT_SECRET`), feste uid aus
+`GARMIN_TARGET_UID` (nicht aus dem Request). Secret-Felder (Name enthaelt token/secret/apikey/
+password/refresh, case-insensitive) werden zusaetzlich rekursiv aus jeder Antwort entfernt,
+unabhaengig von der Whitelist. `sync.py` auf dem VPS (User `fuelofit-analytics`, kein Service
+Account, kein Firestore-Zugriff direkt) holt darueber taeglich ein 14-Tage-Fenster und
+sonntags den Vollbestand nach Postgres `fuelofit_analytics` (Schema `raw` = 1:1-Kopie je
+Collection als JSONB, Schema `views` = 5 typisierte Sichten). Details, Rollen, Sync-Zeiten und
+Wiederaufbau: `analytics/README.md`.
+
+**Whitelist** (Cloud Function `~/functions/index.js`, Konstante `ANALYTICS_WHITELIST`):
+
+| Collection | Scope | Datumsfeld (window) | mode=full |
+|---|---|---|---|
+| `logEntries` | `users/{uid}/` | `datum` (Fallback `date`) | ja |
+| `entries` | `users/{uid}/` | `datum` | ja |
+| `oura_daily` | `users/{uid}/` | `date` | ja |
+| `oura_workouts` | `users/{uid}/` | `day` | ja |
+| `garminActivities` | `users/{uid}/` | `startLocal` (Datumsteil) | ja |
+| `garminDaily` | `users/{uid}/` | Dokument-ID (kein eigenes Feld) | ja |
+| `ciqSteps` | `users/{uid}/` | Dokument-ID (kein eigenes Feld); **ohne** `samples` | ja |
+| `dailyCheck` | `users/{uid}/` | `date` | ja |
+| `dailyCheckCallLog` | `users/{uid}/` | `date` | ja |
+| `trainingplans` | `users/{uid}/` | `datum` | ja |
+| `trainingTypes` | Top-Level | – (kein Datumsfeld) | nur full |
+| `intervalTemplates` | `users/{uid}/` | – | nur full |
+| `garminLinks` | `users/{uid}/` | – | nur full |
+| `garminHidden` | `users/{uid}/` | – | nur full |
+| `foods` | Top-Level | – | nur full |
+| `recipes` | `users/{uid}/` | – | nur full |
+| `weeklyStats` | `users/{uid}/` | – | nur full |
+
+Hart ausgeschlossen (nicht in der Whitelist, Function liefert 400): `settings`, `integrations`,
+`oura_tokens`, `oura_oauth_state`, `ciqSteps/*/samples`, alle `dart_*`-Collections,
+`users/{uid}/foods`, `oura_step_log`, `stravaAthletes`.
+
+**Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
+(`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
+--retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die
+hat kein eigenes Backup, ist aus Firestore ableitbar, s. `analytics/README.md`).
+
+---
+
 ## Prüfprotokoll
 
 Vor dem Commit per grep geprüft: kein Treffer für die reale uid (nur `{uid}`), keine E-Mail-Adressen,

@@ -2351,7 +2351,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-05 17:43';
+    const APP_BUILD = '2026-11-05 19:26';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2384,7 +2384,6 @@
     // getEffectiveTrainingEntries) – entries/-Dokumente bleiben dabei unverändert.
     let garminDailyByDate = {};    // { [date]: { steps, garminLastSync, fetchedAt, source } }
     let garminActivitiesAll = [];  // [{ id, mappedTyp, garminType, startLocal, steps, durationSec, distanceM, avgHr, maxHr, garminKcal }]
-    let garminHealth = null;       // { ok, reason, checkedAt, staleSince } aus integrations/garminHealth (nur diese 4 Felder)
     let garminHiddenIds = new Set(); // activityId-Set aus garminHidden/{activityId} (Korrektur 3, 01.11.2026)
     let garminUnlinkedIds = new Set(); // activityId-Set aus garminLinks/{activityId} mit unlinked:true (Zirkel-Zusammenführung, 01.11.2026) - "Zuordnung lösen"
     let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
@@ -2409,7 +2408,6 @@
     window.ouraStatus = ouraStatus;
     window.garminDailyByDate = garminDailyByDate;
     window.garminActivitiesAll = garminActivitiesAll;
-    window.garminHealth = garminHealth;
     window.garminHiddenIds = garminHiddenIds;
     window.garminUnlinkedIds = garminUnlinkedIds;
 
@@ -2508,11 +2506,11 @@
     // GARMIN (Phase 1b, 01.11.2026) – read-only Zusammenführung mit Google Fit
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Lädt garminDaily, garminActivities, integrations/garminHealth (nur ok/reason/checkedAt/
-    // staleSince, nie das ganze Dokument) und garminHidden frisch aus Firestore. Alle drei
-    // Collections sind klein (garminDaily max. 1 Dok./Tag, garminActivities wenige/Woche,
-    // garminHidden nur manuell befüllt) – deshalb ohne Datums-Cutoff, anders als die 365-Tage-
-    // Grenze bei entries/logEntries.
+    // Lädt garminDaily, garminActivities und garminHidden frisch aus Firestore. integrations/
+    // garminHealth wird serverseitig weiter von garminHealthCheck geschrieben, aber von der App
+    // seit 002b (Sync-Warnbanner entfernt) nicht mehr gelesen. Alle drei Collections sind klein
+    // (garminDaily max. 1 Dok./Tag, garminActivities wenige/Woche, garminHidden nur manuell
+    // befüllt) – deshalb ohne Datums-Cutoff, anders als die 365-Tage-Grenze bei entries/logEntries.
     async function refreshGarminData() {
       const dailySnap = await getDocs(userGarminDailyCol());
       const nextDaily = {};
@@ -2526,15 +2524,6 @@
       garminActivitiesAll = nextActivities;
       window.garminActivitiesAll = garminActivitiesAll;
       garminActivityCutoff = computeGarminActivityCutoff(garminActivitiesAll);
-
-      const healthSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'garminHealth'));
-      garminHealth = healthSnap.exists() ? {
-        ok: healthSnap.data().ok,
-        reason: healthSnap.data().reason,
-        checkedAt: healthSnap.data().checkedAt,
-        staleSince: healthSnap.data().staleSince,
-      } : null;
-      window.garminHealth = garminHealth;
 
       const hiddenSnap = await getDocs(userGarminHiddenCol());
       const nextHidden = new Set();
@@ -2904,8 +2893,8 @@
           cacheGet('ouraDaily'),
           cacheGet('ouraStatus'),
         ]);
-        const [cachedGarminDaily, cachedGarminActivities, cachedGarminHealth, cachedGarminHidden, cachedGarminUnlinked] = await Promise.all([
-          cacheGet('garminDaily'), cacheGet('garminActivities'), cacheGet('garminHealth'), cacheGet('garminHidden'), cacheGet('garminUnlinked'),
+        const [cachedGarminDaily, cachedGarminActivities, cachedGarminHidden, cachedGarminUnlinked] = await Promise.all([
+          cacheGet('garminDaily'), cacheGet('garminActivities'), cacheGet('garminHidden'), cacheGet('garminUnlinked'),
         ]);
         const [cachedPlanFrom, cachedPlanWeeks] = await Promise.all([cacheGet('trainingplan_from'), cacheGet('trainingplan_weeks')]);
         const [cachedCustomTypes, cachedIntervalTemplates, cachedExerciseSettings, cachedSubjectiveStatusHistory] = await Promise.all([cacheGet('customTrainingTypes'), cacheGet('intervalTemplates'), cacheGet('exerciseSettings'), cacheGet('subjectiveStatusHistory')]);
@@ -2962,7 +2951,6 @@
           window.garminActivitiesAll = garminActivitiesAll;
           garminActivityCutoff = computeGarminActivityCutoff(garminActivitiesAll);
         }
-        if (cachedGarminHealth) { garminHealth = cachedGarminHealth; window.garminHealth = garminHealth; }
         if (Array.isArray(cachedGarminHidden)) {
           garminHiddenIds = new Set(cachedGarminHidden);
           window.garminHiddenIds = garminHiddenIds;
@@ -2994,7 +2982,6 @@
         cachePut('ouraStatus', ouraStatus),
         cachePut('garminDaily', Object.entries(garminDailyByDate).map(([date, v]) => ({ date, ...v }))),
         cachePut('garminActivities', garminActivitiesAll),
-        cachePut('garminHealth', garminHealth),
         cachePut('garminHidden', [...garminHiddenIds]),
         cachePut('garminUnlinked', [...garminUnlinkedIds]),
         cachePut('customTrainingTypes', customTrainingTypes),
@@ -3180,10 +3167,19 @@
         } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
 
         // Load Garmin (Phase 1b, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
-        try {
-          await refreshGarminData();
-          garminLastSyncAt = Date.now(); // zählt für die 5-Minuten-Drosselung des Auto-Reloads mit (siehe autoSyncGarmin)
-        } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
+        // Nur laden, wenn weder schon ein Sync läuft noch bereits einer gelaufen ist (002c): pageshow
+        // feuert laut Spec bei JEDEM Laden, auch beim allerersten - während der await-Kette oben
+        // (u.a. IndexedDB-Zugriffe) kann das Ereignis schon vor dieser Stelle einen eigenen
+        // autoSyncGarmin-Lauf gestartet oder beendet haben. Prüfung+Setzen in einem synchronen
+        // Schritt (kein await dazwischen) - kein doppelter Reload, siehe Playwright-Beleg im Bericht.
+        if (!garminAutoSyncInProgress && garminLastSyncAt === 0) {
+          garminAutoSyncInProgress = true;
+          try {
+            await refreshGarminData();
+            garminLastSyncAt = Date.now(); // zählt für die 5-Minuten-Drosselung des Auto-Reloads mit (siehe autoSyncGarmin)
+          } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
+          finally { garminAutoSyncInProgress = false; }
+        }
 
         // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
         // bereits try/catch-geschützt (fällt auf settings/trainingplan zurück), kann nicht mehr werfen
@@ -5469,6 +5465,8 @@
       // Die Tagescheck-Karte gehört zum gerade angezeigten Tag (currentDate), nicht fest zu "heute"
       // (Bugreport 2026-10-19) – renderFoodLog läuft bei JEDEM Tageswechsel (changeDate/slideToDay)
       // und auch im ersten Render (renderAll), ist also die einzige Stelle, die dafür nötig ist.
+      // checkGarminRenderStale: Fallback-Nachladen ohne Ereignis, siehe 002c (B2) weiter unten.
+      checkGarminRenderStale();
       renderDailyCheckCard();
       // Update date display
       const dateObj = new Date(currentDate + 'T12:00:00');
@@ -9954,14 +9952,33 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     function stopGarminPollTimer() {
       if (garminPollTimer) { clearInterval(garminPollTimer); garminPollTimer = null; }
     }
+    // Gemeinsamer Einstieg für alle "App wieder im Vordergrund"-Signale (002c): in der Android-
+    // WebView ist nicht sicher, dass visibilitychange beim Zurückkehren zuverlässig feuert - focus,
+    // pageshow und das von der Android-Hülle gesendete fuelofit:resume laufen deshalb über dieselbe
+    // Funktion. autoSyncGarmin drosselt selbst (GARMIN_AUTOSYNC_MIN_INTERVAL_MS + garminAutoSyncInProgress),
+    // feuern mehrere dieser Ereignisse gleichzeitig, lädt trotzdem nur einer davon tatsächlich neu.
+    function handleGarminResumeTrigger(grund) {
+      autoSyncGarmin(grund);
+      startGarminPollTimer();
+    }
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        autoSyncGarmin('visible');
-        startGarminPollTimer();
-      } else {
-        stopGarminPollTimer();
-      }
+      if (document.visibilityState === 'visible') handleGarminResumeTrigger('visible');
+      else stopGarminPollTimer();
     });
+    window.addEventListener('focus', () => handleGarminResumeTrigger('focus'));
+    window.addEventListener('pageshow', () => handleGarminResumeTrigger('pageshow'));
+    window.addEventListener('fuelofit:resume', () => handleGarminResumeTrigger('fuelofit:resume'));
+
+    // Fallback ohne jedes Ereignis (002c, B2): beim Rendern der Übersicht (renderFoodLog) prüfen,
+    // ob der letzte erfolgreiche Reload schon länger als GARMIN_RENDER_STALE_MS zurückliegt. Nutzt
+    // dieselbe Drosselung wie oben (autoSyncGarmin/garminLastSyncAt) - kein Doppel-Laden.
+    const GARMIN_RENDER_STALE_MS = 15 * 60 * 1000;
+    function checkGarminRenderStale() {
+      if (!userId || auth.currentUser?.isAnonymous) return;
+      if (document.visibilityState !== 'visible') return;
+      if (garminLastSyncAt && Date.now() - garminLastSyncAt < GARMIN_RENDER_STALE_MS) return;
+      autoSyncGarmin('render-stale');
+    }
 
     async function loadGoogleFitStatus() {
       try {

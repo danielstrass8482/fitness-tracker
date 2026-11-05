@@ -1,0 +1,2 @@
+# Gepinnt am 2026-11-05 (pip index versions psycopg -> 3.3.8 aktuell)
+psycopg[binary]==3.3.8

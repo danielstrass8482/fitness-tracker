@@ -9,6 +9,7 @@
 
 ## Sicherheit
 - Secrets nie ausgeben, auch nicht teilweise oder maskiert. Keine Dateien/Dokumente mit Secrets vollständig lesen; bei Keys nur Pfad, Rechte, Länge, Prüfungen ohne Inhaltsausgabe (z. B. -check -noout).
+- Niemals Secret-Werte abrufen: kein `firebase functions:secrets:access`, kein `gcloud secrets versions access`, keine Ausgabe von Secret-Dateien. Secrets nur schreibend setzen (Datei/Pipe).
 - Firestore: settings/ und integrations/ nur mit Feld-Masken lesen; settings/main enthält den Anthropic-Key.
 - Keine IAM-Änderungen. Automatische Grants durch firebase (z. B. secretAccessor) im Bericht benennen.
 - Garmin: bei Login-/Auth-Fehlern oder 429 nie wiederholen, nie Passwort-Login.

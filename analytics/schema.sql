@@ -171,6 +171,16 @@ CREATE TABLE IF NOT EXISTS raw.trainingplans (
 CREATE INDEX IF NOT EXISTS trainingplans_day_idx ON raw.trainingplans (day);
 CREATE INDEX IF NOT EXISTS trainingplans_data_gin ON raw.trainingplans USING gin (data);
 
+CREATE TABLE IF NOT EXISTS raw.daily_snapshots (
+  id text PRIMARY KEY,            -- = YYYY-MM-DD (Firestore-Doc-ID, siehe Teil B Aufgabe 003c)
+  day date,
+  data jsonb NOT NULL,
+  synced_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS daily_snapshots_day_idx ON raw.daily_snapshots (day);
+CREATE INDEX IF NOT EXISTS daily_snapshots_data_gin ON raw.daily_snapshots USING gin (data);
+
 CREATE TABLE IF NOT EXISTS raw.training_types (
   id text PRIMARY KEY,
   day date,                       -- immer NULL, mode=full
@@ -303,3 +313,31 @@ SELECT
   (data->>'tempDeviation')::numeric AS temp_deviation
 FROM raw.oura_daily
 WHERE deleted_at IS NULL;
+
+-- 6) Tages-Zusammenfassung (Phase 1b): live berechnete Werte aus raw.daily_snapshots (von der
+-- App selbst berechnet und geschrieben, siehe B1 in index.html -- KEINE Formel-Nachbildung
+-- hier). Bilanz = Intake - Kalorienziel (negativ = Defizit). Gewicht aus views.body_weight
+-- (separat erfasst, nicht Teil des Snapshots).
+CREATE OR REPLACE VIEW views.daily_summary AS
+SELECT
+  ds.day,
+  (ds.data->'kcalGoal'->>'total')::numeric AS kcal_goal_total,
+  (ds.data->'kcalGoal'->>'base')::numeric AS kcal_goal_base,
+  (ds.data->'kcalGoal'->>'activity')::numeric AS kcal_goal_activity,
+  (ds.data->'kcalGoal'->>'daily')::numeric AS kcal_goal_daily,
+  (ds.data->'intake'->>'kcal')::numeric AS intake_kcal,
+  (ds.data->'intake'->>'protein')::numeric AS intake_protein,
+  (ds.data->'intake'->>'carbs')::numeric AS intake_carbs,
+  (ds.data->'intake'->>'fat')::numeric AS intake_fat,
+  (ds.data->'intake'->>'kcal')::numeric - (ds.data->'kcalGoal'->>'total')::numeric AS balance_kcal,
+  (ds.data->'steps'->>'display')::numeric AS steps_display,
+  ds.data->'steps'->>'source' AS steps_source,
+  (SELECT COALESCE(sum((a->>'kcalGezaehlt')::numeric), 0)
+     FROM jsonb_array_elements(ds.data->'activities') a) AS activity_kcal_sum,
+  bw.weight_kg,
+  (ds.data->>'final')::boolean AS final,
+  (ds.data->>'backfilled')::boolean AS backfilled,
+  ds.data->>'appBuild' AS app_build
+FROM raw.daily_snapshots ds
+LEFT JOIN views.body_weight bw ON bw.day = ds.day
+WHERE ds.deleted_at IS NULL;

@@ -62,6 +62,7 @@ COLLECTIONS = [
     ("dailyCheck", "daily_check", True),
     ("dailyCheckCallLog", "daily_check_call_log", True),
     ("trainingplans", "trainingplans", True),
+    ("dailySnapshots", "daily_snapshots", True),
     ("foods", "foods", False),
     ("recipes", "recipes", False),
     ("weeklyStats", "weekly_stats", False),

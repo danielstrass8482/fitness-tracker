@@ -61,6 +61,10 @@ Die Analyse-DB hat **kein eigenes Backup** -- sie ist aus Firestore vollstaendig
 Das eigentliche Sicherheitsnetz ist der Firestore-Backup-Schedule (taeglich, 14 Wochen
 Aufbewahrung, siehe `docs/datenmodell.md`), nicht ein Backup dieser Postgres-DB.
 
+Fuer eine bereits laufende Instanz (Schema existiert schon) genuegt statt Schritt 2 das
+passende Skript aus `migrations/` (idempotent, nur ADD/CREATE IF NOT EXISTS) - `schema.sql`
+bleibt die vollstaendige Referenz fuer einen Neuaufbau von Null.
+
 ## Rotation des Secrets (`ANALYTICS_EXPORT_SECRET`)
 
 1. Neuen Wert erzeugen: `openssl rand -hex 32 | tr -d '\n' > /tmp/analytics-export-secret.txt`
@@ -86,6 +90,9 @@ die Darts-Collections. Freitextfelder mit Gesundheitsbezug (`dailyCheck.reason/a
 erreichbar) sind ueber die Whitelist der Cloud Function gar nicht exportierbar.
 
 Live berechnete Werte (BMR, Kalorienziel, Zirkel-/Puls-Mischung-kcal, Schrittquelle je Tag) werden
-hier **nicht** nachgebaut -- die Formeln liegen nur in `index.html`. Phase 1b soll sie als
-Snapshot-Tabelle ablegen, berechnet mit der App-Logik selbst (siehe `docs/datenmodell.md`
-Abschnitt 7a).
+hier **nicht** nachgebaut -- die Formeln liegen nur in `index.html`. Seit Phase 1b (Aufgabe
+003c, 2026-11-06) legt die App selbst taeglich einen Snapshot der mit ihrer eigenen Logik
+berechneten Werte ab (`users/{uid}/dailySnapshots/{date}`), der ueber `exportAnalytics` und
+`sync.py` nach `raw.daily_snapshots` / `views.daily_summary` repliziert wird (eine
+Formelquelle: dieselben Funktionen wie Anzeige/Kalorienziel, siehe `docs/datenmodell.md`
+Abschnitt 8).

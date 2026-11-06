@@ -574,7 +574,7 @@ wenn Echtzeit gebraucht wird. (iii) eignet sich nur für kleine Ad-hoc-Abfragen.
 
 ---
 
-## 8. Analytics-DB (Phase 1a, umgesetzt 2026-11-05)
+## 8. Analytics-DB (Phase 1a, umgesetzt 2026-11-05; Phase 1b/dailySnapshots, umgesetzt 2026-11-06)
 
 Umsetzung von Vorschlag 7b(i): Cloud Function `exportAnalytics` (us-central1, Repo
 `fuelofit-functions`) exportiert eine serverseitige Whitelist an Collections per GET,
@@ -601,6 +601,7 @@ Wiederaufbau: `analytics/README.md`.
 | `dailyCheck` | `users/{uid}/` | `date` | ja |
 | `dailyCheckCallLog` | `users/{uid}/` | `date` | ja |
 | `trainingplans` | `users/{uid}/` | `datum` | ja |
+| `dailySnapshots` | `users/{uid}/` | `date` | ja |
 | `trainingTypes` | Top-Level | – (kein Datumsfeld) | nur full |
 | `intervalTemplates` | `users/{uid}/` | – | nur full |
 | `garminLinks` | `users/{uid}/` | – | nur full |
@@ -612,6 +613,21 @@ Wiederaufbau: `analytics/README.md`.
 Hart ausgeschlossen (nicht in der Whitelist, Function liefert 400): `settings`, `integrations`,
 `oura_tokens`, `oura_oauth_state`, `ciqSteps/*/samples`, alle `dart_*`-Collections,
 `users/{uid}/foods`, `oura_step_log`, `stravaAthletes`.
+
+**`dailySnapshots` (Phase 1b, 2026-11-06)**: `users/{uid}/dailySnapshots/{YYYY-MM-DD}`, von der
+App selbst mit ihrer eigenen Berechnungslogik geschrieben (`buildDailySnapshotPayload` in
+`index.html`) – ersetzt NICHT die Formeln in der Analyse-DB, liefert nur deren Ergebnis:
+`date`, `appBuild`, `computedAt` (Server-Timestamp), `final`, `backfilled`,
+`kcalGoal: {base, activity, daily, total}` (aus `calcHistoricalKcalGoal`),
+`steps: {raw, activitySteps, display, source}`, `activities: [{id, typ, dauerMin,
+kcalGezaehlt, formel?, garminNetto?}]` (je Trainingseintrag; `formel`/`garminNetto` nur bei
+verknüpftem Zirkel, siehe `zirkelPulseBreakdown`), `intake: {kcal, protein, carbs, fat}`
+(aus `getDayIntakeTotals`). Ausloeser: nach vollständigem Laden, periodisch alle 30 Min
+solange sichtbar, nach Speichern/Löschen eines Eintrags für heute (gedrosselt 1×/Min);
+beim Tageswechsel wird der Vortag einmalig mit `final=true` nachgezogen. Postgres-Sicht
+`views.daily_summary` (siehe `analytics/schema.sql`) macht daraus eine typisierte
+Tageszusammenfassung inkl. Bilanz (Intake − Kalorienziel) und Gewicht des Tages
+(`views.body_weight`-Join).
 
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily

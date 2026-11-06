@@ -17,10 +17,10 @@
 
 ## Umgebung
 - Zuerst gcloud-Auth prüfen (gcloud auth list, Token holbar). Abgelaufen → STOPP, Befehl für Daniel nennen.
-- App: index.html über GitHub Pages, Android-WebView-Hülle. Nach App-Änderungen: APP_BUILD auf aktuelle Zeit (Europe/Berlin), commit, push, Pages-Build abwarten, ausgeliefertes APP_BUILD per curl belegen.
+- Nutzung ausschließlich als Web-App/PWA (GitHub Pages); Android-Hülle stillgelegt (Repo archiviert). Nach App-Änderungen: APP_BUILD auf aktuelle Zeit (Europe/Berlin), commit, push, Pages-Build abwarten, ausgeliefertes APP_BUILD per curl belegen.
 - UI-Tests: Playwright mit echter index.html, Auth gestubbt, Read-only-Proxy auf echte Daten, alle Schreibzugriffe blockiert und mit Payload protokolliert, Viewport 360 px. Kein window.alert/confirm in der App, App-Dialoge (showConfirm) nutzen.
 - Tests gegen echte Firestore-Daten sparsam: große Collections (logEntries, foods, entries) stubben oder per Count messen; volle App-Starts gegen echte Daten nur, wenn der Auftrag es verlangt (ein Start ≈ 14.800 Reads, gemessen 04.11.2026).
-- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions, dartTTS und dartCoach in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage (dartTTS, createCustomToken u. a.) mit "No" beantworten; createCustomToken nie löschen.
+- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions, dartTTS und dartCoach in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage (dartTTS u. a.) mit "No" beantworten.
 - VPS 185.117.250.246 (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
 - Cloud-Shell-Home-Disk ist knapp: vor größeren Downloads/Builds df -h ~ prüfen; nichts außerhalb des Auftrags löschen.
 
@@ -33,9 +33,8 @@
 - Formeln (MET, BMR, Zirkel-/Puls-Kalorien, Kalorienziel) nur auf ausdrücklichen Auftrag ändern; Konstanten zentral halten.
 - `loadAllData()` lädt bewusst nur 365 Tage (`datum >= cutoffStr`, Fallback-Query auf `date`) – nicht auf "alles" zurückbauen.
 - Jedes Modal in `MODAL_IDS` eintragen und beim Öffnen `pushModalState()` aufrufen, sonst bricht der `popstate`-Zurück-Handler.
-- Android `onBackPressed()` dispatcht `popstate` in die WebView, statt die App zu schließen.
 - Initiales `style="display:none"` nie mit `display:flex` im selben Attribut; flex nur per JS beim Öffnen.
 - `barcode-container` muss direktes Kind von `<body>` bleiben; `barcodeContext` ('food'/'recipe') steuert das Ziel.
 - Tab-Struktur (Übersicht, Ernährung, Training, Analyse, Einstellungen) nicht umbauen.
 - Firestore-Collections und Dokumentstruktur nie ohne Migration ändern (Bestand: `docs/datenmodell.md`).
-- Cloud-Function-Namen und -Signaturen stabil halten; Android-App und index.html rufen sie direkt auf.
+- Cloud-Function-Namen und -Signaturen stabil halten; index.html ruft sie direkt auf.

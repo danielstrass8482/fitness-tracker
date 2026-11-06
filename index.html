@@ -1802,31 +1802,15 @@
           </div>
         </section>
 
-        <!-- Backup: Google Drive (bisher Daten › Backup, interne id export-subtab) -->
+        <!-- Backup: serverseitig via Firestore Scheduled Backups (Drive-Backup entfernt, Entscheidung Daniel 05.11.2026) -->
         <section class="fo-card" style="margin-bottom:20px;">
           <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
             <h3 class="fo-card__title">Backup</h3>
             <svg class="fo-i fo-chev" aria-hidden="true" style="margin-right:4px;"><use href="#i-chevD"/></svg>
           </button>
           <div class="settings-section-body" style="display:none;border-top:1px solid var(--fo-line);">
-            <div id="export-subtab" style="padding:12px;">
-              <!-- Google Drive Auto-Backup -->
-              <div>
-                <h3 style="margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:6px;"><svg class="fo-i fo-i--sm" aria-hidden="true"><use href="#i-save"/></svg>Google Drive Backup</h3>
-                <p class="fo-help" style="margin-bottom:16px;">Automatische tägliche Sicherung in deinen Google Drive (benötigt separate Google-Verbindung).</p>
-                <!-- Disconnected State -->
-                <div id="gdrive-disconnected">
-                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="connectGoogleDrive()">Mit Google Drive verbinden</button>
-                </div>
-                <!-- Connected State -->
-                <div id="gdrive-connected" style="display:none;">
-                  <p class="fo-help" id="gdrive-backup-status" style="margin-bottom:12px;">Status wird geladen...</p>
-                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="backupToGoogleDrive()"><svg class="fo-i" aria-hidden="true"><use href="#i-save"/></svg>Jetzt in Google Drive sichern</button>
-                  <p class="fo-help" style="margin-top:10px;">Letzte Sicherung: <span id="last-backup-time">—</span></p>
-                  <div class="fo-row__sub fo-row__sub--wrap" id="gdrive-backup-attempt-info" style="margin-top:6px;"></div>
-                  <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectGoogleDrive()" style="border-color:transparent;margin-top:10px;">Google Drive trennen</button>
-                </div>
-              </div>
+            <div style="padding:12px;">
+              <div class="fo-row__sub fo-row__sub--wrap">Tägliches automatisches Backup serverseitig (Firestore, 14 Wochen Aufbewahrung).</div>
             </div>
           </div>
         </section>
@@ -1861,6 +1845,7 @@
                   <div style="font-size:28px;font-weight:600;" id="stat-training">0</div>
                 </div>
               </div>
+              <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="recalcLast30DailySnapshots()" style="margin-top:14px;">Tageswerte neu berechnen (letzte 30 Tage)</button>
             </div>
           </div>
         </section>
@@ -2330,7 +2315,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-    import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    import { getFirestore, collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
     import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js';
     
     // Firebase Config - RICHTIGE DB mit Blaze Plan!
@@ -2351,7 +2336,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-05 19:41';
+    const APP_BUILD = '2026-11-06 10:48';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -3011,11 +2996,12 @@
         if (hasCachedData) {
           renderAll();
           showToast('Synchronisiere...', 'wait');
-          loadAllData(true).then(() => { autoSyncGoogleFit('start'); initDailyCheck(); }); // Hintergrund-Sync, kein await
+          loadAllData(true).then(() => { autoSyncGoogleFit('start'); initDailyCheck(); afterDataLoadedForSnapshots(); }); // Hintergrund-Sync, kein await
         } else {
           await loadAllData(false); // Erststart: blockierend laden
           autoSyncGoogleFit('start');
           initDailyCheck(); // asynchron, blockiert den Start nicht (siehe Funktion)
+          afterDataLoadedForSnapshots(); // Tages-Snapshot (B2), kein await - Fehler werden intern abgefangen
         }
 
         handleOuraRedirectParams();
@@ -3193,7 +3179,6 @@
 
         renderAll();
         hideLoadErrorNotice(); // vorheriger Fehler-Hinweis (falls sichtbar) nach erfolgreichem Load wieder weg
-        setTimeout(() => checkAutoBackup(), 5000);
 
       } catch (err) {
         console.error('Load error:', err);
@@ -5461,6 +5446,26 @@
       return groups;
     }
 
+    // Intake-Summe eines Tages aus foodLog (kcal/Makros) – einzige Stelle, von renderFoodLog (Anzeige)
+    // und vom Tages-Snapshot (Teil B, Aufgabe 003c) genutzt, damit beide nie auseinanderlaufen.
+    function getDayIntakeTotals(date) {
+      const entries = foodLog[date] || [];
+      let kcal = 0, protein = 0, carbs = 0, fat = 0;
+      entries.forEach(e => {
+        kcal += e.kcal || 0;
+        protein += e.protein || 0;
+        carbs += e.carbs || 0;
+        fat += e.fat || 0;
+      });
+      return {
+        kcal: Math.round(kcal * 10) / 10,
+        protein: Math.round(protein * 10) / 10,
+        carbs: Math.round(carbs * 10) / 10,
+        fat: Math.round(fat * 10) / 10
+      };
+    }
+    window.getDayIntakeTotals = getDayIntakeTotals;
+
     function renderFoodLog() {
       // Die Tagescheck-Karte gehört zum gerade angezeigten Tag (currentDate), nicht fest zu "heute"
       // (Bugreport 2026-10-19) – renderFoodLog läuft bei JEDEM Tageswechsel (changeDate/slideToDay)
@@ -5468,6 +5473,10 @@
       // checkGarminRenderStale: Fallback-Nachladen ohne Ereignis, siehe 002c (B2) weiter unten.
       checkGarminRenderStale();
       renderDailyCheckCard();
+      // Tages-Snapshot nach Speichern/Löschen fuer heute (B2) - renderFoodLog ist laut Kommentar
+      // oben die einzige Stelle, die bei jeder Änderung des angezeigten Tages läuft; gedrosselt auf
+      // max. 1x/Min, wirkt daher auch bei reiner Navigation nur so oft wie erlaubt.
+      if (userId && snapshotInitialLoadDone && currentDate === berlinTodayStr()) maybeWriteTodaySnapshot(SNAPSHOT_EDIT_THROTTLE_MS);
       // Update date display
       const dateObj = new Date(currentDate + 'T12:00:00');
       const dateStr = dateObj.toLocaleDateString('de-DE', { 
@@ -5487,21 +5496,11 @@
       }
 
       const entries = foodLog[currentDate] || [];
-      
-      // Calculate totals
-      let totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
-      entries.forEach(e => {
-        totalKcal += e.kcal || 0;
-        totalProtein += e.protein || 0;
-        totalCarbs += e.carbs || 0;
-        totalFat += e.fat || 0;
-      });
-      // Round to 1 decimal
-      totalKcal = Math.round(totalKcal * 10) / 10;
-      totalProtein = Math.round(totalProtein * 10) / 10;
-      totalCarbs = Math.round(totalCarbs * 10) / 10;
-      totalFat = Math.round(totalFat * 10) / 10;
-      
+
+      // Calculate totals (gleiche Funktion wie der Tages-Snapshot, siehe getDayIntakeTotals)
+      const dayIntake = getDayIntakeTotals(currentDate);
+      let totalKcal = dayIntake.kcal, totalProtein = dayIntake.protein, totalCarbs = dayIntake.carbs, totalFat = dayIntake.fat;
+
       // Update display
       document.getElementById('daily-kcal').textContent = fmt(totalKcal);
       document.getElementById('daily-protein').textContent = Math.round(totalProtein) + 'g';
@@ -7093,7 +7092,6 @@
           // Health Connect Section nur in App anzeigen
           const hcSection = document.getElementById('health-connect-section');
           if (hcSection) hcSection.style.display = 'block';
-          loadDriveStatus();
           loadOuraStatus();
         }
         if (target === 'analyse') showAnalyseSubtab();
@@ -7475,8 +7473,6 @@
       const open = body.style.display === 'none';
       body.style.display = open ? 'block' : 'none';
       header.setAttribute('aria-expanded', open ? 'true' : 'false');
-      // Backup: Status beim Aufklappen laden (bisher beim Öffnen des Unterbereichs Backup)
-      if (open && body.querySelector('#export-subtab')) loadDriveStatus();
     };
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -13805,216 +13801,152 @@ Regeln:
       }
     };
 
+    // ── Tages-Snapshots (Phase 1b, Teil B, Aufgabe 003c) ────────────────────────────
+    // Speichert die live berechneten Werte eines Tages, damit die Analytics-DB sie nicht aus den
+    // Formeln nachbauen muss (eine Formelquelle: dieselben Funktionen wie Anzeige/Kalorienziel).
+    function buildDailySnapshotPayload(date, opts) {
+      const o = opts || {};
+      const kcalGoal = calcHistoricalKcalGoal(date); // {base, activity, daily, total}
+      const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === date);
+      const steps = {
+        raw: getRawStepsForDate(date, dayLog),
+        activitySteps: getActivityStepsForDate(date),
+        display: getDisplaySchritteForDate(date),
+        source: getStepsSourceForDate(date)
+      };
 
-    // ── Backup (Google Drive) ───────────────────────────────────────────────────────
-    async function buildBackupJson() {
-      const snap = await getDocs(userLogCol());
-      const allFoodLog = [];
-      snap.forEach(d => allFoodLog.push(d.data()));
-      return JSON.stringify({
-        exportDate: new Date().toISOString(),
-        version: '1.0',
-        foodLog: allFoodLog,
-        training: trainingEntries,
-        recipes
-      }, null, 2);
-    }
-
-    // ── Google Drive Integration ─────────────────────────────────────────────
-    const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-
-    async function getValidDriveToken() {
-      const snap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
-      if (!snap.exists() || !snap.data().refreshToken) throw new Error('Google Drive nicht verbunden');
-      const data = snap.data();
-      if (data.expiresAt > Date.now() + 60000) return data.accessToken;
-      // Refresh via Cloud Function – kein Client Secret im Frontend
-      const refreshFn = httpsCallable(fbFunctions, 'googleDriveRefresh');
-      const result = await refreshFn();
-      if (!result.data?.accessToken) throw new Error('Drive token refresh fehlgeschlagen');
-      return result.data.accessToken;
-    }
-
-    window.connectGoogleDrive = function() {
-      const redirectUri = encodeURIComponent('https://us-central1-fitness-tracker-c6f97.cloudfunctions.net/googleDriveCallback');
-      const scope = encodeURIComponent(DRIVE_SCOPE);
-      const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + GOOGLE_CLIENT_ID +
-        '&response_type=code&redirect_uri=' + redirectUri +
-        '&scope=' + scope + '&access_type=offline&prompt=consent&state=' + userId;
-      const popup = window.open(url, 'gdrive_auth', 'width=600,height=700');
-      window.addEventListener('message', async function handler(e) {
-        if (e.data?.type === 'googledrive_connected') {
-          window.removeEventListener('message', handler);
-          popup?.close();
-          await loadDriveStatus();
-          showToast('Google Drive verbunden!', 'ok');
+      const dayActivities = getEffectiveTrainingEntries().filter(e =>
+        e.datum === date && e.typ !== 'tageslog' && e.typ !== 'phonesteps'
+      );
+      const activities = dayActivities.map(e => {
+        const item = {
+          id: String(e.id),
+          typ: e.typ,
+          dauerMin: e.zeit ? Math.round(parseHours(e.zeit) * 60) : null,
+          kcalGezaehlt: activityKcalForGoal(e, dayActivities)
+        };
+        if (e.typ === 'zirkel' && e.linkedGarmin) {
+          const formelKcal = e.source === 'plan' ? calcPlanActivityKcal(e) : calcActivityKcal(e);
+          const breakdown = zirkelPulseBreakdown(e, formelKcal);
+          if (breakdown) {
+            item.formel = breakdown.formel;
+            item.garminNetto = Math.round(breakdown.garminNetto);
+          }
         }
+        return item;
       });
-    };
 
-    window.disconnectGoogleDrive = async function() {
-      if (!await showConfirm('Google Drive trennen?', 'Die Verbindung wird getrennt. Gesicherte Dateien bleiben in Drive erhalten.', 'unlink', 'Trennen')) return;
-      try {
-        const token = await getValidDriveToken();
-        await fetch('https://oauth2.googleapis.com/revoke?token=' + token, { method: 'POST' }).catch(() => {});
-      } catch(e) {}
-      await deleteDoc(doc(db, 'users', userId, 'integrations', 'googledrive')).catch(() => {});
-      document.getElementById('gdrive-connected').style.display = 'none';
-      document.getElementById('gdrive-disconnected').style.display = 'block';
-      showToast('Google Drive getrennt', 'ok');
-    };
-
-    async function loadDriveStatus() {
-      try {
-        const snap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
-        if (snap.exists() && snap.data().refreshToken) {
-          document.getElementById('gdrive-disconnected').style.display = 'none';
-          document.getElementById('gdrive-connected').style.display = 'block';
-          await loadBackupStatus();
-        } else {
-          document.getElementById('gdrive-disconnected').style.display = 'block';
-          document.getElementById('gdrive-connected').style.display = 'none';
-          const statusEl = document.getElementById('gdrive-backup-status');
-          if (statusEl) statusEl.textContent = 'Noch kein Google Drive Backup erstellt.';
-        }
-      } catch(e) { console.warn('Drive status error:', e); }
+      return {
+        date,
+        appBuild: APP_BUILD,
+        computedAt: serverTimestamp(),
+        final: !!o.final,
+        backfilled: !!o.backfilled,
+        kcalGoal,
+        steps,
+        activities,
+        intake: getDayIntakeTotals(date)
+      };
     }
 
-    async function uploadToDrive(token, json, existingFileId) {
-      const filename = 'fuelofit-backup.json';
-      const blob = new Blob([json], { type: 'application/json' });
-      if (existingFileId) {
-        const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`, {
-          method: 'PATCH',
-          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-          body: blob
-        });
-        if (!res.ok) throw new Error((await res.json()).error?.message || 'Upload failed');
-        return existingFileId;
-      } else {
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
-        form.append('file', blob);
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + token },
-          body: form
-        });
-        if (!res.ok) throw new Error((await res.json()).error?.message || 'Upload failed');
-        const file = await res.json();
-        return file.id;
+    async function writeDailySnapshot(date, opts) {
+      try {
+        const payload = buildDailySnapshotPayload(date, opts);
+        await setDoc(doc(db, 'users', userId, 'dailySnapshots', date), payload);
+      } catch (e) {
+        console.warn('Tages-Snapshot schreiben fehlgeschlagen:', date, e);
       }
     }
 
-    // Fehlertext für settings/backup.lastDriveBackupError: kurz, ohne Token-artige Inhalte
-    // (Bearer-/ya29-/GOCSPX-Strings und lange Base64-Ketten werden entfernt).
-    function sanitizeBackupError(stage, err) {
-      let msg = String(err?.message || err || 'unbekannt');
-      msg = msg.replace(/Bearer\s+\S+/gi, 'Bearer […]')
-               .replace(/ya29\.[\w.-]+/g, '[…]')
-               .replace(/GOCSPX-[\w-]+/g, '[…]')
-               .replace(/[A-Za-z0-9_\-]{40,}/g, '[…]');
-      return (stage + ': ' + msg).slice(0, 160);
+    const SNAPSHOT_PERIODIC_INTERVAL_MS = 30 * 60 * 1000; // erneut höchstens alle 30 Min (B2)
+    const SNAPSHOT_EDIT_THROTTLE_MS = 60 * 1000;          // nach Speichern/Löschen, max. 1x/Min (B2)
+    let lastSnapshotWriteMs = 0;
+    // Erst true, nachdem afterDataLoadedForSnapshots einmal gelaufen ist - verhindert, dass der
+    // Edit-Trigger in renderFoodLog schon beim allerersten Render (vor dem Laden, renderAll() beim
+    // Start) einen verfrühten Snapshot mit noch unvollständigen Daten schreibt.
+    let snapshotInitialLoadDone = false;
+
+    // Gemeinsamer Drosselzeitstempel für alle drei Ausloeser (Laden/periodisch/Edit) - ein Edit-
+    // Write zaehlt damit auch fuer den periodischen Timer, verhindert aber nie einen faelligen Write.
+    async function maybeWriteTodaySnapshot(minIntervalMs) {
+      if (!userId) return;
+      const now = Date.now();
+      if (now - lastSnapshotWriteMs < minIntervalMs) return;
+      lastSnapshotWriteMs = now;
+      await writeDailySnapshot(berlinTodayStr(), { final: false });
     }
 
-    window.backupToGoogleDrive = async function(silent = false) {
-      const statusEl = document.getElementById('gdrive-backup-status');
-      if (statusEl && !silent) setIconText(statusEl, 'clock', 'Erstelle Backup...');
-      const backupRef = doc(db, 'users', userId, 'settings', 'backup');
-      // Versuch VOR allen anderen Schritten festhalten: auch ein abgebrochener Versuch (App
-      // geschlossen, Netz weg) zählt für die 24-h-Drosselung in checkAutoBackup.
-      try {
-        await setDoc(backupRef, { lastDriveBackupAttempt: new Date().toISOString() }, { merge: true });
-      } catch (e) { console.warn('Backup-Versuch konnte nicht gespeichert werden:', e); }
-      let stage = 'Token';
-      try {
-        const token = await getValidDriveToken();
-        stage = 'Metadaten';
-        const backupMeta = await getDoc(backupRef);
-        const existingFileId = backupMeta.exists() ? backupMeta.data().lastDriveFileId : null;
-        stage = 'Daten lesen';
-        const json = await buildBackupJson();
-        stage = 'Upload';
-        const fileId = await uploadToDrive(token, json, existingFileId);
-        stage = 'Status speichern';
-        const now = new Date().toISOString();
-        await setDoc(backupRef, {
-          lastDriveBackup: now, lastDriveFileId: fileId, lastDriveFileName: 'fuelofit-backup.json',
-          lastDriveBackupError: null
-        }, { merge: true });
-        if (statusEl) setIconText(statusEl, 'okCircle', `Gesichert: fuelofit-backup.json`, 'fo-i--sm fo-status-ok');
-        const el = document.getElementById('last-backup-time');
-        if (el) el.textContent = new Date().toLocaleString('de-DE');
-        if (!silent) showToast('Google Drive Backup erfolgreich', 'ok');
-        console.log('Drive backup done', now);
-      } catch(e) {
-        const errText = sanitizeBackupError(stage, e);
-        if (statusEl && !silent) setIconText(statusEl, 'alertCircle', 'Fehler: ' + errText, 'fo-i--sm fo-status-bad');
-        console.warn('Drive backup error:', e);
+    let snapshotPeriodicTimer = null;
+    function startSnapshotPeriodicTimer() {
+      if (snapshotPeriodicTimer) return;
+      snapshotPeriodicTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') maybeWriteTodaySnapshot(SNAPSHOT_PERIODIC_INTERVAL_MS);
+      }, 60 * 1000);
+    }
+
+    // Beim ersten Laden eines neuen Tages: Vortag (letzter bekannter Tag) mit final=true schreiben,
+    // falls dort noch kein final=true existiert (B2). lastSeenDate in localStorage, da das über
+    // App-Neustarts hinweg erkannt werden muss.
+    const SNAPSHOT_LAST_SEEN_DATE_KEY = 'fuelofit_snapshotLastSeenDate';
+    async function finalizePreviousDaySnapshotIfNeeded() {
+      const today = berlinTodayStr();
+      let lastSeen = null;
+      try { lastSeen = localStorage.getItem(SNAPSHOT_LAST_SEEN_DATE_KEY); } catch (e) {}
+      if (lastSeen && lastSeen !== today) {
         try {
-          await setDoc(backupRef, { lastDriveBackupError: errText }, { merge: true });
-        } catch (e2) { console.warn('Backup-Fehler konnte nicht gespeichert werden:', e2); }
+          const ref = doc(db, 'users', userId, 'dailySnapshots', lastSeen);
+          const snap = await getDoc(ref);
+          if (!snap.exists() || !snap.data().final) {
+            await writeDailySnapshot(lastSeen, { final: true });
+          }
+        } catch (e) { console.warn('Vortages-Snapshot (final) fehlgeschlagen:', lastSeen, e); }
       }
-      renderBackupAttemptInfo(); // Zeile "Letztes Backup · letzter Versuch · Fehler" aktualisieren
+      try { localStorage.setItem(SNAPSHOT_LAST_SEEN_DATE_KEY, today); } catch (e) {}
+    }
+
+    async function afterDataLoadedForSnapshots() {
+      await finalizePreviousDaySnapshotIfNeeded();
+      await maybeWriteTodaySnapshot(0);
+      snapshotInitialLoadDone = true;
+      startSnapshotPeriodicTimer();
+    }
+
+    function berlinDateStrDaysAgo(daysAgo) {
+      return new Date(Date.now() - daysAgo * 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    }
+
+    // Einstellungen-Button "Tageswerte neu berechnen (letzte 30 Tage)" (B3): nur aus bereits
+    // geladenen Daten (trainingEntries/foodLog/settings sind durch loadAllData im Speicher) -
+    // KEINE zusätzlichen Firestore-Reads, nur 30 setDoc-Writes.
+    window.recalcLast30DailySnapshots = async function() {
+      let written = 0;
+      for (let i = 1; i <= 30; i++) {
+        try { await writeDailySnapshot(berlinDateStrDaysAgo(i), { final: true }); written++; }
+        catch (e) { console.warn('Neuberechnung Snapshot fehlgeschlagen:', i, e); }
+      }
+      showToast(`${written} Tageswerte neu berechnet`, 'ok');
     };
 
-    function fmtBackupTs(iso) {
-      if (!iso) return '—';
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '—';
-      return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    }
-
-    // "Letztes Backup: <Datum> · letzter Versuch: <Datum> · Fehler: <kurz>" (Einstellungen → Export)
-    async function renderBackupAttemptInfo(data) {
-      const el = document.getElementById('gdrive-backup-attempt-info');
-      if (!el) return;
-      try {
-        if (!data) {
-          const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
-          data = snap.exists() ? snap.data() : {};
-        }
-        el.textContent = 'Letztes Backup: ' + fmtBackupTs(data.lastDriveBackup)
-          + ' · letzter Versuch: ' + fmtBackupTs(data.lastDriveBackupAttempt || data.lastDriveBackup)
-          + ' · Fehler: ' + (data.lastDriveBackupError || '—');
-      } catch (e) { console.warn('Backup-Info nicht ladbar:', e); }
-    }
-
-    async function loadBackupStatus() {
-      try {
-        const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
-        const statusEl = document.getElementById('gdrive-backup-status');
-        const lastEl = document.getElementById('last-backup-time');
-        if (snap.exists() && snap.data().lastDriveBackup) {
-          const d = new Date(snap.data().lastDriveBackup);
-          if (statusEl) statusEl.textContent = `Letztes Backup: ${d.toLocaleDateString('de-DE')} um ${d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}`;
-          if (lastEl) lastEl.textContent = d.toLocaleString('de-DE');
-        } else {
-          if (statusEl) statusEl.textContent = 'Noch kein Google Drive Backup erstellt.';
-        }
-        renderBackupAttemptInfo(snap.exists() ? snap.data() : {});
-      } catch(e) {}
-    }
-
-    // Auto-backup on app start: nur wenn der letzte VERSUCH (nicht der letzte Erfolg) > 24 h her ist.
-    // Vorher zählte nur lastDriveBackup: schlug das Backup fehl, wurde es bei JEDEM Start erneut
-    // versucht – jedes Mal mit vollem Lesen aller logEntries (~31.000 Reads, Analyse 04.11.2026).
-    const DRIVE_BACKUP_MIN_INTERVAL_MS = 24 * 3600 * 1000;
-    async function checkAutoBackup() {
-      try {
-        const snap = await getDoc(doc(db, 'users', userId, 'settings', 'backup'));
-        const data = snap.exists() ? snap.data() : {};
-        const lastTryMs = Math.max(
-          Date.parse(data.lastDriveBackupAttempt || '') || 0,
-          Date.parse(data.lastDriveBackup || '') || 0
-        );
-        if (Date.now() - lastTryMs < DRIVE_BACKUP_MIN_INTERVAL_MS) return; // letzter Versuch recent enough
-        const driveSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googledrive'));
-        if (!driveSnap.exists() || !driveSnap.data().refreshToken) return; // Drive not connected
-        console.log('Auto-backup: running silent backup...');
-        await backupToGoogleDrive(true); // silent=true
-      } catch(e) { console.warn('Auto-backup check failed:', e); }
-    }
+    // Einmaliger Backfill über das gesamte geladene 365-Tage-Fenster (B3). Nur per Konsole
+    // aufzurufen (Android-Hülle stillgelegt, s. CLAUDE.md - kein "Erweitert"-Fallback mehr nötig).
+    // NICHT Teil dieser Aufgabe mit echten Daten ausgeführt, siehe Bericht.
+    window.backfillDailySnapshots = async function() {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 365);
+      const cutoffStr = cutoff.toISOString().split('T')[0]; // gleiche Berechnung wie loadAllData
+      const today = berlinTodayStr();
+      let d = new Date(cutoffStr + 'T12:00:00');
+      const end = new Date(today + 'T12:00:00');
+      let written = 0, failed = 0;
+      while (d <= end) {
+        const dateStr = d.toLocaleDateString('sv-SE');
+        try { await writeDailySnapshot(dateStr, { backfilled: true }); written++; }
+        catch (e) { failed++; console.warn('Backfill Snapshot fehlgeschlagen:', dateStr, e); }
+        d.setDate(d.getDate() + 1);
+      }
+      console.log(`Backfill fertig: ${written} Tage geschrieben, ${failed} Fehler.`);
+      return { written, failed };
+    };
 
     // ===== AGGREGATION =====
 

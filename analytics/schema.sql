@@ -253,10 +253,13 @@ WHERE deleted_at IS NULL
   AND data->>'weight' IS NOT NULL;
 
 -- 3) Trainings inkl. Puls: entries (Trainingstypen, ohne tageslog/phonesteps) links gegen
--- garmin_activities desselben Tages (avg_hr/max_hr/garmin_kcal), falls vorhanden. Eine
--- Garmin-Aktivitaet kann zu keinem, einem oder mehreren entries-Docs am selben Tag passen --
--- die genaue Zuordnung macht live computeZirkelGarminLinksForDate() in index.html, hier nur
--- die Rohwerte nebeneinander.
+-- garmin_activities desselben Tages (avg_hr/max_hr/garmin_kcal/distance_m/duration_sec), falls
+-- vorhanden. Eine Garmin-Aktivitaet kann zu keinem, einem oder mehreren entries-Docs am selben
+-- Tag passen -- die genaue Zuordnung macht live computeZirkelGarminLinksForDate() in index.html,
+-- hier nur die Rohwerte nebeneinander. distance_m/duration_sec bevorzugen Garmin-Werte (Tages-
+-- Match), fallen sonst auf entries.distanz (km->m) bzw. entries.zeit ("HH:MM:SS"->Sekunden)
+-- zurueck. pace_min_km nur bei Lauf-/Gehtypen (laufen/gehen/wandern) und distance_m > 0.
+-- speed_kmh bei allen Typen mit distance_m > 0 und duration_sec > 0. (004c, 07.11.2026)
 CREATE OR REPLACE VIEW views.training_sessions AS
 SELECT
   e.id AS entry_id,
@@ -270,13 +273,79 @@ SELECT
   (e.data->>'steps')::numeric AS steps,
   ga.avg_hr,
   ga.max_hr,
-  ga.garmin_kcal
+  ga.garmin_kcal,
+  COALESCE(ga.distance_m, (e.data->>'distanz')::numeric * 1000) AS distance_m,
+  COALESCE(
+    ga.duration_sec,
+    CASE WHEN e.data->>'zeit' ~ '^\d{1,2}:\d{2}:\d{2}$' THEN
+      split_part(e.data->>'zeit', ':', 1)::numeric * 3600
+      + split_part(e.data->>'zeit', ':', 2)::numeric * 60
+      + split_part(e.data->>'zeit', ':', 3)::numeric
+    END
+  ) AS duration_sec,
+  CASE
+    WHEN e.data->>'typ' IN ('laufen', 'gehen', 'wandern')
+     AND COALESCE(ga.distance_m, (e.data->>'distanz')::numeric * 1000) > 0
+     AND COALESCE(
+           ga.duration_sec,
+           CASE WHEN e.data->>'zeit' ~ '^\d{1,2}:\d{2}:\d{2}$' THEN
+             split_part(e.data->>'zeit', ':', 1)::numeric * 3600
+             + split_part(e.data->>'zeit', ':', 2)::numeric * 60
+             + split_part(e.data->>'zeit', ':', 3)::numeric
+           END
+         ) > 0
+    THEN
+      (COALESCE(
+         ga.duration_sec,
+         CASE WHEN e.data->>'zeit' ~ '^\d{1,2}:\d{2}:\d{2}$' THEN
+           split_part(e.data->>'zeit', ':', 1)::numeric * 3600
+           + split_part(e.data->>'zeit', ':', 2)::numeric * 60
+           + split_part(e.data->>'zeit', ':', 3)::numeric
+         END
+       ) / 60.0)
+      / (COALESCE(ga.distance_m, (e.data->>'distanz')::numeric * 1000) / 1000.0)
+  END AS pace_min_km,
+  CASE
+    WHEN COALESCE(ga.distance_m, (e.data->>'distanz')::numeric * 1000) > 0
+     AND COALESCE(
+           ga.duration_sec,
+           CASE WHEN e.data->>'zeit' ~ '^\d{1,2}:\d{2}:\d{2}$' THEN
+             split_part(e.data->>'zeit', ':', 1)::numeric * 3600
+             + split_part(e.data->>'zeit', ':', 2)::numeric * 60
+             + split_part(e.data->>'zeit', ':', 3)::numeric
+           END
+         ) > 0
+    THEN
+      (COALESCE(ga.distance_m, (e.data->>'distanz')::numeric * 1000) / 1000.0)
+      / (COALESCE(
+           ga.duration_sec,
+           CASE WHEN e.data->>'zeit' ~ '^\d{1,2}:\d{2}:\d{2}$' THEN
+             split_part(e.data->>'zeit', ':', 1)::numeric * 3600
+             + split_part(e.data->>'zeit', ':', 2)::numeric * 60
+             + split_part(e.data->>'zeit', ':', 3)::numeric
+           END
+         ) / 3600.0)
+  END AS speed_kmh,
+  ga.aerobic_te,
+  ga.anaerobic_te,
+  ga.elevation_gain_m,
+  ga.avg_speed_ms,
+  ga.avg_cadence,
+  ga.max_cadence
 FROM raw.entries e
 LEFT JOIN LATERAL (
   SELECT
     (g.data->>'avgHr')::numeric AS avg_hr,
     (g.data->>'maxHr')::numeric AS max_hr,
-    (g.data->>'garminKcal')::numeric AS garmin_kcal
+    (g.data->>'garminKcal')::numeric AS garmin_kcal,
+    (g.data->>'distanceM')::numeric AS distance_m,
+    (g.data->>'durationSec')::numeric AS duration_sec,
+    (g.data->>'aerobicTE')::numeric AS aerobic_te,
+    (g.data->>'anaerobicTE')::numeric AS anaerobic_te,
+    (g.data->>'elevationGainM')::numeric AS elevation_gain_m,
+    (g.data->>'avgSpeedMs')::numeric AS avg_speed_ms,
+    (g.data->>'avgCadence')::numeric AS avg_cadence,
+    (g.data->>'maxCadence')::numeric AS max_cadence
   FROM raw.garmin_activities g
   WHERE g.deleted_at IS NULL AND g.day = e.day
   LIMIT 1
@@ -300,7 +369,9 @@ UNION ALL
 SELECT day, 'googlefit_tageslog'::text AS source, (data->>'steps')::numeric AS steps
 FROM raw.entries WHERE deleted_at IS NULL AND data->>'typ' = 'tageslog' AND data->>'steps' IS NOT NULL;
 
--- 5) Schlaf / Erholung: oura_daily-Felder.
+-- 5) Schlaf / Erholung: oura_daily-Felder. remSleepSec/lightSleepSec/awakeSec/sleepEfficiency/
+-- respiratoryRate/sleepLatencySec/bedtimeStart/bedtimeEnd seit 004c (07.11.2026, selber
+-- /v2/usercollection/sleep-Call, kein neuer API-Request).
 CREATE OR REPLACE VIEW views.sleep_recovery AS
 SELECT
   day,
@@ -310,7 +381,15 @@ SELECT
   (data->>'restingHr')::numeric AS resting_hr,
   (data->>'sleepScore')::numeric AS sleep_score,
   (data->>'readinessScore')::numeric AS readiness_score,
-  (data->>'tempDeviation')::numeric AS temp_deviation
+  (data->>'tempDeviation')::numeric AS temp_deviation,
+  (data->>'remSleepSec')::numeric AS rem_sleep_sec,
+  (data->>'lightSleepSec')::numeric AS light_sleep_sec,
+  (data->>'awakeSec')::numeric AS awake_sec,
+  (data->>'sleepEfficiency')::numeric AS sleep_efficiency,
+  (data->>'respiratoryRate')::numeric AS respiratory_rate,
+  (data->>'sleepLatencySec')::numeric AS sleep_latency_sec,
+  data->>'bedtimeStart' AS bedtime_start,
+  data->>'bedtimeEnd' AS bedtime_end
 FROM raw.oura_daily
 WHERE deleted_at IS NULL;
 

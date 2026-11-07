@@ -169,6 +169,11 @@ per Count nur in 1 von 177 Docs nicht null, 2026-W16). `steps_total`, `steps_act
 Immer: `date` (string), `steps`, `activeCalories`, `totalCalories`, `activityScore`, `sleepDurationSec`,
 `deepSleepSec`, `hrvAvg`, `restingHr` (int). Optional: `sleepScore` (int, 32/34 per Count),
 `readinessScore` (int), `tempDeviation` (int\|double), `ouraComplete` (bool, 24/34 per Count).
+Seit 004c (07.11.2026, selber `/v2/usercollection/sleep`-Call wie `sleepDurationSec` o.ä., kein
+neuer API-Request): `remSleepSec`, `lightSleepSec`, `awakeSec` (int, Sekunden), `sleepEfficiency`
+(int, Prozent 0-100), `respiratoryRate` (double, Atemzüge/Minute), `sleepLatencySec` (int),
+`bedtimeStart`, `bedtimeEnd` (string, ISO-Datetime mit Offset) - wie die uebrigen Nachtwerte nur
+bei `type === 'long_sleep'` gesetzt.
 
 #### `oura_workouts` (16, vollständig)
 
@@ -180,12 +185,16 @@ Immer: `date` (string), `steps`, `activeCalories`, `totalCalories`, `activitySco
 
 `lastChangeAt`, `lastFetchAt` (string), `samples` (array<map>: `t` string, `steps` int).
 
-#### `garminActivities` (8, vollständig)
+#### `garminActivities` (19, vollständig)
 
 `startLocal` (string ISO mit Offset), `durationSec` (double), `distanceM` (int\|double), `avgHr`,
 `maxHr`, `garminKcal` (int), `steps` (int\|null), `garminType` (Werte `running`, `treadmill_running`,
 `strength_training`, `e_bike_fitness`), `mappedTyp` (Werte `laufen`, `rad_ebike`, `unmapped`),
-`updatedAt` (timestamp).
+`updatedAt` (timestamp). Seit 004c (07.11.2026, Quelle Garmin Personal API `search_activities`):
+`aerobicTE`, `anaerobicTE` (double, 0-5, immer gesetzt), `elevationGainM` (double\|null, nur bei
+GPS-Cardio, nicht bei `strength_training`), `avgSpeedMs` (double, m/s, Geraetewert = `distanceM`/
+Bewegungszeit, kann leicht von `distanceM`/`durationSec` abweichen), `avgCadence`/`maxCadence`
+(double\|null, nur bei `running`/`treadmill_running`, Schritte/Minute).
 
 #### `garminDaily` (7, vollständig)
 
@@ -631,6 +640,13 @@ beim Tageswechsel wird der Vortag einmalig mit `final=true` nachgezogen. Postgre
 `views.daily_summary` (siehe `analytics/schema.sql`) macht daraus eine typisierte
 Tageszusammenfassung inkl. Bilanz (Intake − Kalorienziel) und Gewicht des Tages
 (`views.body_weight`-Join).
+
+**Datenlücken-Ergänzung (004c, 07.11.2026)**: `views.training_sessions` um Garmin-Distanz/-Dauer,
+Pace (`pace_min_km`, nur Lauf-/Gehtypen), Geschwindigkeit (`speed_kmh`) sowie Trittfrequenz,
+Training Effect, Höhenmeter und Geräte-Geschwindigkeit erweitert (`analytics/migrations/002_*.sql`,
+`004_*.sql`); `views.sleep_recovery` um REM-/Leicht-/Wachzeit, Schlafeffizienz, Atemfrequenz,
+Einschlaflatenz, Bettzeiten erweitert (`003_*.sql`). Siehe die neuen Firestore-Felder oben bei
+`oura_daily`/`garminActivities`.
 
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily

@@ -340,8 +340,10 @@ sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.
 | Aktivitätsschritte (Abzug) | `getActivityStepsForDate()` (3363) | je nach Quelle Garmin-Aktivitäten oder `entries.schritte` |
 | BMR | `mifflinStJeorBmr()` (3292), `calcBmrForDate()` (3301) | `settings/main`, Gewicht aus `entries.tageslog.weight` |
 | Kalorienziel `{base, activity, daily, total}` | `calcHistoricalKcalGoal()` (3400) | BMR, Aktivitätskalorien, Schrittkalorien |
-| Aktivitätskalorien je Eintrag | `calcActivityKcal()` (5309), `calcPlanActivityKcal()` (5374) | `entries` + verknüpfte `garminActivities` |
-| Zirkel-kcal inkl. Puls-Mischung | `zirkelPulseBreakdown()` (5295), `calcZirkelEntryKcal()` (5410) | `entries.uebungen`/`details`, `linkedGarmin` (`avgHr`, `garminKcal`) |
+| Aktivitätskalorien je Eintrag | `calcActivityKcal()` (5268), `calcPlanActivityKcal()` (5374) | `entries` + verknüpfte `garminActivities` |
+| Zirkel-kcal inkl. Puls-Mischung | `zirkelPulseBreakdown()` (5225), `calcZirkelEntryKcal()` (5410) | `entries.uebungen`/`details`, `linkedGarmin` (`avgHr`, `garminKcal`) |
+| Garmin-Netto für unverknüpfte Kraft-Einheit (004b, 07.11.2026) | `strengthGarminNettoBreakdown()` (5247) | `garminKcal` (brutto) minus BMR-Anteil der Dauer; fehlt `garminKcal`/BMR → Fallback MET 5,0 (unverändert) |
+| "Abgedeckt" durch Plan-Einzelübung (004b, 07.11.2026) | `isPlanSingleExerciseDoneOnDate()` (5264), gesetzt in `getEffectiveTrainingEntries()` (`entry.covered`) | Gibt es am Tag einen `entries`-Eintrag `source:'plan'` + `planUnitId` + `typ≠zirkel`, zählt jede unverknüpfte Garmin-Kraft-Einheit dieses Tages 0 kcal (bleibt in der Liste, `covered:true`, keine eigene Zeile in der Trainingsliste) |
 | Einheit alter Rezept-Einträge | `recipeEntryAmountUnit()` (6754) | `logEntries` ohne `unit` |
 | Garmin-Warnbanner | `garminStaleBannerInfo()` (2869) | `integrations/garminHealth`, `garminDaily` |
 
@@ -620,8 +622,9 @@ App selbst mit ihrer eigenen Berechnungslogik geschrieben (`buildDailySnapshotPa
 `date`, `appBuild`, `computedAt` (Server-Timestamp), `final`, `backfilled`,
 `kcalGoal: {base, activity, daily, total}` (aus `calcHistoricalKcalGoal`),
 `steps: {raw, activitySteps, display, source}`, `activities: [{id, typ, dauerMin,
-kcalGezaehlt, formel?, garminNetto?}]` (je Trainingseintrag; `formel`/`garminNetto` nur bei
-verknüpftem Zirkel, siehe `zirkelPulseBreakdown`), `intake: {kcal, protein, carbs, fat}`
+kcalGezaehlt, formel?, garminNetto?, covered?}]` (je Trainingseintrag; `formel`/`garminNetto` nur bei
+verknüpftem Zirkel, siehe `zirkelPulseBreakdown`; `covered:true` ab 004b/07.11.2026 bei einer durch
+eine Plan-Einzelübung abgedeckten unverknüpften Garmin-Kraft-Einheit, `kcalGezaehlt` dann 0), `intake: {kcal, protein, carbs, fat}`
 (aus `getDayIntakeTotals`). Ausloeser: nach vollständigem Laden, periodisch alle 30 Min
 solange sichtbar, nach Speichern/Löschen eines Eintrags für heute (gedrosselt 1×/Min);
 beim Tageswechsel wird der Vortag einmalig mit `final=true` nachgezogen. Postgres-Sicht

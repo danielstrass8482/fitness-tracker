@@ -1293,6 +1293,7 @@
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" id="garmin-hidden-toggle-btn" onclick="toggleShowHiddenGarmin()">Ausgeblendete anzeigen</button>
         </div>
         <div id="training-history" style="max-height:400px;overflow-y:auto;border-top:1px solid var(--fo-line);"></div>
+        <div id="training-covered-strength"></div>
       </div>
       </div><!-- /training-log-subtab -->
 
@@ -2336,7 +2337,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-06 10:48';
+    const APP_BUILD = '2026-11-07 19:50';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2373,6 +2374,7 @@
     let garminUnlinkedIds = new Set(); // activityId-Set aus garminLinks/{activityId} mit unlinked:true (Zirkel-Zusammenführung, 01.11.2026) - "Zuordnung lösen"
     let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
     let showHiddenGarmin = false;  // UI-Toggle "Ausgeblendete anzeigen" im Training-Tab
+    let coveredStrengthExpanded = false; // UI-Toggle "abgedeckte" Garmin-Kraft-Sammelzeile (Teil B, 004b, 07.11.2026)
 
     // ciqSteps/{heute} (Phase 1c, Connect-IQ-Proof-of-Concept, 01.11.2026): Tagesschritte, die eine
     // eigene Connect-IQ-App direkt von der Uhr sendet (ingestCiqSteps, alle 5 Min), an Garmin Connects
@@ -2604,6 +2606,11 @@
         source: 'garmin',
         avgHr: a.avgHr || null,
         maxHr: a.maxHr || null,
+        // garminKcal/durationSec (roh, brutto) nur für strength_training gebraucht - Garmin-Netto
+        // statt MET-Pauschale für unverknüpfte Kraft-Einheiten (004b, 07.11.2026, siehe calcActivityKcal
+        // und strengthGarminNettoBreakdown); für andere Typen ungenutzt, aber harmlos mitgeführt.
+        garminKcal: a.garminKcal || 0,
+        durationSec: a.durationSec || 0,
         ...(isStrength && unclear ? { zuordnungUnklar: true } : {}),
         notiz: typ === 'sonstiges_garmin' ? a.garminType : '',
       };
@@ -2727,6 +2734,7 @@
       });
 
       const liveEntries = [];
+      const coveredDateCache = new Map(); // Datum -> bool, isPlanSingleExerciseDoneOnDate ist sonst O(n) je Aktivität
       garminActivitiesAll.forEach(a => {
         const datum = garminActivityDateKey(a);
         if (!datum) return;
@@ -2736,7 +2744,16 @@
         if (garminHiddenIds.has(aId)) return; // ausgeblendet: zählt nirgends mehr
         if (suppressedGarminActivityIds.has(aId)) return; // jetzt Teil eines Zirkel-Eintrags, keine eigene Zeile mehr
         const entry = garminActivityToEntry(a, unclearActivityIds.has(aId));
-        if (entry) liveEntries.push(entry);
+        if (!entry) return;
+        // "Abgedeckt" (Teil B, 004b, 07.11.2026): nur unverknüpfte strength_training-Einheiten, nur wenn
+        // am selben Tag eine Plan-Einzelübung abgehakt wurde (isPlanSingleExerciseDoneOnDate). Bleibt in
+        // der Liste (covered:true) - Kalorienziel/dailySnapshots sehen so den Eintrag inkl. Kennzeichen,
+        // nur die Anzeige (renderTrainingHistory) blendet ihn aus der normalen Zeile aus.
+        if (entry.garminType === 'strength_training') {
+          if (!coveredDateCache.has(datum)) coveredDateCache.set(datum, isPlanSingleExerciseDoneOnDate(datum));
+          if (coveredDateCache.get(datum)) entry.covered = true;
+        }
+        liveEntries.push(entry);
       });
 
       return trainingEntries
@@ -5219,13 +5236,55 @@
     }
     window.zirkelPulseBreakdown = zirkelPulseBreakdown;
 
+    // Garmin-Netto für unverknüpfte Kraft-Einheiten OHNE Zirkel (Teil A, 004b, 07.11.2026 - Auftrag
+    // Daniel "a+"): bisher zählte strength_training ohne Zirkel-Verknüpfung über calcActivityKcal
+    // default MET 5,0 (Pauschale, ignoriert den tatsächlichen Garmin-Wert komplett). Jetzt wie bei der
+    // Zirkel-Puls-Mischung (zirkelPulseBreakdown) der Netto-Ansatz: BMR-Anteil der Dauer von garminKcal
+    // (brutto) abziehen - aber OHNE Formel-Mittelwert/Deckel (es gibt hier keine Zirkel-Formel als
+    // Vergleichswert), direkt der Netto-Wert, nie negativ ("im Zweifel konservativ"). null, wenn
+    // garminKcal fehlt oder kein BMR ermittelbar ist - Aufrufer (calcActivityKcal) fällt dann auf die
+    // bisherige MET-5,0-Pauschale zurück (Teil A.2).
+    function strengthGarminNettoBreakdown(entry) {
+      if (!entry.garminKcal) return null;
+      const bmr = calcBmrForDate(entry.datum);
+      if (!bmr) return null;
+      const durationMin = (entry.durationSec || 0) / 60;
+      const brutto = entry.garminKcal;
+      const netto = Math.max(0, Math.round(brutto - (bmr / 1440) * durationMin));
+      return { brutto, netto };
+    }
+    window.strengthGarminNettoBreakdown = strengthGarminNettoBreakdown;
+
+    // "Abgedeckt" durch Plan-Einzelübungen (Teil B, 004b, 07.11.2026): gibt es am Datum mindestens
+    // einen ECHTEN Trainingseintrag (trainingEntries, nicht die virtuelle Garmin-Liste) mit
+    // source:'plan' + planUnitId, dessen Plan-Einheit eine Einzelübung ist (Typ ≠ zirkel - Zirkel haben
+    // bereits ihre eigene Garmin-Verknüpfung über computeZirkelGarminLinksForDate), dann gelten alle
+    // unverknüpften Garmin-Kraft-Einheiten dieses Tages als durch die manuelle Buchung abgedeckt (nicht
+    // doppelt gezählt). Einzige Stelle dieser Regel, von getEffectiveTrainingEntries genutzt.
+    function isPlanSingleExerciseDoneOnDate(date) {
+      return trainingEntries.some(e => e.datum === date && e.source === 'plan' && e.planUnitId && e.typ !== 'zirkel');
+    }
+
     function calcActivityKcal(entry) {
+      // "Abgedeckt" (Teil B, 004b): zählt nirgends mehr ins Kalorienziel - einzige Stelle dieser
+      // Kurzschluss-Regel, siehe isPlanSingleExerciseDoneOnDate/getEffectiveTrainingEntries.
+      if (entry.covered) return 0;
+
       // Aus dem Trainingsplan abgehakte Einheiten: eigene MET-Tabelle (dauerbasiert)
       if (entry.source === 'plan') {
         const formelKcal = calcPlanActivityKcal(entry);
         if (entry.typ !== 'zirkel') return formelKcal;
         const breakdown = zirkelPulseBreakdown(entry, formelKcal);
         return breakdown ? breakdown.gezaehlt : formelKcal;
+      }
+
+      // Garmin-Live-Kraftaktivität ohne Zirkel-Verknüpfung (Teil A, 004b): Garmin-Netto statt der
+      // MET-5,0-Pauschale unten im default-Fall. Andere Garmin-Typen (Laufen, Rad, Gehen, ...) nutzen
+      // weiterhin unverändert die Formeln unten (Teil A.3).
+      if (entry.source === 'garmin' && entry.garminType === 'strength_training') {
+        const breakdown = strengthGarminNettoBreakdown(entry);
+        if (breakdown) return breakdown.netto;
+        // garminKcal fehlt oder kein BMR -> fällt durch in den default-Fall unten (MET-Pauschale)
       }
 
       const weight = weightForDate(entry.datum);
@@ -7869,17 +7928,50 @@
       renderTrainingHistory();
     };
 
+    // Dezente Sammelzeile "abgedeckter" Garmin-Kraft-Aufzeichnungen (Teil B.3, 004b, 07.11.2026) -
+    // unabhängig von renderTrainingHistory aufgerufen, damit sie auch sichtbar bleibt, wenn die
+    // normale Liste (z.B. durch "Noch keine Einträge") früh zurückkehrt.
+    function renderCoveredStrengthSummary() {
+      const el = document.getElementById('training-covered-strength');
+      if (!el) return;
+      const covered = getEffectiveTrainingEntries()
+        .filter(e => e.covered)
+        .sort((a, b) => (b.datum + (b.garminTime || '')).localeCompare(a.datum + (a.garminTime || '')));
+      if (covered.length === 0) { el.innerHTML = ''; return; }
+      const n = covered.length;
+      const label = `${n} Kraft-Aufzeichnung${n === 1 ? '' : 'en'} der Uhr durch Plan-Übungen abgedeckt`;
+      const rows = covered.map(e => {
+        const b = strengthGarminNettoBreakdown(e);
+        const bruttoNetto = b ? `brutto ${fmt(Math.round(b.brutto))} / netto ${fmt(b.netto)}` : 'Garmin-kcal fehlt';
+        return `<div class="fo-row__sub fo-row__sub--wrap" style="padding:4px 0;">${e.datum} ${(e.garminTime || '').slice(0,5)} · ${e.zeit || '--'} · ${bruttoNetto}</div>`;
+      }).join('');
+      el.innerHTML = `
+        <div style="padding:8px 0;color:var(--fo-text-3);font-size:13px;cursor:pointer;" onclick="toggleCoveredStrengthExpanded()">
+          ${foIcon(coveredStrengthExpanded ? 'chevD' : 'chevR', 'fo-i--sm')} ${label}
+        </div>
+        ${coveredStrengthExpanded ? `<div style="padding-left:20px;">${rows}</div>` : ''}
+      `;
+    }
+    window.toggleCoveredStrengthExpanded = function() {
+      coveredStrengthExpanded = !coveredStrengthExpanded;
+      renderCoveredStrengthSummary();
+    };
+
     function renderTrainingHistory() {
       const container = document.getElementById('training-history');
       if (!container) return;
+
+      renderCoveredStrengthSummary();
 
       const hiddenEntries = showHiddenGarmin
         ? garminActivitiesAll.filter(a => garminHiddenIds.has(String(a.id)))
             .map(a => ({ ...garminActivityToEntry(a), garminHiddenEntry: true }))
         : [];
 
+      // "Abgedeckt" (Teil B, 004b): keine eigene Zeile in der normalen Trainingsliste - die dezente
+      // Sammelzeile dafür rendert renderCoveredStrengthSummary unten, über dieselben covered-Einträge.
       const sorted = [...getEffectiveTrainingEntries(), ...hiddenEntries]
-        .filter(e => e.typ !== 'tageslog')
+        .filter(e => e.typ !== 'tageslog' && !e.covered)
         .sort((a, b) => {
           const aKey = (a.datum || '') + 'T' + (a.garminTime || a.timestamp?.split('T')[1] || '00:00:00');
           const bKey = (b.datum || '') + 'T' + (b.garminTime || b.timestamp?.split('T')[1] || '00:00:00');
@@ -7944,6 +8036,10 @@
         // bearbeitbar und über "Ausblenden" statt "Löschen" entfernbar (garminHidden, Korrektur 3).
         const isGarminLive = !!e.garminLive;
         const hrLabel = isGarminLive ? garminHrLabel(e) : '';
+        // Garmin brutto/netto-Detail für unverknüpfte Kraft-Einheiten (Teil A.4, 004b): kcal-Wert der
+        // Zeile bleibt der gezählte Netto-Wert (displayKcal/calcActivityKcal), hier nur zur Erklärung.
+        const strengthNetto = (isGarminLive && e.garminType === 'strength_training') ? strengthGarminNettoBreakdown(e) : null;
+        const strengthNettoLabel = strengthNetto ? `Garmin brutto ${fmt(Math.round(strengthNetto.brutto))} / netto ${fmt(strengthNetto.netto)}` : '';
         // Zirkel mit verknüpfter Garmin-Kraftaktivität: HF-Zeile + Uhr-Symbol statt der früheren
         // "gehört zum Zirkel"-Zeile auf der (jetzt nicht mehr existierenden) Garmin-eigenen Zeile.
         const linkedGarminNote = hasLinkedGarmin ? `${foIcon('clock', 'fo-i--sm')} ${garminHrLabel(e.linkedGarmin) || 'Uhr-Aufzeichnung verknüpft'}` : '';
@@ -7965,6 +8061,7 @@
               ${unclearNote ? `<span style="color:var(--fo-text-3);margin-left:6px;">${unclearNote}</span>` : ''}
             </div>
             ${linkedGarminNote ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
+            ${strengthNettoLabel ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${strengthNettoLabel}</div>` : ''}
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
@@ -13833,6 +13930,9 @@ Regeln:
             item.garminNetto = Math.round(breakdown.garminNetto);
           }
         }
+        // "Abgedeckt" (Teil B, 004b, 07.11.2026): covered bleibt in der Liste, kcalGezaehlt bereits 0
+        // (über activityKcalForGoal/calcActivityKcal) - Kennzeichen zusätzlich explizit im Snapshot.
+        if (e.covered) item.covered = true;
         return item;
       });
 

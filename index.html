@@ -2337,7 +2337,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-07 19:50';
+    const APP_BUILD = '2026-11-08 20:51';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -3022,7 +3022,7 @@
         }
 
         handleOuraRedirectParams();
-        loadOuraStatus();
+        loadOuraStatus().then(() => runOuraDetailBackfillOnce()); // 004d: einmaliges Nachladen ab 02.10., nur hier (App-Start) – NICHT bei jedem loadOuraStatus()-Aufruf (Settings-Tab, manueller Sync), siehe Kommentar an der Funktion
       } else {
         userId = null;
         document.getElementById('login-screen').style.display = 'flex';
@@ -9421,6 +9421,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     const OURA_AUTOSYNC_RETRY_DELAYS_MS = [2 * 60000, 5 * 60000, 10 * 60000];
     let ouraAutoSyncState = { date: null, attempts: 0, inProgress: false, retryTimer: null };
     let ouraAutoSyncInProgress = false; // nur für den Karten-Text ("wird abgerufen …" statt "noch nicht da")
+    // Echte Sperre gegen parallele syncOuraManual-Aufrufe (Auftrag 004d): ein simples, nie ersetztes
+    // Boolean statt ouraAutoSyncState.inProgress, weil ouraAutoSyncState bei Tageswechsel komplett neu
+    // angelegt wird (Zeile unten) – das würde eine laufende Sperre sonst verlieren. Geteilt zwischen
+    // tryOuraAutoSync() (regulärer Start-/Retry-Sync) und runOuraDetailBackfillOnce() (einmaliges
+    // Nachladen ab 02.10.).
+    let ouraManualSyncLock = false;
 
     function scheduleOuraAutoSyncRetry() {
       const idx = ouraAutoSyncState.attempts - 1; // attempts wurde für den gerade gelaufenen Versuch bereits hochgezählt
@@ -9439,7 +9445,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       if (ouraNightDataComplete(todayStr)) return; // schon da, nichts zu tun
       if (ouraAutoSyncState.inProgress) return;
       if (ouraAutoSyncState.attempts > OURA_AUTOSYNC_RETRY_DELAYS_MS.length) return; // 1 initial + 3 Retries verbraucht
+      if (ouraManualSyncLock) return; // einmaliger Detail-Backfill (004d) läuft gerade – nicht parallel aufrufen
 
+      ouraManualSyncLock = true;
       ouraAutoSyncState.inProgress = true;
       const cardWasPending = dailyCheckState?.statusPending && dailyCheckState.date === todayStr;
       if (cardWasPending) { ouraAutoSyncInProgress = true; renderDailyCheckCard(); }
@@ -9468,6 +9476,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         scheduleOuraAutoSyncRetry();
       } finally {
         ouraAutoSyncState.inProgress = false;
+        ouraManualSyncLock = false;
         if (cardWasPending) { ouraAutoSyncInProgress = false; renderDailyCheckCard(); }
       }
     }
@@ -10364,6 +10373,37 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
         renderOuraDailyCard(currentDate);
       } catch(e) { console.warn('Oura status error:', e); }
+    }
+
+    // ── Einmaliges Nachladen der Oura-Detailfelder ab 02.10. (Auftrag 004d) ──────────────────────
+    // Bericht 004c B.4 schlug dafür ein Konsolen-Snippet vor (httpsCallable/fbFunctionsEU global) –
+    // funktioniert nicht, da index.html als <script type="module"> läuft (kein globales
+    // httpsCallable) und die Android-PWA ohnehin keine Konsole hat. Läuft deshalb automatisch beim
+    // ersten App-Start nach diesem Update: genau 1 Aufruf von syncOuraManual mit dem vollen Zeitraum
+    // ab 02.10., danach localStorage-Flag setzen – nie wieder automatisch. Teilt sich die Sperre
+    // ouraManualSyncLock mit tryOuraAutoSync() (regulärer Start-Sync), damit beide niemals parallel
+    // syncOuraManual aufrufen (siehe Deklaration von ouraManualSyncLock).
+    const OURA_DETAIL_BACKFILL_FLAG = 'ouraDetailBackfill_v1';
+    const OURA_DETAIL_BACKFILL_START_MS = 1790892000000; // 2026-10-02 00:00 Europe/Berlin (CEST, UTC+2)
+    async function runOuraDetailBackfillOnce() {
+      if (!userId || auth.currentUser?.isAnonymous) return;
+      if (!ouraStatus?.connected) return;
+      if (localStorage.getItem(OURA_DETAIL_BACKFILL_FLAG)) return;
+      if (ouraManualSyncLock) return; // regulärer Start-Sync läuft bereits – nächster Start versucht es erneut, da kein Flag gesetzt wird
+      ouraManualSyncLock = true;
+      try {
+        const syncFn = httpsCallable(fbFunctionsEU, 'syncOuraManual');
+        await syncFn({ startMs: OURA_DETAIL_BACKFILL_START_MS, endMs: Date.now() });
+        localStorage.setItem(OURA_DETAIL_BACKFILL_FLAG, '1');
+        await refreshOuraDaily();
+        saveToCache();
+        renderAll();
+        showToast('Oura-Verlauf ergänzt', 'ok');
+      } catch (e) {
+        console.warn('Oura-Detail-Backfill (004d) fehlgeschlagen, Flag nicht gesetzt – nächster Start versucht es erneut:', e);
+      } finally {
+        ouraManualSyncLock = false;
+      }
     }
 
     window.connectOura = async function() {

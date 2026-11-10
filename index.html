@@ -1592,10 +1592,6 @@
     </div>
 
     <div id="analyse-tab" class="subtab-content">
-      <div id="analyse-no-key" style="display:none;background:var(--surface);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-        <p style="margin-bottom:12px;">Kein Anthropic API Key hinterlegt.</p>
-        <button class="btn" onclick="document.querySelector('[data-tab=einstellungen]').click()">Zu den Einstellungen</button>
-      </div>
 
       <div id="analyse-messages" aria-live="polite">
         <p id="analyse-empty-hint">Stelle eine Frage zu deinen Trainings-, Ernährungs- und Erholungsdaten.</p>
@@ -1741,9 +1737,7 @@
           <div class="fo-card__head"><h3 class="fo-card__title" style="display:flex;align-items:center;gap:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg>KI-Analyse (Anthropic)</h3></div>
           <div class="fo-card__body" style="border-top:1px solid var(--fo-line);">
             <div class="fo-field">
-              <label class="fo-label" for="settings-anthropic-key">Anthropic API Key</label>
-              <input class="fo-input" type="password" id="settings-anthropic-key" placeholder="sk-ant-...">
-              <p class="fo-help" style="margin-top:6px;">Dein API Key wird mit deinen Einstellungen in deinem Firebase-Konto gespeichert (Firestore, users/…/settings/main) und bei Anfragen direkt vom Gerät an Anthropic gesendet. Erforderlich für den "Analyse"-Tab.</p>
+              <p class="fo-help" id="settings-ai-status">KI-Zugang serverseitig eingerichtet.</p>
             </div>
           </div>
         </section>
@@ -2337,7 +2331,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-08 20:51';
+    const APP_BUILD = '2026-11-10 14:02';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8234,6 +8228,7 @@
         
         if (docSnap.exists()) {
           settings = { ...settings, ...docSnap.data() };
+          delete settings.anthropicApiKey; // Altfeld (005c2): KI läuft nur noch über anthropicProxy
         }
 
         // Auto-fill weight from most recent dayLog
@@ -8257,8 +8252,6 @@
           document.getElementById('settings-height').value = settings.height || '';
           if (document.getElementById('settings-detail-days'))
             document.getElementById('settings-detail-days').value = settings.detailDays || 31;
-          if (document.getElementById('settings-anthropic-key'))
-            document.getElementById('settings-anthropic-key').value = settings.anthropicApiKey || '';
 
           if (latestWeight) {
             document.getElementById('settings-weight-hint').textContent =
@@ -8350,12 +8343,11 @@
       
       const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
       const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
-      const anthropicApiKey = document.getElementById('settings-anthropic-key')?.value.trim() || '';
       // Leer/negativ/Text → nicht speichern (es gilt der Standard), über der Grenze → Grenze
       const assumedDailySteps = normalizeAssumedDailySteps(document.getElementById('settings-assumed-steps')?.value);
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays, recipeDisplay, anthropicApiKey,
+        gender, age, height, weight, activityLevel, detailDays, recipeDisplay,
         ...(assumedDailySteps !== null ? { assumedDailySteps } : {})
       };
       const assumedStepsEl = document.getElementById('settings-assumed-steps');
@@ -8381,9 +8373,9 @@
       }
     };
 
-    // ── KI-Analyse (Anthropic Claude API, direkt aus dem Browser) ───────────
+    // ── KI-Analyse (Anthropic Claude API über Cloud Function anthropicProxy) ───────────
     let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
-    let analyseRequestInFlight = false; // steuert zusammen mit API-Key und leerem Feld den Senden-Button (D)
+    let analyseRequestInFlight = false; // steuert zusammen mit leerem Feld den Senden-Button (D)
 
     // Zeitraum des Kontexts (betrifft Ernährungsbilanz, Tageslog und Oura-Zeilen – nicht die
     // Trainingseinträge, die bewusst ihr eigenes 365-Tage-Fenster behalten, siehe Bericht, und
@@ -8460,23 +8452,20 @@
       });
     }
 
+    // KI-Zugang liegt serverseitig (anthropicProxy, 005c2) – Eingabe ist immer verfügbar.
     function updateAnalyseKeyState() {
-      const noKeyEl = document.getElementById('analyse-no-key');
       const input = document.getElementById('analyse-input');
-      const hasKey = !!settings.anthropicApiKey;
-      if (noKeyEl) noKeyEl.style.display = hasKey ? 'none' : 'block';
-      if (input) input.disabled = !hasKey;
+      if (input) input.disabled = false;
       updateAnalyseSendButtonState();
     }
     window.updateAnalyseKeyState = updateAnalyseKeyState;
 
-    // Senden-Button: deaktiviert bei fehlendem API-Key, leerem Feld oder laufender Anfrage (D)
+    // Senden-Button: deaktiviert bei leerem Feld oder laufender Anfrage (D)
     function updateAnalyseSendButtonState() {
       const sendBtn = document.getElementById('analyse-send-btn');
       const input = document.getElementById('analyse-input');
       if (!sendBtn || !input) return;
-      const hasKey = !!settings.anthropicApiKey;
-      sendBtn.disabled = !hasKey || analyseRequestInFlight || !input.value.trim();
+      sendBtn.disabled = analyseRequestInFlight || !input.value.trim();
     }
     window.updateAnalyseSendButtonState = updateAnalyseSendButtonState;
 
@@ -8654,7 +8643,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
 
     // ═══ Tagescheck: KI-Morgenkarte oben in der Übersicht ═══════════════════════════════════════
     // Einmal pro Tag generiert (dailyCheck/{YYYY-MM-DD} in Firestore + IndexedDB-Cache), nutzt
-    // denselben Anthropic-Call wie der Analyse-Tab (settings.anthropicApiKey, selbes Modell).
+    // denselben Anthropic-Call wie der Analyse-Tab (über anthropicProxy, selbes Modell).
 
     const DAILY_CHECK_ILLNESS_HRV_DROP_FRACTION = 0.15; // HRV ≥15% unter dem eigenen 28-Tage-Schnitt
     const DAILY_CHECK_ILLNESS_RHR_RISE_BPM = 4;          // Ruhepuls ≥4 bpm über dem eigenen 28-Tage-Schnitt
@@ -9137,34 +9126,46 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       return s;
     }
 
-    // Ruft denselben Anthropic-Call wie der Analyse-Tab auf (settings.anthropicApiKey, Modell
+    // ═══ KI-Aufrufe nur über die Cloud Function anthropicProxy (005c2) ═══════════════════════════
+    // Kein Key im Browser. Antwort ist 1:1 die Anthropic-Messages-Antwort. Fehler werden in
+    // verständliche Texte übersetzt (err.code = Function-Fehlercode). Timeout 300 s wie die Function.
+    const ANTHROPIC_PROXY_TIMEOUT_MS = 300000;
+    function anthropicProxyErrorText(err) {
+      const code = String(err?.code || '').replace(/^functions\//, '');
+      if (code === 'resource-exhausted') return 'Limit erreicht, später erneut versuchen.';
+      if (code === 'unauthenticated') return 'Bitte erneut anmelden, dann noch einmal versuchen.';
+      if (code === 'permission-denied') return 'Kein Zugriff auf die KI-Funktion mit diesem Konto.';
+      if (code === 'invalid-argument') return 'Anfrage ungültig: ' + (err?.message || '');
+      return 'KI gerade nicht erreichbar. Bitte später erneut versuchen.';
+    }
+    async function callAnthropicProxy(body) {
+      try {
+        const fn = httpsCallable(fbFunctions, 'anthropicProxy', { timeout: ANTHROPIC_PROXY_TIMEOUT_MS });
+        const res = await fn(body);
+        return res.data;
+      } catch (e) {
+        console.error('anthropicProxy:', e?.code, e?.message);
+        const err = new Error(anthropicProxyErrorText(e));
+        err.code = e?.code;
+        throw err;
+      }
+    }
+
+    // Ruft denselben Anthropic-Call wie der Analyse-Tab auf (über anthropicProxy, Modell
     // claude-sonnet-5) – keine neue Schlüsselverwaltung. max_tokens 3000 statt vorher 1024: der echte
     // Call (Bugreport 2026-10-17, reproduziert) zeigt durchgängig 800-950 Output-Tokens, davon
     // 500-665 für modellinternes "thinking" (nicht abschaltbar über diesen Endpunkt) – bei 1024 blieb
     // kaum noch Spielraum, ein etwas längerer Thinking-Anteil hätte den sichtbaren JSON-Text
-    // mitten im Satz abschneiden können. Wirft bei fehlendem Key, HTTP-Fehler, leerer Textantwort
+    // mitten im Satz abschneiden können. Wirft bei Proxy-Fehler, leerer Textantwort
     // (z.B. durch max_tokens abgeschnitten, erkennbar an stop_reason) oder nicht parsbarem JSON – der
     // jeweilige rohe Modelltext hängt als err.rawText am Error (siehe generateDailyCheck/lastError).
     async function callDailyCheckModel(payload) {
-      const apiKey = settings.anthropicApiKey;
-      if (!apiKey) throw new Error('Kein Anthropic API Key in den Einstellungen');
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-5',
-          max_tokens: 3000,
-          system: buildDailyCheckSystemPrompt(),
-          messages: [{ role: 'user', content: JSON.stringify(payload) }]
-        })
+      const data = await callAnthropicProxy({
+        model: 'claude-sonnet-5',
+        max_tokens: 3000,
+        system: buildDailyCheckSystemPrompt(),
+        messages: [{ role: 'user', content: JSON.stringify(payload) }]
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error?.message || ('HTTP ' + resp.status));
       const textBlock = (data.content || []).find(b => b.type === 'text');
       const rawText = (textBlock?.text || '').trim();
       if (!rawText) {
@@ -9779,12 +9780,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const text = (input?.value || '').trim();
       if (!text) return;
 
-      const apiKey = settings.anthropicApiKey;
-      if (!apiKey) {
-        showToast('Bitte zuerst einen Anthropic API Key in den Einstellungen eintragen', 'bad');
-        return;
-      }
-
       input.value = '';
       input.style.height = 'auto';
       appendAnalysisMessage('user', text);
@@ -9802,30 +9797,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
       try {
         const systemPrompt = buildAnalysisSystemPrompt();
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-5',
-            max_tokens: 8192,
-            system: systemPrompt,
-            messages: analysisMessages
-          })
+        const data = await callAnthropicProxy({
+          model: 'claude-sonnet-5',
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: analysisMessages
         });
-        const data = await resp.json();
-
-        if (!resp.ok) {
-          const msg = data?.error?.message || ('HTTP ' + resp.status);
-          updateAnalysisMessage(loadingId, 'Fehler: ' + msg, 'alertCircle');
-          analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
-          restoreInputOnFailure();
-          return;
-        }
 
         const textBlock = (data.content || []).find(b => b.type === 'text');
         const answer = textBlock?.text || '(keine Antwort erhalten)';
@@ -9833,8 +9810,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         updateAnalysisMessage(loadingId, answer);
       } catch (err) {
         console.error('Analyse API error:', err);
-        updateAnalysisMessage(loadingId, 'Verbindungsfehler: ' + err.message, 'alertCircle');
-        analysisMessages.pop();
+        updateAnalysisMessage(loadingId, err.message, 'alertCircle');
+        analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
         restoreInputOnFailure();
       } finally {
         analyseRequestInFlight = false;
@@ -11887,26 +11864,13 @@ Regeln:
       };
     }
 
-    // Gleicher Anthropic-Call wie der Tagescheck (settings.anthropicApiKey, Modell claude-sonnet-5,
+    // Gleicher Anthropic-Call wie der Tagescheck (über anthropicProxy, Modell claude-sonnet-5,
     // keine neue Schlüsselverwaltung). max_tokens 4000: mehrere changes + "thinking"-Anteil können
     // größer ausfallen als die 3000 des Tagescheck-Calls (ein einzelner Vorschlag).
     async function callWorkoutBuilderModel(instruction) {
-      const apiKey = settings.anthropicApiKey;
-      if (!apiKey) throw new Error('Kein Anthropic API Key in den Einstellungen');
       const payload = buildWorkoutBuilderPayload(instruction);
       const messages = [...workoutBuilderState.conversation, { role: 'user', content: JSON.stringify(payload) }];
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 4000, system: buildWorkoutBuilderSystemPrompt(), messages })
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error?.message || ('HTTP ' + resp.status));
+      const data = await callAnthropicProxy({ model: 'claude-sonnet-5', max_tokens: 4000, system: buildWorkoutBuilderSystemPrompt(), messages });
       const textBlock = (data.content || []).find(b => b.type === 'text');
       const rawText = (textBlock?.text || '').trim();
       if (!rawText) throw new Error('Keine Textantwort vom Modell' + (data.stop_reason === 'max_tokens' ? ' (max_tokens erreicht)' : ' (stop_reason: ' + data.stop_reason + ')'));

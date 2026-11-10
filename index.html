@@ -2236,7 +2236,7 @@
             <div class="fo-inputicon"><svg class="fo-i" aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="food-search" class="fo-input" placeholder="Lebensmittel suchen..." 
               oninput="searchFood()" onfocus="showFoodSuggestions()"
               onkeydown="handleFoodSearchKey(event)"></div>
-            <button class="fo-iconbtn fo-iconbtn--boxed" type="button" onclick="searchOpenFoodFacts()" title="Open Food Facts" aria-label="Open Food Facts"><svg class="fo-i" aria-hidden="true"><use href="#i-globe"/></svg></button>
+            <button id="off-search-btn" class="fo-iconbtn fo-iconbtn--boxed" type="button" onclick="searchOpenFoodFacts()" title="Open Food Facts" aria-label="Open Food Facts"><svg class="fo-i" aria-hidden="true"><use href="#i-globe"/></svg></button>
             <button class="fo-iconbtn fo-iconbtn--boxed" type="button" onclick="startBarcodeScanner()" title="Barcode" aria-label="Barcode"><svg class="fo-i" aria-hidden="true"><use href="#i-barcode"/></svg></button>
           </div>
 
@@ -2331,7 +2331,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-10 14:02';
+    const APP_BUILD = '2026-11-10 15:45';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6181,17 +6181,47 @@
       return food;
     }
 
-    function renderOFFResult(food, container) {
+    // 006: Treffer ohne Nährwerte. "Ohne Makros" = kcal 0/fehlend UND Protein/KH/Fett 0/fehlend.
+    // Getränke (OFF-Kategorie) mit 0 kcal sind plausibel (Wasser, Tee, Light) → nicht ausblenden, nur markieren.
+    const OFF_DRINK_CATEGORIES = ['en:beverages', 'en:waters', 'en:teas', 'en:herbal-teas', 'en:coffees', 'en:diet-beverages', 'en:artificially-sweetened-beverages'];
+    function offFoodHasMacros(food) {
+      return (food.kcal || 0) > 0 || (food.protein || 0) > 0 || (food.carbs || 0) > 0 || (food.fat || 0) > 0;
+    }
+    function offIsDrink(product) {
+      const cats = product.categories_tags || [];
+      return cats.some(c => OFF_DRINK_CATEGORIES.includes(c));
+    }
+    function offEscape(str) {
+      return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    // noMacros: undefined | 'drink' (0-kcal-Getränk, markiert) | 'none' (keine Nährwerte, nur nach "anzeigen")
+    function renderOFFResult(food, container, noMacros) {
       const div = document.createElement('div');
-      div.style.cssText = 'padding:12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;';
+      div.setAttribute('data-off-row', noMacros || 'ok');
+      div.style.cssText = 'padding:12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;';
+      const tag = noMacros === 'drink'
+        ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;flex-shrink:0;">0 kcal · Getränk</span>`
+        : noMacros === 'none'
+          ? `<span class="fo-tag" style="background:var(--fo-warn, #eab308);color:#1a1a1a;flex-shrink:0;">ohne Nährwerte</span>`
+          : `<span style="font-size:11px;color:var(--success);padding:2px 6px;background:var(--fo-ok-tint);border-radius:4px;flex-shrink:0;">OFF</span>`;
       div.innerHTML = `
         <div>
-          <div style="font-weight:500;font-size:14px;">${food.name}</div>
+          <div style="font-weight:500;font-size:14px;">${offEscape(food.name)}</div>
           <div style="font-size:11px;color:var(--muted);">${fmt(food.kcal)} kcal · P ${fmt(food.protein,1)}g · K ${fmt(food.carbs,1)}g · F ${fmt(food.fat,1)}g / 100g</div>
         </div>
-        <span style="font-size:11px;color:var(--success);padding:2px 6px;background:var(--fo-ok-tint);border-radius:4px;">OFF</span>
+        ${tag}
       `;
       div.onclick = async () => {
+        if (noMacros) {
+          const ok = await showConfirm(
+            noMacros === 'drink' ? 'Getränk ohne Nährwerte übernehmen?' : 'Produkt ohne Nährwerte übernehmen?',
+            noMacros === 'drink'
+              ? 'Open Food Facts nennt 0 kcal und keine Makros. Für Wasser/Tee/Light-Getränke plausibel – sonst bitte Werte prüfen.'
+              : 'Open Food Facts nennt für dieses Produkt weder kcal noch Protein, KH oder Fett. Der Eintrag zählt dann 0 kcal.',
+            'alertCircle', 'Trotzdem übernehmen', false);
+          if (!ok) return;
+        }
         const saved = await saveOFFFood(food);
         selectFood(saved.id);
         document.getElementById('selected-food-source').textContent = 'Open Food Facts';
@@ -6201,45 +6231,150 @@
       container.appendChild(div);
     }
 
+    // 006: Suche zuverlässig. Gemessen 10.11.2026: search.pl antwortet in ~40 % der Fälle sofort mit 503
+    // (ohne CORS-Header → im Browser "Failed to fetch"), Erfolge in 0,35–5,1 s. Daher pro Versuch 8 s Timeout,
+    // max. 2 automatische Wiederholungen (2 s, 5 s), ein Klick = eine Suche, veraltete Antworten werden verworfen.
+    const OFF_SEARCH_TIMEOUT_MS = 8000;
+    const OFF_SEARCH_RETRY_DELAYS_MS = [2000, 5000];
+    const OFF_SEARCH_FIELDS = 'code,product_name,product_name_de,product_name_en,nutriments,categories_tags';
+    const OFF_MAX_SHOWN = 10;
+    let offSearchSeq = 0;          // jede neue Suche erhöht; ältere Läufe verwerfen ihr Ergebnis
+    let offSearchController = null;
+    let offSearchRunningQuery = null;
+
+    function offStatusHTML(icon, text, danger) {
+      return `<div style="padding:15px;text-align:center;color:var(--${danger ? 'danger' : 'muted'});font-size:13px;">${foIcon(icon, 'fo-i--sm')} ${text}</div>`;
+    }
+    function setOFFSearchBusy(busy) {
+      const btn = document.getElementById('off-search-btn');
+      if (!btn) return;
+      btn.disabled = busy;
+      btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+      btn.style.opacity = busy ? '0.5' : '';
+    }
+
+    // Liefert die OFF-Antwort oder wirft {retryable, kind}. Abbruch durch neue Suche → AbortError (still).
+    async function fetchOFFSearchOnce(query, outerSignal) {
+      const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&lc=de&fields=${OFF_SEARCH_FIELDS}`;
+      const ctrl = new AbortController();
+      let timedOut = false;
+      const onOuterAbort = () => ctrl.abort();
+      outerSignal.addEventListener('abort', onOuterAbort);
+      const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, OFF_SEARCH_TIMEOUT_MS);
+      try {
+        let resp, data;
+        try {
+          resp = await fetch(url, { signal: ctrl.signal });
+          if (resp.ok) data = await resp.json();
+        } catch (e) {
+          if (outerSignal.aborted) throw e; // neue Suche → still beenden
+          // Timeout, TypeError (503 ohne CORS-Header erscheint im Browser als Netzwerkfehler) oder kaputtes JSON
+          throw { retryable: true, kind: timedOut ? 'timeout' : (resp ? 'badjson' : 'network') };
+        }
+        if (resp.status === 429 || resp.status >= 500) throw { retryable: true, kind: 'http' + resp.status };
+        if (!resp.ok) throw { retryable: false, kind: 'http' + resp.status };
+        if (!data || !Array.isArray(data.products)) throw { retryable: true, kind: 'badjson' };
+        return data;
+      } finally {
+        clearTimeout(timer);
+        outerSignal.removeEventListener('abort', onOuterAbort);
+      }
+    }
+
+    let offHiddenFoods = [];
+    window.showHiddenOFFResults = function() {
+      const results = document.getElementById('off-search-results');
+      const hint = document.getElementById('off-hidden-hint');
+      if (hint) hint.remove();
+      offHiddenFoods.forEach(f => renderOFFResult(f, results, 'none'));
+      offHiddenFoods = [];
+    };
+
     window.searchOpenFoodFacts = async function() {
       const query = document.getElementById('food-search').value.trim();
       if (query.length < 2) { showToast('Bitte erst Suchbegriff eingeben'); return; }
+      if (offSearchRunningQuery === query) return; // gleiche Suche läuft schon → kein zweiter Request
+
+      if (offSearchController) offSearchController.abort(); // andere laufende Suche abbrechen
+      const controller = new AbortController();
+      offSearchController = controller;
+      const seq = ++offSearchSeq;
+      offSearchRunningQuery = query;
+      setOFFSearchBusy(true);
 
       const container = document.getElementById('off-results-container');
       const results = document.getElementById('off-search-results');
       const status = document.getElementById('off-status');
       container.style.display = 'block';
-      results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Suche...</div>`;
+      results.innerHTML = offStatusHTML('clock', 'Suche läuft…');
       status.textContent = '';
+      offHiddenFoods = [];
 
       try {
-        const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&lc=de`;
-        const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        const data = await resp.json();
+        let data = null, lastErr = null;
+        for (let attempt = 0; attempt <= OFF_SEARCH_RETRY_DELAYS_MS.length; attempt++) {
+          if (attempt > 0) {
+            results.innerHTML = offStatusHTML('clock', `Suche läuft… (Versuch ${attempt + 1} von ${OFF_SEARCH_RETRY_DELAYS_MS.length + 1})`);
+            await new Promise(r => setTimeout(r, OFF_SEARCH_RETRY_DELAYS_MS[attempt - 1]));
+            if (seq !== offSearchSeq) return;
+          }
+          try {
+            data = await fetchOFFSearchOnce(query, controller.signal);
+            break;
+          } catch (e) {
+            if (seq !== offSearchSeq || e?.name === 'AbortError') return;
+            lastErr = e;
+            console.warn('OFF search attempt failed:', attempt + 1, e?.kind || e);
+            if (!e?.retryable) break;
+          }
+        }
+        if (seq !== offSearchSeq) return; // veraltete Antwort verwerfen
 
-        // Robuster Filter – akzeptiert verschiedene Energie-Felder
-        const products = (data.products || []).filter(p => {
-          if (!p.product_name) return false;
-          const n = p.nutriments || {};
-          return n['energy-kcal_100g'] || n['energy-kcal'] || 
-                 (n['energy_100g'] && n['energy_100g'] < 4000); // kJ Fallback
-        });
-
-        if (products.length === 0) {
-          results.innerHTML = '<div style="padding:15px;text-align:center;color:var(--muted);font-size:13px;">Keine Ergebnisse gefunden</div>';
+        if (!data) {
+          const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+          results.innerHTML = offStatusHTML('alertCircle', offline
+            ? 'Keine Internetverbindung – bitte später erneut'
+            : 'Open Food Facts antwortet gerade nicht – bitte später erneut', true);
+          console.error('OFF search failed:', lastErr?.kind || lastErr);
           return;
         }
 
-        status.textContent = `${products.length} Treffer`;
-        results.innerHTML = '';
-        products.slice(0, 10).forEach(p => renderOFFResult(foodFromOFF(p), results));
-      } catch(e) {
-        if (e.name === 'TimeoutError') {
-          results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">${foIcon('clock', 'fo-i--sm')} Zeitüberschreitung – bitte nochmal versuchen</div>`;
-        } else {
-          results.innerHTML = `<div style="padding:15px;text-align:center;color:var(--danger);font-size:13px;">${foIcon('alertCircle', 'fo-i--sm')} Fehler bei der Suche</div>`;
+        // Bisheriger Energie-Filter bleibt für normale Treffer gültig. Neu (006): Treffer ohne jede Nährwertangabe
+        // werden nicht mehr stumm verworfen, sondern ausgeblendet (zählbar, "Anzeigen") bzw. als Getränk markiert.
+        // Treffer ohne Energieangabe, aber mit Makros, fallen wie bisher weg.
+        const hasEnergy = n => n['energy-kcal_100g'] || n['energy-kcal'] || (n['energy_100g'] && n['energy_100g'] < 4000);
+        const named = (data.products || []).filter(p => p.product_name);
+        const shown = [], hidden = [];
+        named.forEach(p => {
+          const food = foodFromOFF(p);
+          if (hasEnergy(p.nutriments || {})) shown.push({ food });
+          else if (offFoodHasMacros(food)) return;
+          else if (offIsDrink(p)) shown.push({ food, noMacros: 'drink' });
+          else hidden.push(food);
+        });
+
+        if (shown.length === 0 && hidden.length === 0) {
+          results.innerHTML = offStatusHTML('search', 'Keine Ergebnisse gefunden');
+          return;
         }
-        console.error('OFF search error:', e);
+
+        status.textContent = `${shown.length} Treffer`;
+        results.innerHTML = '';
+        shown.slice(0, OFF_MAX_SHOWN).forEach(x => renderOFFResult(x.food, results, x.noMacros));
+        offHiddenFoods = hidden;
+        if (hidden.length > 0) {
+          const hint = document.createElement('div');
+          hint.id = 'off-hidden-hint';
+          hint.style.cssText = 'padding:10px 12px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px;';
+          hint.innerHTML = `<span>${hidden.length} Treffer ohne Nährwerte ausgeblendet</span><button type="button" class="fo-btn fo-btn--ghost" style="padding:4px 10px;font-size:12px;" onclick="showHiddenOFFResults()">Anzeigen</button>`;
+          results.appendChild(hint);
+        }
+      } finally {
+        if (seq === offSearchSeq) {
+          offSearchRunningQuery = null;
+          offSearchController = null;
+          setOFFSearchBusy(false);
+        }
       }
     };
 

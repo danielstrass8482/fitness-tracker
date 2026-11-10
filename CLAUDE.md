@@ -20,7 +20,8 @@
 - Nutzung ausschließlich als Web-App/PWA (GitHub Pages); Android-Hülle stillgelegt (Repo archiviert). Nach App-Änderungen: APP_BUILD auf aktuelle Zeit (Europe/Berlin), commit, push, Pages-Build abwarten, ausgeliefertes APP_BUILD per curl belegen.
 - UI-Tests: Playwright mit echter index.html, Auth gestubbt, Read-only-Proxy auf echte Daten, alle Schreibzugriffe blockiert und mit Payload protokolliert, Viewport 360 px. Kein window.alert/confirm in der App, App-Dialoge (showConfirm) nutzen.
 - Tests gegen echte Firestore-Daten sparsam: große Collections (logEntries, foods, entries) stubben oder per Count messen; volle App-Starts gegen echte Daten nur, wenn der Auftrag es verlangt (ein Start ≈ 14.800 Reads, gemessen 04.11.2026).
-- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions, dartTTS und dartCoach in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage (dartTTS u. a.) mit "No" beantworten.
+- Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage mit "No" beantworten.
+- KI-Aufrufe nur über anthropicProxy; Anthropic-Zugang per Workload Identity Federation (Dienstkonto anthropic-proxy) bzw. – falls Rückfall – Secret ANTHROPIC_API_KEY_PROXY. Dart-App läuft im eigenen Projekt darttrainer-app-fed88, nicht hier.
 - VPS 185.117.250.246 (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
 - Cloud-Shell-Home-Disk ist knapp: vor größeren Downloads/Builds df -h ~ prüfen; nichts außerhalb des Auftrags löschen.
 

@@ -30,6 +30,7 @@ ist kleiner (ohne JSON-Overhead), dafür kommen Indizes hinzu. Als Größenordnu
 | `stravaAthletes` | `{stravaAthleteId}` | 1 | `updatedAt` 2026-04-14 | <1 KB | Konfiguration (Altbestand, s. 1d) |
 | `oura_tokens` | `{uid}` | 1 | – | <1 KB | **Secrets** |
 | `oura_oauth_state` | `{state}` | 0 (transient, nur während OAuth) | – | – | Secrets (kurzlebig) |
+| `aiProxyUsage` | `{uid}` | 1 (neu 10.11.2026, 005c2) | `window` (UTC-Stunde), `count`, `updatedAt` | <1 KB | Konfiguration (Drosselzähler von `anthropicProxy`, nur Functions schreiben, keine Rules-Freigabe) |
 | `dart_*` (9 Collections) | – | 181 zusammen | – | – | eigene Darts-App, nicht Teil dieser Aufnahme |
 
 **Unter `users/{uid}/`** (17 Subcollections laut `listCollectionIds`, dazu 3 im Code genutzte, derzeit
@@ -287,7 +288,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 
 | Dokument | Felder (Typ) | Secret-Felder |
 |---|---|---|
-| `settings/main` | `activityLevel`, `age`, `assumedDailySteps`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string), `anthropicApiKey` (string) | **`anthropicApiKey`** |
+| `settings/main` | `activityLevel`, `age`, `assumedDailySteps`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`) | – |
 | `settings/favorites` | `ids` (array) | – |
 | `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName`, `lastDriveBackupAttempt` (ISO-Zeitstempel, seit 04.11.2026), `lastDriveBackupError` (Kurztext oder null, seit 04.11.2026) (string) | – (Drive-Referenzen; Auto-Backup nur wenn letzter Versuch > 24 h) |
 | `settings/exercises` | 11 Übungsschlüssel (`pullups`, `pushups`, `lunges`, `terraband_knie`, `custom_*`) je map | – |
@@ -308,7 +309,7 @@ sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.
 
 | Kategorie | Collections/Felder |
 |---|---|
-| Secrets | `settings/main.anthropicApiKey`, `integrations/{googlefit,googledrive,strava}` (Token-Felder), `oura_tokens`, `oura_oauth_state` |
+| Secrets | `integrations/{googlefit,googledrive,strava}` (Token-Felder), `oura_tokens`, `oura_oauth_state` |
 | Gesundheit | `entries.weight` (`tageslog`), `entries.hf`, `garminActivities.avgHr/maxHr`, `oura_daily` (Schlaf, HRV, Ruhepuls, Temperatur), `settings/subjectiveStatus`, `dailyCheck` (inkl. `flags.alcohol/illness`), `settings/main` (Alter, Größe, Gewicht, Geschlecht) |
 | Ernährung | `logEntries`, `foods` (beide), `recipes`, `settings/favorites` |
 | Bewegung | `entries`, `garminActivities`, `garminDaily`, `ciqSteps` (+`samples`), `oura_workouts`, `oura_step_log`, `trainingplans`, `garminLinks`, `garminHidden` |
@@ -361,11 +362,12 @@ live neu) und `weeklyStats` (Wochen-Snapshot, seit 2026-W18 nicht fortgeschriebe
 
 ---
 
-## 4. Cloud Functions (`gcloud functions list`, 18 Functions)
+## 4. Cloud Functions (`gcloud functions list`, 17 Functions, Stand 10.11.2026)
 
 | Function | Gen | Runtime | Region | Letztes Update | Typ | Quelle in `~/functions` |
 |---|---|---|---|---|---|---|
-| `createCustomToken` | 2 | nodejs22 | us-central1 | 2026-10-04 | callable | **nein** |
+| `anthropicProxy` | 2 | nodejs22 | us-central1 | 2026-11-10 | callable (KI-Proxy, WIF, Dienstkonto `anthropic-proxy`, 005c2) | ja (`anthropicProxy.js`) |
+| `exportAnalytics` | 2 | nodejs22 | us-central1 | 2026-11-06 | HTTP | ja |
 | `garminHealthCheck` | 2 | nodejs22 | us-central1 | 2026-10-30 | Schedule stündlich | ja |
 | `googleDriveCallback` | 2 | nodejs22 | us-central1 | 2026-10-31 | HTTP | ja |
 | `googleDriveRefresh` | 2 | nodejs22 | us-central1 | 2026-10-31 | callable | ja |
@@ -374,21 +376,20 @@ live neu) und `weeklyStats` (Wochen-Snapshot, seit 2026-W18 nicht fortgeschriebe
 | `googleFitDisconnect` | 2 | nodejs22 | us-central1 | 2026-10-23 | callable | ja |
 | `googleFitSync` | 2 | nodejs22 | us-central1 | 2026-10-31 | callable | ja |
 | `ingestCiqSteps` | 2 | nodejs22 | us-central1 | 2026-11-01 | HTTP | ja |
-| `ingestGarmin` | 2 | nodejs22 | us-central1 | 2026-10-30 | HTTP | ja |
+| `ingestGarmin` | 2 | nodejs22 | us-central1 | 2026-11-07 | HTTP | ja |
 | `ouraAuthStart` | 2 | nodejs22 | **europe-west1** | 2026-10-23 | HTTP | ja |
 | `ouraCallback` | **1** | nodejs22 | **europe-west1** | 2026-10-23 | HTTP (v1) | ja |
 | `ouraDisconnect` | 2 | nodejs22 | **europe-west1** | 2026-10-23 | callable | ja |
-| `syncOura` | 2 | nodejs22 | **europe-west1** | 2026-10-23 | Schedule alle 3 h | ja |
-| `syncOuraManual` | 2 | nodejs22 | **europe-west1** | 2026-10-23 | callable | ja |
-| `syncOuraMorning` | 2 | nodejs22 | **europe-west1** | 2026-10-23 | Schedule 05–10 Uhr halbstündlich | ja |
-| `dartCoach` | 2 | nodejs22 | europe-west1 | 2026-10-23 | HTTP | ja (`dartCoach.js`) |
-| `dartTTS` | 2 | nodejs22 | europe-west1 | 2026-06-17 | HTTP | **nein** |
+| `syncOura` | 2 | nodejs22 | **europe-west1** | 2026-11-07 | Schedule alle 3 h | ja |
+| `syncOuraManual` | 2 | nodejs22 | **europe-west1** | 2026-11-07 | callable | ja |
+| `syncOuraMorning` | 2 | nodejs22 | **europe-west1** | 2026-11-07 | Schedule 05–10 Uhr halbstündlich | ja |
 
-Die Zeitpläne stammen aus `gcloud scheduler jobs list`, Zeitzone Europe/Berlin. CLAUDE.md nennt
-us-central1 als Region; die Oura- und Dart-Functions liegen tatsächlich in europe-west1. Es gibt keine
+Die Zeitpläne stammen aus `gcloud scheduler jobs list`, Zeitzone Europe/Berlin. App-Functions in
+us-central1, Oura-Functions in europe-west1. Gelöscht: `createCustomToken` (002d), `dartCoach` und
+`dartTTS` (005b2 – die Dart-App läuft im eigenen Projekt darttrainer-app-fed88). Es gibt keine
 Strava-Function.
 
-**`createCustomToken` – Deploy-Quelle** (`gcloud functions describe … --region=us-central1`):
+**`createCustomToken` – Deploy-Quelle** (historisch, Function seit 002d gelöscht) (`gcloud functions describe … --region=us-central1`):
 - `buildConfig.source.storageSource`: Bucket `gcf-v2-sources-187864668697-us-central1`, Objekt
   `createCustomToken/function-source.zip`, Generation `1791127777085431`.
   `sourceProvenance.resolvedStorageSource` ist identisch.

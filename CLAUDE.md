@@ -10,7 +10,7 @@
 ## Sicherheit
 - Secrets nie ausgeben, auch nicht teilweise oder maskiert. Keine Dateien/Dokumente mit Secrets vollständig lesen; bei Keys nur Pfad, Rechte, Länge, Prüfungen ohne Inhaltsausgabe (z. B. -check -noout).
 - Niemals Secret-Werte abrufen: kein `firebase functions:secrets:access`, kein `gcloud secrets versions access`, keine Ausgabe von Secret-Dateien. Secrets nur schreibend setzen (Datei/Pipe).
-- Firestore: settings/ und integrations/ nur mit Feld-Masken lesen; settings/main enthält den Anthropic-Key.
+- Firestore: settings/ und integrations/ nur mit Feld-Masken lesen (Tokens/Zugangsdaten möglich).
 - Keine IAM-Änderungen. Automatische Grants durch firebase (z. B. secretAccessor) im Bericht benennen.
 - Garmin: bei Login-/Auth-Fehlern oder 429 nie wiederholen, nie Passwort-Login.
 - Vor jedem Commit: keine Secrets, Tokens, E-Mail-Adressen oder uid im Klartext (uid als {uid}).
@@ -22,7 +22,7 @@
 - Tests gegen echte Firestore-Daten sparsam: große Collections (logEntries, foods, entries) stubben oder per Count messen; volle App-Starts gegen echte Daten nur, wenn der Auftrag es verlangt (ein Start ≈ 14.800 Reads, gemessen 04.11.2026).
 - Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage mit "No" beantworten.
 - KI-Aufrufe nur über anthropicProxy; Anthropic-Zugang per Workload Identity Federation (Dienstkonto anthropic-proxy) bzw. – falls Rückfall – Secret ANTHROPIC_API_KEY_PROXY. Dart-App läuft im eigenen Projekt darttrainer-app-fed88, nicht hier.
-- VPS 185.117.250.246 (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
+- VPS (Adresse in der SSH-Konfiguration) (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
 - Cloud-Shell-Home-Disk ist knapp: vor größeren Downloads/Builds df -h ~ prüfen; nichts außerhalb des Auftrags löschen.
 
 ## Bekannte Fallstricke

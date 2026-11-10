@@ -2331,7 +2331,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-10 15:45';
+    const APP_BUILD = '2026-11-10 16:47';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6026,15 +6026,38 @@
       const tw = selectedRecipe.totalWeight || 0;
       document.getElementById('selected-recipe-info').textContent =
         `${selectedRecipe.portions || 1} Portion(en)${tw > 0 ? ' · ' + fmt(tw) + 'g gesamt' : ''} · ${fmt(selectedRecipe.kcal || 0)} kcal gesamt`;
-      document.getElementById('recipe-portions').value = '1';
-      document.getElementById('recipe-grams').value = '100';
       document.getElementById('recipe-form').style.display = 'block';
       document.getElementById('recipe-search-results').innerHTML = '';
       // Show/hide grams toggle based on whether totalWeight is known
       const gramsBtn = document.getElementById('recipe-mode-grams-btn');
       if (gramsBtn) gramsBtn.style.opacity = tw > 0 ? '1' : '0.4';
-      setRecipeInputMode('portions');
+      const start = recipeStartAmount(selectedRecipe);
+      document.getElementById('recipe-portions').value = start.unit === 'portions' ? String(start.amount) : '1';
+      document.getElementById('recipe-grams').value = start.unit === 'grams' ? String(start.amount) : '100';
+      setRecipeInputMode(start.unit);
     };
+
+    // Start-Einheit + -Menge beim NEU-Eintragen eines Rezepts (008, 10.11.2026): zuletzt genutzte Einheit
+    // und Menge aus dem letzten Tagebucheintrag dieses Rezepts (logEntries im Speicher, Felder amount + unit -
+    // gleiche Quelle wie die gemerkte Menge bei Lebensmitteln in selectFood; kein eigener Speicher, kein
+    // zusätzlicher Write). Ohne Gedächtnis: Gramm (100 g). Alte Einträge ohne "unit": Gramm, Menge über
+    // recipeEntryAmountUnit umgerechnet. Ohne totalWeight ist Gramm nicht berechenbar -> Portionen.
+    // Bearbeiten (editEntry) ist davon unberührt und startet weiter immer in Gramm.
+    function recipeStartAmount(recipe) {
+      const tw = recipe.totalWeight || 0;
+      const rp = recipe.portions || 1;
+      const lastEntry = Object.values(foodLog).flat()
+        .filter(e => e && e.amount > 0 && String(e.recipeId || e.foodId) === String(recipe.id))
+        .sort((a, b) => ((b.datum || b.date || '') + (b.time || '')).localeCompare((a.datum || a.date || '') + (a.time || '')))[0];
+      if (lastEntry && lastEntry.unit === 'portions') return { unit: 'portions', amount: lastEntry.amount };
+      if (tw <= 0) return { unit: 'portions', amount: 1 };
+      if (!lastEntry) return { unit: 'grams', amount: 100 };
+      if (lastEntry.unit === 'grams') return { unit: 'grams', amount: lastEntry.amount };
+      const legacyUnit = recipeEntryAmountUnit(lastEntry, recipe);
+      const grams = legacyUnit === 'grams' ? lastEntry.amount : lastEntry.amount * (tw / rp);
+      return { unit: 'grams', amount: Math.round(grams * 10) / 10 };
+    }
+    window.recipeStartAmount = recipeStartAmount;
 
     window.saveRecipeEntry = async function() {
       if (!selectedRecipe) return;

@@ -18,7 +18,8 @@ CREATE INDEX IF NOT EXISTS daily_snapshots_day_idx ON raw.daily_snapshots (day);
 CREATE INDEX IF NOT EXISTS daily_snapshots_data_gin ON raw.daily_snapshots USING gin (data);
 
 GRANT SELECT, INSERT, UPDATE ON raw.daily_snapshots TO fuelofit_sync;
-GRANT SELECT ON raw.daily_snapshots TO fuelofit_ro;
+-- fuelofit_ro bekommt bewusst KEIN Recht auf raw.* (008b/008b3); die View daily_summary
+-- laeuft mit Owner-Rechten. Frueher: GRANT SELECT ON raw.daily_snapshots TO fuelofit_ro;
 
 CREATE OR REPLACE VIEW views.daily_summary AS
 SELECT

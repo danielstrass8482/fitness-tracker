@@ -31,11 +31,17 @@ BEGIN
 END
 $$;
 
+-- fuelofit_ro (MCP-Server, 008b/008b3): nur Lesen auf views, hoechstens 3 Verbindungen,
+-- jede Transaktion read-only, 10 s Statement-Timeout. Stand = vps/mcp/db_role.sql (fuelofit-functions).
+ALTER ROLE fuelofit_ro LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 3;
+ALTER ROLE fuelofit_ro SET default_transaction_read_only = on;
+ALTER ROLE fuelofit_ro SET statement_timeout = '10s';
+
 -- ===== Schemas =====
 CREATE SCHEMA IF NOT EXISTS raw;
 CREATE SCHEMA IF NOT EXISTS views;
 
-GRANT USAGE ON SCHEMA raw TO fuelofit_sync, fuelofit_ro;
+GRANT USAGE ON SCHEMA raw TO fuelofit_sync;
 GRANT USAGE ON SCHEMA views TO fuelofit_ro;
 
 -- ===== raw.* -- eine Tabelle pro Whitelist-Collection aus exportAnalytics =====
@@ -213,13 +219,18 @@ CREATE TABLE IF NOT EXISTS raw.garmin_hidden (
   deleted_at timestamptz
 );
 
--- ===== Rechte: fuelofit_sync schreibt raw.*, fuelofit_ro liest raw.* und views.* =====
+-- ===== Rechte: fuelofit_sync schreibt raw.*, fuelofit_ro liest NUR views.* =====
+-- views.* gehoeren dem ausfuehrenden Superuser und laufen mit Owner-Rechten (kein
+-- security_invoker), fuelofit_ro braucht daher keinen Zugriff auf raw (008b/008b3).
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA raw TO fuelofit_sync;
 ALTER DEFAULT PRIVILEGES IN SCHEMA raw GRANT SELECT, INSERT, UPDATE ON TABLES TO fuelofit_sync;
 
-GRANT SELECT ON ALL TABLES IN SCHEMA raw TO fuelofit_ro;
-ALTER DEFAULT PRIVILEGES IN SCHEMA raw GRANT SELECT ON TABLES TO fuelofit_ro;
+-- raw: fuelofit_ro alles entziehen (falls aus Phase 1a noch vorhanden; idempotent)
+REVOKE ALL ON ALL TABLES IN SCHEMA raw FROM fuelofit_ro;
+REVOKE ALL ON SCHEMA raw FROM fuelofit_ro;
+ALTER DEFAULT PRIVILEGES IN SCHEMA raw REVOKE ALL ON TABLES FROM fuelofit_ro;
 
+-- views: USAGE (oben) + SELECT, auch fuer kuenftige Views
 GRANT SELECT ON ALL TABLES IN SCHEMA views TO fuelofit_ro;
 ALTER DEFAULT PRIVILEGES IN SCHEMA views GRANT SELECT ON TABLES TO fuelofit_ro;
 
@@ -253,14 +264,27 @@ WHERE deleted_at IS NULL
   AND data->>'weight' IS NOT NULL;
 
 -- 3) Trainings inkl. Puls: entries (Trainingstypen, ohne tageslog/phonesteps) links gegen
--- garmin_activities desselben Tages (avg_hr/max_hr/garmin_kcal/distance_m/duration_sec), falls
--- vorhanden. Eine Garmin-Aktivitaet kann zu keinem, einem oder mehreren entries-Docs am selben
--- Tag passen -- die genaue Zuordnung macht live computeZirkelGarminLinksForDate() in index.html,
--- hier nur die Rohwerte nebeneinander. distance_m/duration_sec bevorzugen Garmin-Werte (Tages-
--- Match), fallen sonst auf entries.distanz (km->m) bzw. entries.zeit ("HH:MM:SS"->Sekunden)
--- zurueck. pace_min_km nur bei Lauf-/Gehtypen (laufen/gehen/wandern) und distance_m > 0.
--- speed_kmh bei allen Typen mit distance_m > 0 und duration_sec > 0. (004c, 07.11.2026)
+-- garmin_activities. Zuordnung PRO AKTIVITAET ueber Startzeit (Stand Migration 005, 008a2):
+-- gleicher Tag UND entries.garminTime = Uhrzeit aus startLocal; jede Aktivitaet hoechstens
+-- einem Eintrag, Eintraege ohne Treffer -> Garmin-Felder NULL. distance_m/duration_sec
+-- bevorzugen Garmin-Werte, fallen sonst auf entries.distanz (km->m) bzw. entries.zeit
+-- ("HH:MM:SS"->Sekunden) zurueck. pace_min_km nur bei laufen/gehen/wandern und distance_m > 0,
+-- speed_kmh bei allen Typen mit distance_m > 0 und duration_sec > 0.
 CREATE OR REPLACE VIEW views.training_sessions AS
+WITH garmin_match AS (
+  -- Zuordnung Garmin-Aktivitaet -> Eintrag: gleicher Tag UND entries.garminTime ("HH:MM:SS")
+  -- = Uhrzeit aus startLocal ("YYYY-MM-DDTHH:MM:SS+hh:mm", Zeichen 12-19). DISTINCT ON
+  -- (g.id): jede Aktivitaet hoechstens EINEM Eintrag (bei Gleichstand kleinste entry id).
+  SELECT DISTINCT ON (g.id) g.id AS garmin_id, e.id AS entry_id
+  FROM raw.garmin_activities g
+  JOIN raw.entries e
+    ON e.day = g.day
+   AND e.data->>'garminTime' = substr(g.data->>'startLocal', 12, 8)
+  WHERE g.deleted_at IS NULL
+    AND e.deleted_at IS NULL
+    AND e.data->>'typ' NOT IN ('tageslog', 'phonesteps')
+  ORDER BY g.id, e.id
+)
 SELECT
   e.id AS entry_id,
   e.day,
@@ -346,8 +370,10 @@ LEFT JOIN LATERAL (
     (g.data->>'avgSpeedMs')::numeric AS avg_speed_ms,
     (g.data->>'avgCadence')::numeric AS avg_cadence,
     (g.data->>'maxCadence')::numeric AS max_cadence
-  FROM raw.garmin_activities g
-  WHERE g.deleted_at IS NULL AND g.day = e.day
+  FROM garmin_match m
+  JOIN raw.garmin_activities g ON g.id = m.garmin_id
+  WHERE m.entry_id = e.id
+  ORDER BY g.id
   LIMIT 1
 ) ga ON true
 WHERE e.deleted_at IS NULL

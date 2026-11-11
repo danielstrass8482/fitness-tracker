@@ -13,7 +13,7 @@ Firestore (fitness-tracker-c6f97)
 Cloud Function exportAnalytics (us-central1, Repo fuelofit-functions)
     |  HTTPS GET, Header X-Analytics-Secret (ANALYTICS_EXPORT_SECRET)
     v
-sync.py  (User fuelofit-analytics, VPS 185.117.250.246)
+sync.py  (User fuelofit-analytics, VPS)
     v
 Postgres 18, DB fuelofit_analytics, Schema raw (Rohdaten) + views (typisierte Sichten)
 ```

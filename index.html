@@ -2331,7 +2331,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-10 16:47';
+    const APP_BUILD = '2026-11-12 18:46';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -11294,6 +11294,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
       let totalPlanned = 0, totalDone = 0;
       let daysHtml = '';
+      // Wie alle übrigen Lese-/Render-Pfade: trainingEntries + live Garmin-Aktivitäten (gfit-Dubletten
+      // ±5 Min. entfernt, ausgeblendete Garmin-Aktivitäten raus). Sonst wird ein Garmin-Lauf ohne
+      // Google-Fit-Gegenstück in entries/ im Plan nie zugeordnet (007c, 12.11.2026). Einmal pro Render.
+      const effectiveEntries = getEffectiveTrainingEntries();
 
       dates.forEach((d, i) => {
         const { key, label } = PLAN_DAYS[i];
@@ -11301,7 +11305,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         const isToday = ds === todayStr;
         const isFuture = ds > todayStr;
         const units = weekPlan[key] || [];
-        const dayEntries = trainingEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
+        const dayEntries = effectiveEntries.filter(e => e.datum === ds && e.typ !== 'tageslog' && e.typ !== 'phonesteps');
         // Tagescheck-Planvorschlag (Teil B) gilt NUR für heute und nur solange nicht verworfen.
         // status mitgegeben, damit planMatchDay einen akzeptierten Ruhetag-Vorschlag erkennt (Task 1).
         const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion

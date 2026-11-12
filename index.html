@@ -2136,7 +2136,7 @@
 
   <!-- FoodDB Edit Modal -->
   <div id="edit-fooddb-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:10000;align-items:center;justify-content:center;padding:20px;">
-    <div style="max-width:500px;width:100%;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
+    <div style="max-width:500px;width:100%;max-height:100%;overflow-y:auto;background:var(--surface);border-radius:16px;border:1px solid var(--border);">
       <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <h3 id="fooddb-modal-title">Lebensmittel bearbeiten</h3>
         <button onclick="closeFoodDBModal()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
@@ -2189,7 +2189,18 @@
         </div>
         
         <p style="font-size:12px;color:var(--muted);margin-bottom:15px;">Alle Werte pro 100g</p>
-        
+
+        <!-- 009: Portionsgrößen (z. B. "Stück" = 10 g) -->
+        <div style="margin-bottom:15px;">
+          <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:500;">Portionen</label>
+          <div id="fooddb-servings-list" style="margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="fooddb-serving-name" placeholder="z.B. Stück" maxlength="30" style="flex:1.4;min-width:0;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+            <input type="number" id="fooddb-serving-grams" placeholder="g" step="0.1" min="0.5" max="2000" inputmode="decimal" style="flex:1;min-width:0;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+          </div>
+          <button type="button" id="fooddb-serving-add" onclick="addFoodDBServing()" style="margin-top:8px;width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">+ Portion hinzufügen</button>
+        </div>
+
         <div style="display:flex;gap:10px;">
           <button onclick="closeFoodDBModal()" style="flex:1;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">Abbrechen</button>
           <button onclick="saveFoodDBModal()" class="btn" style="flex:1;">Speichern</button>
@@ -2248,8 +2259,12 @@
                 <span id="selected-food-source" class="fo-tag fo-tag--neutral"></span>
               </div>
               <div class="fo-field" style="margin-bottom:10px;">
-                <label class="fo-label" for="food-amount">Menge (g)</label>
-                <input type="number" id="food-amount" class="fo-input" value="100" min="1" oninput="updateNutrition()" onfocus="this.select()" onkeydown="if(event.key==='Enter'||event.key==='Go'||event.keyCode===13){saveFood();event.preventDefault();}" inputmode="decimal" enterkeyhint="done">
+                <label class="fo-label" for="food-amount" id="food-amount-label">Menge (g)</label>
+                <div style="display:flex;gap:8px;">
+                  <input type="number" id="food-amount" class="fo-input" value="100" min="1" oninput="updateNutrition()" onfocus="this.select()" onkeydown="if(event.key==='Enter'||event.key==='Go'||event.keyCode===13){saveFood();event.preventDefault();}" inputmode="decimal" enterkeyhint="done" style="flex:1;min-width:0;">
+                  <select id="food-unit" class="fo-input" onchange="onFoodUnitChange()" aria-label="Einheit" style="display:none;flex:1;min-width:0;"></select>
+                </div>
+                <div id="food-unit-grams" class="fo-help" style="display:none;margin-top:4px;"></div>
               </div>
               <div class="fo-pickform__calc">
                 <span id="calc-kcal">0</span> kcal · P <span id="calc-protein">0</span>g · K <span id="calc-carbs">0</span>g · F <span id="calc-fat">0</span>g
@@ -2331,7 +2346,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-12 18:46';
+    const APP_BUILD = '2026-11-12 19:01';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4777,6 +4792,8 @@
       document.getElementById('fooddb-carbs').value = '';
       document.getElementById('fooddb-fat').value = '';
       document.getElementById('fooddb-kategorie').value = '';
+      fooddbServings = [];
+      renderFoodDBServings();
     };
     
     window.editFoodDB = function(id) {
@@ -4791,6 +4808,45 @@
       document.getElementById('fooddb-carbs').value = food.carbs || 0;
       document.getElementById('fooddb-fat').value = food.fat || 0;
       document.getElementById('fooddb-kategorie').value = food.kategorie || '';
+      fooddbServings = validServings(food).map(sv => ({ ...sv }));
+      renderFoodDBServings();
+    };
+
+    // 009: Portionen im Lebensmittel-Dialog (Arbeitskopie, gespeichert erst mit "Speichern")
+    let fooddbServings = [];
+    function renderFoodDBServings() {
+      const list = document.getElementById('fooddb-servings-list');
+      if (!list) return;
+      document.getElementById('fooddb-serving-name').value = '';
+      document.getElementById('fooddb-serving-grams').value = '';
+      if (!fooddbServings.length) {
+        list.innerHTML = '<div style="font-size:12px;color:var(--muted);">Keine Portionen – Eingabe nur in Gramm.</div>';
+        return;
+      }
+      list.innerHTML = fooddbServings.map((sv, i) => `
+        <div data-serving-row="${i}" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:14px;">${offEscape(servingLabel(sv))}${sv.source === 'off' ? ' <span style="font-size:11px;color:var(--muted);">(Open Food Facts)</span>' : ''}</span>
+          <button type="button" onclick="removeFoodDBServing(${i})" aria-label="Portion löschen" style="background:none;border:none;color:var(--danger, #ef4444);font-size:20px;cursor:pointer;padding:0 6px;">×</button>
+        </div>`).join('');
+    }
+    window.addFoodDBServing = function() {
+      const name = document.getElementById('fooddb-serving-name').value.trim();
+      const grams = parseFloat(String(document.getElementById('fooddb-serving-grams').value).replace(',', '.'));
+      if (!name) { showToast('Bitte Namen der Portion eingeben', 'bad'); return; }
+      if (!(grams >= SERVING_MIN_G && grams <= SERVING_MAX_G)) {
+        showToast(`Gramm pro Portion: ${fmtGrams(SERVING_MIN_G)}–${fmtGrams(SERVING_MAX_G)} g`, 'bad');
+        return;
+      }
+      if (fooddbServings.some(sv => sv.name.toLowerCase() === name.toLowerCase())) {
+        showToast('Portion mit diesem Namen gibt es schon', 'bad');
+        return;
+      }
+      fooddbServings.push({ name, grams: Math.round(grams * 10) / 10, source: 'user' });
+      renderFoodDBServings();
+    };
+    window.removeFoodDBServing = function(i) {
+      fooddbServings.splice(i, 1);
+      renderFoodDBServings();
     };
     
     window.closeFoodDBModal = function() {
@@ -4811,7 +4867,12 @@
         return;
       }
       
-      const food = { id, name, kcal, protein, carbs, fat, ...(kategorie ? { kategorie } : {}) };
+      // 009: vorhandene Felder (z. B. source) beibehalten statt verwerfen; servings nur wenn vorhanden
+      const existing = foodDB.find(f => String(f.id) === String(id)) || {};
+      const food = { ...existing, id, name, kcal, protein, carbs, fat };
+      if (kategorie) food.kategorie = kategorie; else delete food.kategorie;
+      if (fooddbServings.length) food.servings = fooddbServings.map(sv => ({ name: sv.name, grams: sv.grams, source: sv.source === 'off' ? 'off' : 'user' }));
+      else delete food.servings;
       
       try {
         await setDoc(doc(userFoodCol(), String(id)), food);
@@ -5854,6 +5915,9 @@
                   <div class="fo-row__sub"><span>${e.time}</span>${(() => {
                     if (!e.amount) return '';
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
+                    if (e.serving && e.serving.name && Number(e.serving.count) > 0) {
+                      return ` <span>${fmtGrams(e.serving.count)} × ${offEscape(e.serving.name)} (${fmtGrams(e.amount)}g)</span>`;
+                    }
                     return alreadyInName ? '' : ` <span>${e.amount}g</span>`;
                   })()}</div>
                 </div>
@@ -6188,7 +6252,22 @@
       const carbs = Math.round((nutriments['carbohydrates_100g'] || 0) * 10) / 10;
       const fat = Math.round((nutriments['fat_100g'] || 0) * 10) / 10;
       const id = 'off_' + (product.code || name).toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
-      return { id, name, kcal, protein, carbs, fat, source: 'openfoodfacts' };
+      const food = { id, name, kcal, protein, carbs, fat, source: 'openfoodfacts' };
+      const sv = servingFromOFF(product);
+      if (sv) food.servings = [sv];
+      return food;
+    }
+
+    // 009: OFF-Portionsangabe übernehmen, nur in Gramm und plausibel (0,5–1000 g). Gemessen 12.11.2026:
+    // serving_quantity kommt als Zahl ODER String, serving_quantity_unit fehlt teils (dann zählt
+    // serving_size: ml/cl/l → ignorieren), Getränke liefern 'ml' (z. B. "1 can (330 ml)") → ignorieren.
+    function servingFromOFF(product) {
+      const q = parseFloat(String(product.serving_quantity ?? '').replace(',', '.'));
+      if (!(q >= SERVING_MIN_G && q <= OFF_SERVING_MAX_G)) return null;
+      const unit = String(product.serving_quantity_unit || '').trim().toLowerCase();
+      if (unit && unit !== 'g') return null;
+      if (!unit && /\d\s*(ml|cl|dl|l)\b/i.test(String(product.serving_size || ''))) return null;
+      return { name: 'Portion', grams: Math.round(q * 10) / 10, source: 'off' };
     }
 
     async function saveOFFFood(food) {
@@ -6259,7 +6338,7 @@
     // max. 2 automatische Wiederholungen (2 s, 5 s), ein Klick = eine Suche, veraltete Antworten werden verworfen.
     const OFF_SEARCH_TIMEOUT_MS = 8000;
     const OFF_SEARCH_RETRY_DELAYS_MS = [2000, 5000];
-    const OFF_SEARCH_FIELDS = 'code,product_name,product_name_de,product_name_en,nutriments,categories_tags';
+    const OFF_SEARCH_FIELDS = 'code,product_name,product_name_de,product_name_en,nutriments,categories_tags,serving_size,serving_quantity,serving_quantity_unit';
     const OFF_MAX_SHOWN = 10;
     let offSearchSeq = 0;          // jede neue Suche erhöht; ältere Läufe verwerfen ihr Ergebnis
     let offSearchController = null;
@@ -6750,6 +6829,79 @@
       results.innerHTML = html;
     };
     
+    // ── 009: Portionsgrößen pro Lebensmittel ─────────────────────────────────────────────
+    // foods.servings = [{name, grams, source: 'user'|'off'}] (optional, additiv). Rechenbasis bleibt
+    // Gramm: Menge × grams → amount (g) wie bisher; logEntries.serving = {name, grams, count} nur für
+    // Anzeige/Gedächtnis. Eigene Portionen ('user') haben Vorrang vor Open-Food-Facts-Portionen ('off').
+    const SERVING_MIN_G = 0.5;
+    const SERVING_MAX_G = 2000;
+    const OFF_SERVING_MAX_G = 1000;
+    function fmtGrams(n) {
+      return Number(n).toLocaleString('de-DE', { maximumFractionDigits: 1 });
+    }
+    function servingLabel(sv) {
+      return `${sv.name} (${fmtGrams(sv.grams)} g)`;
+    }
+    // Alle gültigen Portionen in gespeicherter Reihenfolge (für die Pflege)
+    function validServings(food) {
+      const list = Array.isArray(food && food.servings) ? food.servings : [];
+      return list.filter(sv => sv && typeof sv.name === 'string' && sv.name.trim()
+        && Number(sv.grams) >= SERVING_MIN_G && Number(sv.grams) <= SERVING_MAX_G)
+        .map(sv => ({ name: sv.name.trim(), grams: Number(sv.grams), source: sv.source === 'off' ? 'off' : 'user' }));
+    }
+    // Portionen für die Einheiten-Auswahl: eigene zuerst; OFF-Portion mit gleichem Namen wie eine eigene entfällt
+    function foodServings(food) {
+      const all = validServings(food);
+      const user = all.filter(sv => sv.source === 'user');
+      const userNames = new Set(user.map(sv => sv.name.toLowerCase()));
+      const off = all.filter(sv => sv.source === 'off' && !userNames.has(sv.name.toLowerCase()));
+      return [...user, ...off];
+    }
+    // Einheiten-Auswahl aufbauen und Startwert setzen. pref = gespeicherter logEntries.serving (oder null)
+    function setupFoodUnit(food, gramsAmount, pref) {
+      const sel = document.getElementById('food-unit');
+      const servings = foodServings(food);
+      sel.innerHTML = '<option value="g">Gramm</option>' +
+        servings.map((sv, i) => `<option value="${i}">${offEscape(servingLabel(sv))}</option>`).join('');
+      sel._servings = servings;
+      sel.style.display = servings.length ? '' : 'none';
+      document.getElementById('food-amount-label').textContent = servings.length ? 'Menge' : 'Menge (g)';
+      let idx = -1;
+      if (pref && pref.name) idx = servings.findIndex(sv => sv.name.toLowerCase() === String(pref.name).toLowerCase());
+      if (idx >= 0) {
+        const count = Number(pref.count) > 0 ? Number(pref.count) : (gramsAmount / servings[idx].grams);
+        sel.value = String(idx);
+        document.getElementById('food-amount').value = Math.round(count * 100) / 100;
+      } else {
+        sel.value = 'g';
+        document.getElementById('food-amount').value = gramsAmount;
+      }
+      sel._prev = sel.value;
+    }
+    function currentFoodServing() {
+      const sel = document.getElementById('food-unit');
+      if (!sel || sel.value === 'g' || !sel._servings) return null;
+      return sel._servings[Number(sel.value)] || null;
+    }
+    // Menge in Gramm (Rechenbasis), unabhängig von der gewählten Einheit
+    function currentFoodGrams() {
+      const qty = parseFloat(document.getElementById('food-amount').value) || 0;
+      const sv = currentFoodServing();
+      return sv ? Math.round(qty * sv.grams * 10) / 10 : qty;
+    }
+    window.onFoodUnitChange = function() {
+      const sel = document.getElementById('food-unit');
+      const input = document.getElementById('food-amount');
+      const qty = parseFloat(input.value) || 0;
+      const prevSv = sel._prev && sel._prev !== 'g' ? sel._servings[Number(sel._prev)] : null;
+      const grams = prevSv ? qty * prevSv.grams : qty;
+      const sv = currentFoodServing();
+      input.value = sv ? 1 : Math.round(grams * 10) / 10;
+      sel._prev = sel.value;
+      updateNutrition();
+      setTimeout(() => input.select(), 50);
+    };
+
     window.selectFood = function(id) {
       selectedFood = foodDB.find(f => String(f.id) === String(id));
       if (!selectedFood) return;
@@ -6771,7 +6923,7 @@
         .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0];
       if (lastEntry) lastAmount = lastEntry.amount;
 
-      document.getElementById('food-amount').value = lastAmount;
+      setupFoodUnit(selectedFood, lastAmount, lastEntry ? lastEntry.serving : null);
       updateNutrition();
       // Fokus auf Mengenfeld
       setTimeout(() => document.getElementById('food-amount')?.select(), 100);
@@ -6780,8 +6932,14 @@
     window.updateNutrition = function() {
       if (!selectedFood) return;
       
-      const amount = parseFloat(document.getElementById('food-amount').value) || 0;
+      const amount = currentFoodGrams();
       const factor = amount / 100;
+      const gramsHint = document.getElementById('food-unit-grams');
+      if (gramsHint) {
+        const sv = currentFoodServing();
+        gramsHint.style.display = sv ? 'block' : 'none';
+        gramsHint.textContent = sv ? `= ${fmtGrams(amount)} g` : '';
+      }
       
       const kcal = Math.round((selectedFood.kcal || 0) * factor * 10) / 10;
       const protein = Math.round((selectedFood.protein || 0) * factor * 10) / 10;
@@ -6814,7 +6972,9 @@
     window.saveFood = async function() {
       if (!selectedFood) return;
 
-      const amount = parseFloat(document.getElementById('food-amount').value) || 0;
+      const amount = currentFoodGrams();
+      const serving = currentFoodServing();
+      const servingCount = parseFloat(document.getElementById('food-amount').value) || 0;
       const time = document.getElementById('food-time').value;
       const meal = document.getElementById('food-meal').value || mealFromHour(parseInt((time || '12:00').split(':')[0]));
 
@@ -6841,6 +7001,7 @@
         carbs: Math.round((selectedFood.carbs || 0) * factor * 10) / 10,
         fat: Math.round((selectedFood.fat || 0) * factor * 10) / 10
       };
+      if (serving) entry.serving = { name: serving.name, grams: serving.grams, count: servingCount };
       
       try {
         await setDoc(doc(userLogCol(), String(entry.id)), entry);
@@ -6973,7 +7134,7 @@
       }
       if (selectedFood) {
         document.getElementById('selected-food-name').textContent = selectedFood.name;
-        document.getElementById('food-amount').value = entry.amount || 100;
+        setupFoodUnit(selectedFood, entry.amount || 100, entry.serving || null);
         document.getElementById('food-form').style.display = 'block';
         document.getElementById('food-search-results').innerHTML = '';
         updateNutrition();

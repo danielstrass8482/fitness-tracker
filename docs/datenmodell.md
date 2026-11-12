@@ -145,12 +145,20 @@ Felder (Präsenz = Count über alle 1250 Docs):
 | `recipeId` | string | 421 (2026-05-12 – 2026-11-04) |
 | `_fromRecipe` | (nicht gelesen) | 44 (2026-04-25 – 2026-04-30) |
 | `unit` | string, Werte `grams` (6), `portions` (2) | 8 (ab 2026-11-03) |
+| `serving` | map `{name: string, grams: number, count: number}` – optional, nur Lebensmittel-Einträge, die in einer Portion (z. B. „2 × Stück“) eingetragen wurden; nur Anzeige/Gedächtnis, Rechenbasis bleibt `amount` (Gramm) = `count × grams` | neu ab 2026-11-12 (009) |
 
 #### `foods` (Top-Level, 20 Stichproben) und `users/{uid}/foods` (20 Stichproben)
 
 Beide haben: `id`, `name` (string), `kcal` (int), `protein`, `carbs`, `fat` (int\|double, je 100 g).
 Top-Level zusätzlich `kategorie` (string, 2258 von 2293). Nutzereigen zusätzlich `source` (string,
 Wert `openfoodfacts`, 2 Docs). Keine Zeitfelder.
+
+Seit 009 (12.11.2026) optional an Top-Level-`foods`: `servings` (array<map>), Elemente `name` (string),
+`grams` (number, 0,5–2000), `source` (`user` = selbst angelegt | `off` = aus Open Food Facts
+`serving_quantity`, nur Gramm, 0,5–1000 g). Rein additiv, keine Migration; Docs ohne `servings` = nur Gramm.
+Vorher gab es kein Portionsfeld an `foods` (Abfrage 12.11.2026 per orderBy auf `portion`, `portions`,
+`portionSize`, `serving`, `servings`, `serving_size`, `serving_quantity`, `unit`, `totalWeight`, `grams`: 0 Docs).
+Top-Level-`foods` mit `source` = `openfoodfacts`: 65 (Count 12.11.2026).
 
 #### `recipes` (12 Stichproben – nur 12 verschiedene IDs über die Bereichs-Probe gefunden)
 

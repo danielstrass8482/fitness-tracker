@@ -159,6 +159,10 @@ Seit 009 (12.11.2026) optional an Top-Level-`foods`: `servings` (array<map>), El
 Vorher gab es kein Portionsfeld an `foods` (Abfrage 12.11.2026 per orderBy auf `portion`, `portions`,
 `portionSize`, `serving`, `servings`, `serving_size`, `serving_quantity`, `unit`, `totalWeight`, `grams`: 0 Docs).
 Top-Level-`foods` mit `source` = `openfoodfacts`: 65 (Count 12.11.2026).
+Seit 010 (12.11.2026) zusätzlicher `source`-Wert `bls` (aus dem Bundeslebensmittelschlüssel übernommen,
+Doc-ID `bls_<BLS-Code>`, Felder wie OFF: `id`, `name`, `kcal` (int), `protein`, `carbs`, `fat`, `source`).
+Rein additiv, keine Migration. Die BLS-Daten selbst liegen NICHT in Firestore, sondern als statische Datei
+`data/bls-makros.json` (GitHub Pages).
 
 #### `recipes` (12 Stichproben – nur 12 verschiedene IDs über die Bereichs-Probe gefunden)
 

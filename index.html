@@ -1845,6 +1845,21 @@
           </div>
         </section>
 
+        <!-- Datenquellen (010): Namensnennung BLS nach CC BY 4.0 -->
+        <section class="fo-card" style="margin-bottom:20px;">
+          <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
+            <h3 class="fo-card__title">Datenquellen</h3>
+            <svg class="fo-i fo-chev" aria-hidden="true" style="margin-right:4px;"><use href="#i-chevD"/></svg>
+          </button>
+          <div class="settings-section-body" id="settings-datenquellen" style="display:none;border-top:1px solid var(--fo-line);">
+            <div style="padding:12px;">
+              <div style="font-weight:650;margin-bottom:4px;">Bundeslebensmittelschlüssel (BLS)</div>
+              <div class="fo-row__sub fo-row__sub--wrap">Max Rubner-Institut (2025): Bundeslebensmittelschlüssel (BLS), Version 4.0 — Deutsche Nährstoffdatenbank. Karlsruhe. DOI: <a href="https://doi.org/10.25826/Data20251217-134202-0" target="_blank" rel="noopener">10.25826/Data20251217-134202-0</a></div>
+              <div class="fo-row__sub fo-row__sub--wrap" style="margin-top:6px;">Herausgeber: Max Rubner-Institut. Lizenz: <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>. Verwendet wird ein Auszug (nur Energie, Protein, Fett, Kohlenhydrate je 100 g, gerundet auf eine Nachkommastelle; Einträge ohne Energieangabe oder mit Makrosumme über 100 g ausgelassen).</div>
+            </div>
+          </div>
+        </section>
+
         <!-- Versionsmarker (APP_BUILD) – zum Abgleich, welcher Stand auf dem Gerät tatsächlich läuft -->
         <div id="app-build-marker" style="text-align:center;font-size:11px;color:var(--fo-text-3);padding:8px 0 16px;"></div>
       </div>
@@ -2346,7 +2361,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-12 19:01';
+    const APP_BUILD = '2026-11-12 23:14';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6819,15 +6834,116 @@
         recipeMatches.forEach(r => { html += renderFoodItem(r, true, counts['recipe_' + r.id] || 0); });
       } else {
         const foodMatches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 20);
-        if (foodMatches.length === 0) {
-          results.innerHTML = '<div class="fo-empty fo-empty--sm">Keine Ergebnisse</div>';
-          return;
+        if (foodMatches.length > 0) {
+          html += `<div class="fo-overline fo-listhead">${foIcon('food', 'fo-i--sm')} Lebensmittel</div>`;
+          foodMatches.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
         }
-        html += `<div class="fo-overline fo-listhead">${foIcon('food', 'fo-i--sm')} Lebensmittel</div>`;
-        foodMatches.forEach(f => { html += renderFoodItem(f, false, counts['food_' + f.id] || 0); });
+        // 010: Reihenfolge eigene DB → BLS → Open Food Facts (Button). BLS-Treffer füllen den Platzhalter
+        // asynchron; die OFF-Suche ist davon unabhängig.
+        html += '<div id="bls-results-slot"></div>';
+        results.innerHTML = html;
+        if (foodMatches.length === 0) document.getElementById('bls-results-slot').innerHTML = '<div class="fo-empty fo-empty--sm">Suche im BLS…</div>';
+        renderBLSResults(query, foodMatches.length);
+        return;
       }
       results.innerHTML = html;
     };
+
+    // ── 010: Bundeslebensmittelschlüssel (BLS 4.0, MRI, CC BY 4.0) als Fallback für Grundnahrungsmittel ──
+    // Statische Datei data/bls-makros.json (nur Makros je 100 g). Erst bei der ersten Suche geladen, danach
+    // für die Sitzung im Speicher. Fehler beim Laden blockieren nichts (keine BLS-Treffer, OFF läuft normal).
+    const BLS_URL = 'data/bls-makros.json';
+    const BLS_MAX_SHOWN = 20;
+    let blsItems = null;        // [{blsCode, name, kcal, protein, fat, carbs, _n}] nach erstem Laden
+    let blsLoadPromise = null;
+    let blsFailedAt = 0;        // nach Ladefehler 60 s kein neuer Versuch (nicht bei jedem Tastendruck)
+    const BLS_RETRY_AFTER_MS = 60000;
+    let blsShown = [];          // aktuell angezeigte BLS-Treffer (für Klick)
+    function blsNorm(s) {
+      return String(s || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+    function loadBLS() {
+      if (blsItems) return Promise.resolve(blsItems);
+      if (!blsLoadPromise && Date.now() - blsFailedAt < BLS_RETRY_AFTER_MS) return Promise.reject(new Error('cooldown'));
+      if (!blsLoadPromise) {
+        blsLoadPromise = fetch(BLS_URL)
+          .then(r => { if (!r.ok) throw new Error('http' + r.status); return r.json(); })
+          .then(d => {
+            if (!d || !Array.isArray(d.items)) throw new Error('badjson');
+            blsItems = d.items.map(it => ({ ...it, _n: blsNorm(it.name) }));
+            return blsItems;
+          })
+          .catch(e => { blsLoadPromise = null; blsFailedAt = Date.now(); throw e; }); // später neuer Versuch
+      }
+      return blsLoadPromise;
+    }
+    // Teilwortsuche: alle Wörter der Anfrage müssen im Namen vorkommen (umlaut-/groß-klein-tolerant).
+    // Sortierung: Name beginnt mit dem ersten Wort als ganzem Wort, dann als Wortteil, dann Wortanfang
+    // irgendwo, dann übrige; innerhalb gleicher Stufe kürzere Namen zuerst.
+    function searchBLS(items, query) {
+      const tokens = blsNorm(query).split(' ').filter(Boolean);
+      if (!tokens.length) return [];
+      const ownIds = new Set(foodDB.map(f => String(f.id)));
+      const hits = [];
+      for (const it of items) {
+        if (!tokens.every(t => it._n.includes(t))) continue;
+        if (ownIds.has('bls_' + it.blsCode)) continue; // schon als eigenes Lebensmittel übernommen → steht oben
+        const first = tokens[0];
+        const rank = (it._n === first || it._n.startsWith(first + ' ')) ? 0
+          : it._n.startsWith(first) ? 1 : ((' ' + it._n).includes(' ' + first) ? 2 : 3);
+        hits.push({ it, rank });
+      }
+      hits.sort((a, b) => a.rank - b.rank || a.it.name.length - b.it.name.length || a.it.name.localeCompare(b.it.name, 'de'));
+      return hits.slice(0, BLS_MAX_SHOWN).map(h => h.it);
+    }
+    async function renderBLSResults(rawQuery, ownCount) {
+      let items;
+      try {
+        items = await loadBLS();
+      } catch (e) {
+        console.warn('BLS load failed:', e?.message || e);
+        items = null;
+      }
+      const current = (document.getElementById('food-search')?.value || '').toLowerCase().trim();
+      const slot = document.getElementById('bls-results-slot');
+      if (!slot || current !== rawQuery) return; // Eingabe hat sich geändert → neuere Suche rendert
+      const hits = items ? searchBLS(items, rawQuery) : [];
+      blsShown = hits;
+      if (!hits.length) {
+        slot.innerHTML = ownCount === 0 ? '<div class="fo-empty fo-empty--sm">Keine Ergebnisse</div>' : '';
+        return;
+      }
+      slot.innerHTML = `<div class="fo-overline fo-listhead">${foIcon('food', 'fo-i--sm')} BLS (Grundnahrungsmittel)</div>` +
+        hits.map((it, i) => `
+        <div class="bls-suggestion-item fo-row fo-pick-row" data-bls-idx="${i}" style="cursor:pointer;">
+          <div class="fo-row__main" style="pointer-events:none;">
+            <div class="fo-row__title">${offEscape(it.name)}</div>
+            <div class="fo-row__sub">${fmt(it.kcal)} kcal · P ${fmt(it.protein,1)}g · K ${fmt(it.carbs,1)}g · F ${fmt(it.fat,1)}g / 100g</div>
+          </div>
+          <span class="fo-tag fo-tag--neutral" style="flex-shrink:0;">BLS</span>
+        </div>`).join('');
+    }
+    // Übernahme legt wie bei Open Food Facts ein eigenes Lebensmittel an (foods, source 'bls').
+    // kcal ganzzahlig wie bei OFF (Bestand: kcal int), Makros 1 Nachkommastelle.
+    async function selectBLSFood(it) {
+      const food = {
+        id: 'bls_' + it.blsCode, name: it.name,
+        kcal: Math.round(it.kcal), protein: it.protein, carbs: it.carbs, fat: it.fat,
+        source: 'bls'
+      };
+      const saved = await saveOFFFood(food);
+      selectFood(saved.id);
+      document.getElementById('selected-food-source').textContent = 'BLS';
+    }
+    document.addEventListener('click', function(e) {
+      const item = e.target.closest('.bls-suggestion-item');
+      if (!item) return;
+      const it = blsShown[Number(item.dataset.blsIdx)];
+      if (it) selectBLSFood(it);
+    });
     
     // ── 009: Portionsgrößen pro Lebensmittel ─────────────────────────────────────────────
     // foods.servings = [{name, grams, source: 'user'|'off'}] (optional, additiv). Rechenbasis bleibt

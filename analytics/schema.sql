@@ -446,3 +446,36 @@ SELECT
 FROM raw.daily_snapshots ds
 LEFT JOIN views.body_weight bw ON bw.day = ds.day
 WHERE ds.deleted_at IS NULL;
+
+-- Trinktage aus foods.alkohol (Migration 006, Aufgabe 011b). Regel siehe migrations/006_alkohol_tage.sql.
+CREATE OR REPLACE VIEW views.alkohol_tage AS
+WITH e AS (
+  SELECT
+    l.day,
+    f.data->>'name' AS food_name,
+    f.data->>'alkohol' AS alkohol,
+    l.data->>'time' AS t,
+    CASE WHEN (l.data->>'amount') ~ '^[0-9]+(\.[0-9]+)?$'
+         THEN (l.data->>'amount')::numeric END AS amount,
+    (COALESCE(l.data->>'recipeId', '') <> '' OR COALESCE(l.data->>'_fromRecipe', '') <> '') AS aus_rezept
+  FROM raw.log_entries l
+  JOIN raw.foods f ON f.id = l.data->>'foodId' AND f.deleted_at IS NULL
+  WHERE l.deleted_at IS NULL
+    AND l.day IS NOT NULL
+    AND f.data->>'alkohol' IN ('ja', 'kochen')
+)
+SELECT
+  day,
+  count(*) AS getraenke,
+  sum(amount) AS menge_ml,
+  string_agg(DISTINCT food_name, ' | ' ORDER BY food_name) AS lebensmittel
+FROM e
+WHERE alkohol = 'ja'
+   OR ( alkohol = 'kochen'
+        AND t ~ '^[0-9]{2}:[0-9]{2}$'
+        AND (t >= '18:00' OR t < '06:00')
+        AND amount >= 100
+        AND NOT aus_rezept )
+GROUP BY day;
+
+GRANT SELECT ON views.alkohol_tage TO fuelofit_ro;

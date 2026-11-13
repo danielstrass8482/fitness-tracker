@@ -668,6 +668,13 @@ Training Effect, Höhenmeter und Geräte-Geschwindigkeit erweitert (`analytics/m
 Einschlaflatenz, Bettzeiten erweitert (`003_*.sql`). Siehe die neuen Firestore-Felder oben bei
 `oura_daily`/`garminActivities`.
 
+**Trinktage (011b, 13.11.2026)**: `views.alkohol_tage` (`analytics/migrations/006_alkohol_tage.sql`),
+ein Eintrag je Tag mit `getraenke`, `menge_ml`, `lebensmittel`. Regel: ein Log-Eintrag zählt als
+getrunken, wenn sein Lebensmittel `alkohol = 'ja'` hat, oder `alkohol = 'kochen'` mit Uhrzeit
+18:00–05:59, Menge ≥ 100 (ml bzw. g) und nicht aus einem Rezept (`recipeId`/`_fromRecipe`).
+`nein` und Lebensmittel ohne Feld zählen nie. Belastbar ab ca. 11/2025 (ältere Einträge verweisen
+teils auf gelöschte Lebensmittel). SELECT für `fuelofit_ro`.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

@@ -163,6 +163,13 @@ Seit 010 (12.11.2026) zusätzlicher `source`-Wert `bls` (aus dem Bundeslebensmit
 Doc-ID `bls_<BLS-Code>`, Felder wie OFF: `id`, `name`, `kcal` (int), `protein`, `carbs`, `fat`, `source`).
 Rein additiv, keine Migration. Die BLS-Daten selbst liegen NICHT in Firestore, sondern als statische Datei
 `data/bls-makros.json` (GitHub Pages).
+Seit 011 (13.11.2026) optional an Top-Level-`foods`: `alkohol` (string) – `ja` (alkoholisches Getränk,
+zählt immer als Konsum), `kochen` (meist Kochwein, selten getrunken: Einordnung je Eintrag über Uhrzeit
+und Rezeptbezug, Regel siehe Aufgabe 011), `nein` (ausdrücklich alkoholfrei). Docs ohne Feld = nicht
+eingeordnet (kein Alkohol oder noch offen). Rein additiv, keine Migration; gesetzt an 38 Docs (33 `ja`,
+4 `kochen`, 1 `nein`, Count 13.11.2026). Die App liest das Feld (noch) nicht; die Bearbeiten-Maske
+erhält es (übernimmt vorhandene Felder seit 009). Kommt unverändert über `exportAnalytics` nach
+`raw.foods` (belegt 13.11.2026).
 
 #### `recipes` (12 Stichproben – nur 12 verschiedene IDs über die Bereichs-Probe gefunden)
 

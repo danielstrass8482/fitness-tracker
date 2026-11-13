@@ -2361,7 +2361,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-12 23:14';
+    const APP_BUILD = '2026-11-13 07:07';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6873,7 +6873,8 @@
           .then(r => { if (!r.ok) throw new Error('http' + r.status); return r.json(); })
           .then(d => {
             if (!d || !Array.isArray(d.items)) throw new Error('badjson');
-            blsItems = d.items.map(it => ({ ...it, _n: blsNorm(it.name) }));
+            // _m: Name ohne Klammer-Zusatz, z. B. "Kräuterquark (aus Magerquark)" → "kraeuterquark" (011b)
+            blsItems = d.items.map(it => ({ ...it, _n: blsNorm(it.name), _m: blsNorm(String(it.name || '').replace(/\([^)]*\)/g, ' ')) }));
             return blsItems;
           })
           .catch(e => { blsLoadPromise = null; blsFailedAt = Date.now(); throw e; }); // später neuer Versuch
@@ -6881,8 +6882,17 @@
       return blsLoadPromise;
     }
     // Teilwortsuche: alle Wörter der Anfrage müssen im Namen vorkommen (umlaut-/groß-klein-tolerant).
-    // Sortierung: Name beginnt mit dem ersten Wort als ganzem Wort, dann als Wortteil, dann Wortanfang
-    // irgendwo, dann übrige; innerhalb gleicher Stufe kürzere Namen zuerst.
+    // Sortierung (Stufen auf dem Namen ohne Klammer-Zusatz): beginnt mit dem ersten Wort als ganzem Wort,
+    // dann als Wortteil, dann Wortanfang irgendwo, dann Teilwort; danach Treffer nur im Klammer-Zusatz
+    // (Wortanfang, dann Teilwort); innerhalb gleicher Stufe kürzere Namen zuerst (011b).
+    function blsRank(it, first) {
+      const m = it._m;
+      if (m === first || m.startsWith(first + ' ')) return 0;
+      if (m.startsWith(first)) return 1;
+      if ((' ' + m).includes(' ' + first)) return 2;
+      if (m.includes(first)) return 3;
+      return (' ' + it._n).includes(' ' + first) ? 4 : 5;
+    }
     function searchBLS(items, query) {
       const tokens = blsNorm(query).split(' ').filter(Boolean);
       if (!tokens.length) return [];
@@ -6891,10 +6901,7 @@
       for (const it of items) {
         if (!tokens.every(t => it._n.includes(t))) continue;
         if (ownIds.has('bls_' + it.blsCode)) continue; // schon als eigenes Lebensmittel übernommen → steht oben
-        const first = tokens[0];
-        const rank = (it._n === first || it._n.startsWith(first + ' ')) ? 0
-          : it._n.startsWith(first) ? 1 : ((' ' + it._n).includes(' ' + first) ? 2 : 3);
-        hits.push({ it, rank });
+        hits.push({ it, rank: blsRank(it, tokens[0]) });
       }
       hits.sort((a, b) => a.rank - b.rank || a.it.name.length - b.it.name.length || a.it.name.localeCompare(b.it.name, 'de'));
       return hits.slice(0, BLS_MAX_SHOWN).map(h => h.it);
@@ -9092,8 +9099,8 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
     }
 
-    // Grobe Schätzung Gramm Alkohol pro 100 g/ml Getränk (ABV × Dichte 0,789 g/ml) – es gibt kein
-    // Alkohol-Feld in Lebensmitteln/FoodDB/Open-Food-Facts-Import/Rezepten, daher namensbasiert.
+    // Grobe Schätzung Gramm Alkohol pro 100 g/ml Getränk (ABV × Dichte 0,789 g/ml), namensbasiert.
+    // Welche Einträge als Alkohol zählen, entscheidet seit 011b isAlcoholDrinkEntry (foods.alkohol).
     // Wortgrenzen gegen Fehltreffer (z.B. "Weizenbrötchen" darf nicht als Weizenbier zählen) – gegen
     // die echte Lebensmittel-Historie geprüft (229 eindeutige Namen, 26 echte Treffer, 0 Fehltreffer).
     const ALCOHOL_KEYWORDS = [
@@ -9112,14 +9119,35 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       return Math.round(match.gPer100 * amount / 100);
     }
 
+    // Auswahl der Alkohol-Einträge (011b): über foods.alkohol am Lebensmittel (foodId), gleiche Regel
+    // wie views.alkohol_tage – 'ja' zählt immer; 'kochen' nur 18:00–05:59 UND Menge ≥ 100 (ml/g);
+    // 'nein' und Lebensmittel ohne Feld nie. Rezept-Einträge (recipeId/_fromRecipe) nie.
+    // Schlüsselwort-Fallback NUR, wenn das Lebensmittel nicht (mehr) in foodDB existiert: dann gibt es
+    // kein Feld, und ohne Fallback fiele z. B. ein geloggter, inzwischen gelöschter "Gin Tonic" still weg.
+    const ALCOHOL_KOCHEN_MIN_AMOUNT = 100;
+    function isAlcoholDrinkEntry(entry, foodById) {
+      if (!entry || entry.recipeId || entry._fromRecipe) return false;
+      const food = entry.foodId != null ? foodById.get(String(entry.foodId)) : null;
+      if (!food) return detectAlcoholGrams(entry) > 0;
+      if (food.alkohol === 'ja') return true;
+      if (food.alkohol !== 'kochen') return false;
+      const t = String(entry.time || '');
+      if (!/^\d{2}:\d{2}$/.test(t) || !(t >= '18:00' || t < '06:00')) return false;
+      return Number(entry.amount) >= ALCOHOL_KOCHEN_MIN_AMOUNT;
+    }
+
     // Alkohol-Einträge im Datumsbereich (inklusive), aus foodLog. Zeitfeld ist e.time ("HH:MM").
+    // grams: unveränderte Schätzung aus ALCOHOL_KEYWORDS; null, wenn der Name kein Schlüsselwort
+    // trifft (z. B. "Helles") – Eintrag zählt trotzdem als Alkohol.
     function getAlcoholEntries(fromDate, toDate) {
       const rows = [];
+      const foodById = new Map((foodDB || []).map(f => [String(f.id), f]));
       Object.keys(foodLog).forEach(d => {
         if (d < fromDate || d > toDate) return;
         (foodLog[d] || []).forEach(e => {
+          if (!isAlcoholDrinkEntry(e, foodById)) return;
           const grams = detectAlcoholGrams(e);
-          if (grams > 0) rows.push({ date: d, time: e.time || '', item: e.name || '', grams });
+          rows.push({ date: d, time: e.time || '', item: e.name || '', grams: grams > 0 ? grams : null });
         });
       });
       rows.sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
@@ -9136,7 +9164,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
         const o = ouraDaily[date];
         if (o.hrvAvg == null && o.restingHr == null && o.tempDeviation == null && o.sleepScore == null) return;
         const baseEnd = dailyCheckShiftDate(date, -1);
-        const grams = getAlcoholEntries(baseEnd, baseEnd).reduce((s, e) => s + e.grams, 0);
+        const hadAlcohol = getAlcoholEntries(baseEnd, baseEnd).length > 0;
         const hrvBase = ouraWindowAvg('hrvAvg', 28, baseEnd);
         const rhrBase = ouraWindowAvg('restingHr', 28, baseEnd);
         const tempBase = ouraWindowAvg('tempDeviation', 28, baseEnd);
@@ -9147,7 +9175,7 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
           temp: (o.tempDeviation != null && tempBase.avg != null) ? o.tempDeviation - tempBase.avg : null,
           sleep: (o.sleepScore != null && sleepBase.avg != null) ? o.sleepScore - sleepBase.avg : null
         };
-        (grams > 0 ? withAlcohol : withoutAlcohol).push(dev);
+        (hadAlcohol ? withAlcohol : withoutAlcohol).push(dev);
       });
       const avgOf = (arr, key) => {
         const vals = arr.map(d => d[key]).filter(v => v != null);

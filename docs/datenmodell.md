@@ -675,6 +675,17 @@ getrunken, wenn sein Lebensmittel `alkohol = 'ja'` hat, oder `alkohol = 'kochen'
 `nein` und Lebensmittel ohne Feld zählen nie. Belastbar ab ca. 11/2025 (ältere Einträge verweisen
 teils auf gelöschte Lebensmittel). SELECT für `fuelofit_ro`.
 
+**Garmin primär in `views.training_sessions` (012, 14.11.2026)**: Migration
+`analytics/migrations/007_training_sessions_garmin_primary.sql`. Je Garmin-Aktivität
+(`garminActivities`, ohne `garminHidden`) eine Zeile, `entry_id` = `garmin_<id>`, `source` = `garmin`,
+`typ` wie `garminActivityToEntry()` (`strength_training` → `kraft`, sonst `mappedTyp`, `unmapped` →
+`sonstiges_garmin`), Distanz/Dauer/Schritte/Puls aus Garmin, `kalorien_device` NULL (Gerätewert in
+`garmin_kcal`). Ein passender Google-Fit-Eintrag (gleicher Tag, `garminTime` = Startuhrzeit, exakt)
+liefert nur noch `act_kcal_calc` und ist keine eigene Zeile mehr; ohne Google-Fit-Eintrag kommt
+`act_kcal_calc` aus `dailySnapshots.activities[].kcalGezaehlt` (`garmin_<id>`), sonst NULL.
+Manuelle, Plan-/Zirkel-Einträge und Google-Fit-Einträge ohne Garmin-Gegenstück bleiben eigene
+Zeilen. Spalten unverändert, SELECT für `fuelofit_ro`.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

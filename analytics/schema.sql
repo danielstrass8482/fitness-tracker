@@ -263,22 +263,20 @@ WHERE deleted_at IS NULL
   AND data->>'typ' = 'tageslog'
   AND data->>'weight' IS NOT NULL;
 
--- 3) Trainings (Stand Migration 007, Aufgabe 012): Garmin-Aktivitaeten sind die primaere Quelle.
+-- 3) Trainings (Stand Migration 008, Aufgabe 012b; Garmin primaer seit 007/012).
 -- Je Garmin-Aktivitaet (nicht geloescht, nicht in garmin_hidden) eine Zeile mit
 -- entry_id 'garmin_<id>', source 'garmin', typ wie garminActivityToEntry() in index.html
 -- (strength_training -> kraft, sonst mappedTyp, unmapped -> sonstiges_garmin), Werte aus Garmin.
 -- Ein passender Google-Fit-Eintrag (gleicher Tag, garminTime = Uhrzeit aus startLocal, exakt)
--- liefert nur act_kcal_calc und wird keine eigene Zeile; ohne Google-Fit-Eintrag kommt
--- act_kcal_calc aus dailySnapshots (kcalGezaehlt fuer 'garmin_<id>'), sonst NULL.
+-- ist keine eigene Zeile. act_kcal_calc der Garmin-Zeilen = App-Wert: zuerst
+-- dailySnapshots.activities[].kcalGezaehlt fuer 'garmin_<id>', sonst fuer die id des passenden
+-- Google-Fit-Eintrags (22.-28.10.2026), sonst act_kcal_calc des Google-Fit-Eintrags, sonst NULL.
+-- Zirkel-verknuepfte Kraft: der Wert des Zirkel-Eintrags wird nicht zugeordnet (nicht doppelt).
 -- Alle uebrigen entries (manual, plan/zirkel, Google Fit ohne Garmin-Gegenstueck; ohne
 -- tageslog/phonesteps) bleiben eigene Zeilen mit Garmin-Feldern NULL. distance_m/duration_sec:
 -- Garmin-Werte, sonst entries.distanz (km->m) bzw. entries.zeit ("HH:MM:SS"->Sekunden).
 -- pace_min_km nur bei laufen/gehen/wandern und distance_m > 0, speed_kmh bei allen Typen mit
 -- distance_m > 0 und duration_sec > 0.
-CREATE OR REPLACE VIEW). Idempotent.
--- Ausfuehrung auf dem VPS:
--- psql -d fuelofit_analytics -f 007_training_sessions_garmin_primary.sql
-
 CREATE OR REPLACE VIEW views.training_sessions AS
 WITH ga_all AS (
   SELECT g.id, g.day, g.data,
@@ -301,11 +299,12 @@ gfit_match AS (
   ORDER BY g.id, e.id
 ),
 snap_kcal AS (
+  -- App-Wert je Aktivitaets-id (garmin_<id> ODER Google-Fit-Eintrags-id), juengster Snapshot gewinnt.
   SELECT DISTINCT ON (x->>'id') x->>'id' AS act_id, (x->>'kcalGezaehlt')::numeric AS kcal
   FROM raw.daily_snapshots s, jsonb_array_elements(s.data->'activities') x
   WHERE s.deleted_at IS NULL
     AND jsonb_typeof(s.data->'activities') = 'array'
-    AND x->>'id' LIKE 'garmin\_%'
+    AND x->>'kcalGezaehlt' IS NOT NULL
   ORDER BY x->>'id', s.day DESC
 ),
 base AS (
@@ -327,7 +326,7 @@ base AS (
            || lpad((round((g.data->>'durationSec')::numeric)::int % 60)::text, 2, '0')
          ELSE '' END AS zeit,
     NULL::numeric AS kalorien_device,
-    COALESCE(m.act_kcal_calc, sk.kcal) AS act_kcal_calc,
+    COALESCE(sk.kcal, skg.kcal, m.act_kcal_calc) AS act_kcal_calc,
     (g.data->>'steps')::numeric AS steps,
     (g.data->>'avgHr')::numeric AS avg_hr,
     (g.data->>'maxHr')::numeric AS max_hr,
@@ -343,6 +342,7 @@ base AS (
   FROM ga_all g
   LEFT JOIN gfit_match m ON m.garmin_id = g.id
   LEFT JOIN snap_kcal sk ON sk.act_id = 'garmin_' || g.id
+  LEFT JOIN snap_kcal skg ON skg.act_id = m.entry_id
   WHERE NOT g.hidden
 
   UNION ALL

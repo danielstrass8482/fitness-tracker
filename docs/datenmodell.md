@@ -686,6 +686,13 @@ liefert nur noch `act_kcal_calc` und ist keine eigene Zeile mehr; ohne Google-Fi
 Manuelle, Plan-/Zirkel-Einträge und Google-Fit-Einträge ohne Garmin-Gegenstück bleiben eigene
 Zeilen. Spalten unverändert, SELECT für `fuelofit_ro`.
 
+**Kalorien = App-Wert (012b, 14.11.2026)**: Migration
+`analytics/migrations/008_training_sessions_kcal_app_value.sql`. `act_kcal_calc` der Garmin-Zeilen
+zuerst aus `dailySnapshots.activities[].kcalGezaehlt` für `garmin_<id>`, sonst für die id des passenden
+Google-Fit-Eintrags (22.–28.10.2026), erst dann `act_kcal_calc` des Google-Fit-Eintrags, sonst NULL.
+Der Wert eines Zirkel-Eintrags wird einer zirkel-verknüpften Garmin-Kraft-Zeile nicht zugeordnet.
+Zeilen, Distanz, Dauer unverändert.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

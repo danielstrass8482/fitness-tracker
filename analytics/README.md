@@ -34,12 +34,22 @@ Passwoerter liegen in `~/.pgpass` des Systemnutzers `fuelofit-analytics` (600), 
 nicht in `schema.sql`. `pg_hba.conf` auf dem VPS lässt ohnehin nur `localhost`/`127.0.0.1`/`::1`
 zu (gilt fuer alle Rollen inkl. der trading_bot-Rolle) -- keine zusaetzliche Zeile noetig.
 
-## Sync-Zeiten (Europe/Berlin, Crontab von `fuelofit-analytics`)
+## Sync-Zeiten (Crontab von `fuelofit-analytics`)
+
+Der installierte Debian-`cron` (3.0pl1) kennt `CRON_TZ` nicht (die Zeile steht noch in der
+Crontab, ist aber wirkungslos); die VPS-Systemzeit ist UTC. Die Zeiten der beiden alten Jobs sind
+deshalb **UTC** (008c belegt, bewusst so belassen).
 
 | Zeit | Modus | Was |
 |---|---|---|
-| taeglich 04:15 | `window` | Collections mit Datumsfeld, letzte 14 Tage (Upsert + Soft-Delete im Fenster) |
-| sonntags 04:45 | `full` | alle Whitelist-Collections komplett (inkl. Collections ohne Datumsfeld: `foods`, `recipes`, `weeklyStats`, `trainingTypes`, `intervalTemplates`, `garminLinks`, `garminHidden`) |
+| taeglich 04:15 UTC (05:15 Berlin Winter / 06:15 Sommer) | `window` | Collections mit Datumsfeld, letzte 14 Tage (Upsert + Soft-Delete im Fenster) |
+| sonntags 04:45 UTC | `full` | alle Whitelist-Collections komplett (inkl. Collections ohne Datumsfeld: `foods`, `recipes`, `weeklyStats`, `trainingTypes`, `intervalTemplates`, `garminLinks`, `garminHidden`) |
+| alle 15 Min (:05/:20/:35/:50), 05:05-22:50 Europe/Berlin (008c) | `window --days 1` | nur gestern + heute (Datumsfilter in exportAnalytics), ca. 57 Reads je Lauf |
+
+Der 15-Min-Job steht als `3-21` UTC in der Crontab; ein Guard
+`h=$(TZ=Europe/Berlin date +\%-H); [ "$h" -ge 5 ] && [ "$h" -le 22 ]` laesst nur Berliner Stunden
+05-22 durch (sommer- und winterzeitfest, 72 Laeufe/Tag). Die Minuten sind gegen die alten Jobs
+(:15/:45) versetzt, damit sich die Laeufe nicht am Lock stoeren.
 
 `sync.py` hat eine eigene Lock-Datei (`flock`, `app/sync.lock`) gegen Parallellaeufe -- die
 Crontab ruft das Skript deshalb *ohne* zusaetzlichen `flock`-Wrapper auf (anders als beim

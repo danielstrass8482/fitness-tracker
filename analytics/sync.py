@@ -9,6 +9,7 @@ Secret aus einer lokalen Datei.
 Aufruf:
     sync.py --mode window   (taeglich, cron 04:15)
     sync.py --mode full     (sonntags, cron 04:45)
+    sync.py --mode window --days 1   (tagsueber alle 15 Min: nur gestern + heute, 008c)
 
 Nur Standardbibliothek + psycopg (siehe requirements.txt). Secret wird gelesen, aber nie
 geloggt oder ausgegeben. DB-Passwort kommt aus ~/.pgpass des ausfuehrenden Systemnutzers
@@ -25,7 +26,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import psycopg
 
@@ -43,7 +45,8 @@ DB_CONNINFO = os.environ.get(
     "ANALYTICS_DB_CONNINFO", "host=localhost dbname=fuelofit_analytics user=fuelofit_sync"
 )
 
-WINDOW_DAYS = 14          # Fenster fuer den taeglichen Sync (Function-Default, max 31)
+WINDOW_DAYS = 14          # Default-Fenster fuer den taeglichen Sync (Function-Default, max 31)
+MAX_WINDOW_DAYS = 31      # Function-Grenze (ANALYTICS_MAX_DAYS)
 PAGE_LIMIT = 1000         # Max. Dokumente je Antwort (Function-Grenze)
 HTTP_TIMEOUT_SEC = 60
 MAX_HTTP_RETRIES = 2      # nur bei Netzwerkfehlern, nie bei 4xx
@@ -89,10 +92,16 @@ def read_secret() -> str:
         return f.read().strip()
 
 
-def fetch_page(collection: str, mode: str, secret: str, page_token: str | None) -> dict:
+def window_cutoff(days: int) -> str:
+    """Erster Tag des Fensters, identisch zur Function (Berlin-Datum von jetzt - days*24 h)."""
+    return (datetime.now(timezone.utc) - timedelta(days=days)).astimezone(
+        ZoneInfo("Europe/Berlin")).date().isoformat()
+
+
+def fetch_page(collection: str, mode: str, secret: str, page_token: str | None, days: int) -> dict:
     params = {"collection": collection, "mode": mode, "limit": str(PAGE_LIMIT)}
     if mode == "window":
-        params["days"] = str(WINDOW_DAYS)
+        params["days"] = str(days)
     if page_token:
         params["pageToken"] = page_token
     url = FUNCTION_URL + "?" + urllib.parse.urlencode(params)
@@ -117,12 +126,12 @@ def fetch_page(collection: str, mode: str, secret: str, page_token: str | None) 
     raise RuntimeError(f"Unerreichbar fuer {collection}: {last_err}")
 
 
-def fetch_all(collection: str, mode: str, secret: str) -> tuple[list[dict], int]:
+def fetch_all(collection: str, mode: str, secret: str, days: int) -> tuple[list[dict], int]:
     docs: list[dict] = []
     reads = 0
     page_token = None
     while True:
-        page = fetch_page(collection, mode, secret, page_token)
+        page = fetch_page(collection, mode, secret, page_token, days)
         docs.extend(page["docs"])
         reads += page["readCount"]
         page_token = page.get("nextPageToken")
@@ -151,7 +160,7 @@ def upsert_docs(conn: psycopg.Connection, table: str, docs: list[dict]) -> None:
             )
 
 
-def mark_deleted(conn: psycopg.Connection, table: str, mode: str, seen_ids: set[str]) -> int:
+def mark_deleted(conn: psycopg.Connection, table: str, mode: str, seen_ids: set[str], cutoff: str) -> int:
     """Markiert Zeilen, die in diesem Lauf nicht mehr geliefert wurden, als geloescht.
 
     window: nur innerhalb des abgefragten Zeitfensters (sonst wuerden aeltere, nicht
@@ -160,7 +169,6 @@ def mark_deleted(conn: psycopg.Connection, table: str, mode: str, seen_ids: set[
     """
     with conn.cursor() as cur:
         if mode == "window":
-            cutoff = (date.today() - timedelta(days=WINDOW_DAYS)).isoformat()
             cur.execute(
                 f"""
                 UPDATE raw.{table}
@@ -185,11 +193,12 @@ def mark_deleted(conn: psycopg.Connection, table: str, mode: str, seen_ids: set[
         return cur.rowcount
 
 
-def sync_collection(conn: psycopg.Connection, collection: str, table: str, mode: str, secret: str) -> dict:
+def sync_collection(conn: psycopg.Connection, collection: str, table: str, mode: str, secret: str, days: int) -> dict:
     t0 = time.monotonic()
-    docs, reads = fetch_all(collection, mode, secret)
+    cutoff = window_cutoff(days)  # vor dem Abruf: nie spaeter als der Cutoff der Function
+    docs, reads = fetch_all(collection, mode, secret, days)
     upsert_docs(conn, table, docs)
-    deleted = mark_deleted(conn, table, mode, {d["id"] for d in docs})
+    deleted = mark_deleted(conn, table, mode, {d["id"] for d in docs}, cutoff)
     conn.commit()
     duration = time.monotonic() - t0
     return {
@@ -203,7 +212,7 @@ def sync_collection(conn: psycopg.Connection, collection: str, table: str, mode:
     }
 
 
-def run(mode: str) -> int:
+def run(mode: str, days: int) -> int:
     secret = read_secret()
     results = []
     with psycopg.connect(DB_CONNINFO) as conn:
@@ -211,7 +220,7 @@ def run(mode: str) -> int:
             if mode == "window" and not supports_window:
                 continue  # Collections ohne Datumsfeld nur im woechentlichen full-Lauf
             try:
-                r = sync_collection(conn, collection, table, mode, secret)
+                r = sync_collection(conn, collection, table, mode, secret, days)
                 results.append(r)
                 log.info(
                     "OK %-20s mode=%-6s docs=%-6d reads=%-6d deleted=%-4d dauer=%.1fs",
@@ -225,8 +234,8 @@ def run(mode: str) -> int:
     total_reads = sum(r["reads"] for r in results)
     total_duration = sum(r["duration_sec"] for r in results)
     log.info(
-        "Zusammenfassung mode=%s: %d Collections, %d Dokumente, %d Reads, %.1fs gesamt",
-        mode, len(results), total_docs, total_reads, total_duration,
+        "Zusammenfassung mode=%s%s: %d Collections, %d Dokumente, %d Reads, %.1fs gesamt",
+        mode, f" days={days}" if mode == "window" else "", len(results), total_docs, total_reads, total_duration,
     )
     return 0
 
@@ -234,7 +243,11 @@ def run(mode: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["window", "full"], required=True)
+    parser.add_argument("--days", type=int, default=WINDOW_DAYS,
+                        help="nur mode=window: Fenster in Tagen (1 = gestern + heute)")
     args = parser.parse_args()
+    if not 1 <= args.days <= MAX_WINDOW_DAYS:
+        parser.error(f"--days muss zwischen 1 und {MAX_WINDOW_DAYS} liegen")
 
     setup_logging()
 
@@ -247,9 +260,10 @@ def main() -> int:
         return 1
 
     start = datetime.now(timezone.utc)
-    log.info("Start mode=%s um %s", args.mode, start.isoformat())
+    log.info("Start mode=%s%s um %s", args.mode,
+             f" days={args.days}" if args.mode == "window" else "", start.isoformat())
     try:
-        rc = run(args.mode)
+        rc = run(args.mode, args.days)
     except Exception as e:
         log.error("Lauf abgebrochen: %s", e)
         rc = 1

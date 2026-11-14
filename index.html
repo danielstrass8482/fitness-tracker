@@ -731,92 +731,6 @@
        das JS entscheidet per Intent-Erkennung (siehe initDateSwipe). Kein Einfluss auf das Aussehen. */
     #uebersicht-tab, #tagebuch-subtab { touch-action: pan-y; overscroll-behavior-x: none; }
 
-    /* KI-Analyse: Chat-Ansicht. Leseansicht (#analyse-messages) steht im normalen Seitenfluss
-       (kein eigener Flex-/Scroll-Rahmen mehr, die Seite scrollt als Ganzes); der Eingabebereich
-       (#analyse-composer) klebt sticky am unteren Rand, oberhalb der unteren Navigation. */
-    #analyse-tab { max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-
-    /* padding-bottom statt margin-bottom: reserviert echten Platz vor dem sticky Composer, auch beim
-       Scrollen ans Dokumentende. Fester Fehlbetrag von 40px zwischen "optischem Ende" und Composer-
-       Oberkante empirisch gemessen (Playwright, 390x844 und 360x780, Composer-Höhe 252-418px,
-       Bericht Teil 0) – unabhängig von Composer-Höhe/Viewport, daher Konstante statt 1:1-Zuschlag.
-       --composer-h (siehe installAnalyseComposerSizeObserver) sorgt dafür, dass der Abstand bei
-       wachsendem Eingabefeld nie kleiner als 16px wird. */
-    #analyse-messages { min-height: 40dvh; padding-bottom: max(16px, calc(var(--composer-h, 252px) - 196px)); }
-    #analyse-empty-hint { color: var(--fo-text-3); font-size: 14px; text-align: center; margin: 32px 0; }
-
-    .analyse-msg { margin-bottom: 20px; scroll-margin-top: 12px; }
-    .analyse-msg--user {
-      max-width: 85%;
-      margin-left: auto;
-      background: var(--fo-surface-2);
-      color: var(--fo-text);
-      padding: 10px 14px;
-      border-radius: var(--fo-r-lg);
-      font-size: 14px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-    }
-    .analyse-msg--assistant {
-      font-size: 16px;
-      line-height: 1.5;
-      color: var(--fo-text);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-    }
-
-    /* Eingabebereich: sticky statt fixed, damit er sich automatisch innerhalb von .app-container
-       (vor der unteren Navigation) "aufbraucht" und nie über sie hinaus klebt. Der bottom-Versatz
-       wird nur auf schmalen Bildschirmen per JS gesetzt (syncAnalyseComposerOffset), weil #bottom-nav
-       dort allein position:fixed ist. Auf breiten Bildschirmen (>768px, #bottom-nav im normalen
-       Fluss, siehe @media max-width:768px weiter oben) wird sticky bewusst abgeschaltet: Bei kurzen
-       Seiten (wenig Chat-Inhalt) würde ein sticky Element sonst bis zum Viewport-Rand "fallen" und
-       die darunterliegende, nicht-fixierte Navigation überlappen (per echtem Headless-Browser-Test
-       gefunden) – im normalen Fluss (position:static) kann das nicht passieren. */
-    #analyse-composer {
-      position: sticky;
-      bottom: 0;
-      background: var(--fo-bg);
-      border-top: 1px solid var(--fo-line);
-      box-sizing: border-box;
-      padding: 10px 12px env(safe-area-inset-bottom, 10px);
-      margin: 0 -12px;
-    }
-    @media (min-width: 769px) {
-      #analyse-composer { position: static; }
-    }
-    #analyse-window-row { margin-bottom: 6px; }
-    #analyse-window-top { display: flex; align-items: center; gap: 8px; }
-    #analyse-window-top > span { font-size: 13px; line-height: 1.3; color: var(--fo-text-3); white-space: nowrap; flex-shrink: 0; }
-    #analyse-window-seg { flex: 1; min-width: 0; }
-    #analyse-context-size { font-size: 12px; line-height: 1.3; color: var(--fo-text-3); margin-top: 4px; }
-
-    #analyse-input {
-      display: block;
-      width: 100%;
-      min-height: 88px;
-      max-height: 40dvh;
-      padding: 10px;
-      font: inherit; /* Browser-Default für textarea ist monospace; Kurzform zurücksetzen, daher danach erneut: */
-      font-size: 16px;
-      line-height: 1.5;
-      background: var(--fo-bg);
-      border: 1px solid var(--fo-line-strong);
-      border-radius: var(--fo-r-md);
-      color: var(--fo-text);
-      resize: none;
-      overflow-y: auto;
-      box-sizing: border-box;
-      margin-bottom: 8px;
-    }
-    /* !important nötig: eine bestehende globale Regel (@media max-width:768px) setzt
-       button{min-height:44px!important} für alle Buttons als Mindest-Tippfläche – hier absichtlich
-       auf 48px angehoben (D), ohne die globale Regel selbst anzufassen. */
-    #analyse-send-btn { min-height: 48px !important; }
-
     /* Loading */
     .loading {
       text-align: center;
@@ -983,12 +897,6 @@
         max-width: 100% !important;
         overflow-x: hidden !important;
       }
-      /* KI-Analyse: #analyse-composer gleicht die Nav-Höhe bereits selbst aus (sticky bottom +
-         syncAnalyseComposerOffset) – die generische 80px-Reserve oben wäre hier doppelt gerechnet
-         und erzeugte einen leeren Streifen über der Navigation (Bericht Teil 0b). Nur für diese
-         Ansicht auf das normale Innenpolster zurücksetzen, Grafiken/Dashboard unverändert. */
-      .app-container:has(#analyse-tab.active) { padding-bottom: 12px !important; }
-
       /* Two-column grids → single column */
       [style*="grid-template-columns:1fr 1fr"],
       [style*="grid-template-columns: 1fr 1fr"] {
@@ -1271,7 +1179,7 @@
         <div class="fo-card">
           <div class="fo-card__head"><h3 class="fo-card__title">Tageslog</h3></div>
           <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
-            <p class="fo-help" style="margin:0;">Schritte werden automatisch über Google Fit importiert.</p>
+            <p class="fo-help" style="margin:0;">Schritte kommen automatisch von der Garmin-Uhr; fehlt ein Garmin-Tageswert, wird Oura genutzt.</p>
             <div class="fo-field">
               <label class="fo-label" for="log-date">Datum</label>
               <input class="fo-input" type="date" id="log-date">
@@ -1435,12 +1343,8 @@
       
     </div>
     
-    <!-- Analyse: Unterbereiche Grafiken (bisheriger Dashboard-Tab, id dashboard-tab) | KI-Analyse (bisheriger Analyse-Tab, id analyse-tab) -->
+    <!-- Analyse: nur noch Grafiken (id dashboard-tab). KI-Analyse entfernt (012b, 14.11.2026) – Analysen laufen über den MCP-Connector in claude.ai -->
     <div id="analyse-bereich-tab" class="tab-content">
-      <div class="fo-seg" role="tablist" aria-label="Analyse" style="margin-bottom:16px;">
-        <button class="sub-tab fo-seg__btn active" type="button" role="tab" aria-selected="true" data-subtab="grafiken" data-subtab-panel="dashboard-tab">Grafiken</button>
-        <button class="sub-tab fo-seg__btn" type="button" role="tab" aria-selected="false" data-subtab="ki-analyse" data-subtab-panel="analyse-tab">KI-Analyse</button>
-      </div>
 
     <div id="dashboard-tab" class="subtab-content active">
 
@@ -1591,29 +1495,6 @@
 
     </div>
 
-    <div id="analyse-tab" class="subtab-content">
-
-      <div id="analyse-messages" aria-live="polite">
-        <p id="analyse-empty-hint">Stelle eine Frage zu deinen Trainings-, Ernährungs- und Erholungsdaten.</p>
-      </div>
-
-      <div id="analyse-composer">
-        <div id="analyse-window-row">
-          <div id="analyse-window-top">
-            <span>Zeitraum der Daten</span>
-            <div id="analyse-window-seg" class="fo-seg" role="tablist" aria-label="Zeitraum der Daten">
-              <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="30" style="min-height:44px;" onclick="setAnalysisWindow(30)">30 Tage</button>
-              <button class="fo-seg__btn" type="button" role="tab" aria-selected="false" data-window="60" style="min-height:44px;" onclick="setAnalysisWindow(60)">60 Tage</button>
-              <button class="fo-seg__btn active" type="button" role="tab" aria-selected="true" data-window="90" style="min-height:44px;" onclick="setAnalysisWindow(90)">90 Tage</button>
-            </div>
-          </div>
-          <div id="analyse-context-size">Kontext: keine Daten</div>
-        </div>
-
-        <textarea id="analyse-input" rows="3" placeholder="Frage stellen..." aria-label="Frage an die KI-Analyse" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendAnalysisMessage();}" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';updateAnalyseSendButtonState();"></textarea>
-        <button class="btn" id="analyse-send-btn" onclick="sendAnalysisMessage()">Senden</button>
-      </div>
-    </div>
     </div><!-- /analyse-bereich-tab -->
 
     <div id="einstellungen-tab" class="tab-content">
@@ -1734,7 +1615,7 @@
         </section>
 
         <section class="fo-card" style="margin-bottom:20px;">
-          <div class="fo-card__head"><h3 class="fo-card__title" style="display:flex;align-items:center;gap:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg>KI-Analyse (Anthropic)</h3></div>
+          <div class="fo-card__head"><h3 class="fo-card__title" style="display:flex;align-items:center;gap:6px;"><svg class="fo-i" aria-hidden="true"><use href="#i-ai"/></svg>KI-Zugang (Anthropic)</h3></div>
           <div class="fo-card__body" style="border-top:1px solid var(--fo-line);">
             <div class="fo-field">
               <p class="fo-help" id="settings-ai-status">KI-Zugang serverseitig eingerichtet.</p>
@@ -1742,7 +1623,7 @@
           </div>
         </section>
 
-        <!-- Verbindungen: Google Fit und Oura (bisher Daten › Import, interne id import-subtab) -->
+        <!-- Verbindungen: Oura (bisher Daten › Import, interne id import-subtab). Google-Fit-Karte entfernt (012b, 14.11.2026) -->
         <section class="fo-card" style="margin-bottom:20px;">
           <button class="fo-card__head" type="button" aria-expanded="false" onclick="toggleSettingsSection(this)" style="width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;">
             <h3 class="fo-card__title">Verbindungen</h3>
@@ -1750,31 +1631,8 @@
           </button>
           <div class="settings-section-body" style="display:none;border-top:1px solid var(--fo-line);">
             <div id="import-subtab">
-              <!-- Google Fit Integration -->
-              <div style="padding:12px;display:flex;flex-direction:column;gap:10px;">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <span class="fo-row__icon fo-row__icon--rec"><svg class="fo-i" aria-hidden="true"><use href="#i-steps"/></svg></span>
-                  <div style="flex:1;min-width:0;"><div style="font-weight:650;">Google Fit</div></div>
-                </div>
-                <div id="gfit-disconnected">
-                  <p class="fo-help" style="margin-bottom:12px;">Verbinde Google Fit um Aktivitäten und Schritte automatisch zu importieren.</p>
-                  <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="connectGoogleFit()">Mit Google Fit verbinden</button>
-                </div>
-                <div id="gfit-connected" style="display:none;">
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                    <span class="fo-tag fo-tag--ok"><svg class="fo-i fo-i--sm" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-okCircle"/></svg>Verbunden</span>
-                    <span class="fo-row__sub" id="gfit-last-sync" style="white-space:normal;"></span>
-                  </div>
-                  <div class="fo-btnrow">
-                    <button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="syncGoogleFit(false)"><svg class="fo-i" aria-hidden="true"><use href="#i-sync"/></svg>Neue Daten sync</button>
-                    <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="syncGoogleFit(true)"><svg class="fo-i" aria-hidden="true"><use href="#i-download"/></svg>Alles neu laden</button>
-                  </div>
-                  <button class="fo-btn fo-btn--danger fo-btn--sm fo-btn--block" type="button" onclick="disconnectGoogleFit()" style="border-color:transparent;margin-top:8px;">Google Fit trennen</button>
-                </div>
-              </div>
-
               <!-- Oura Ring Integration -->
-              <div style="padding:12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--fo-line);">
+              <div style="padding:12px;display:flex;flex-direction:column;gap:10px;">
                 <div style="display:flex;align-items:center;gap:10px;">
                   <span class="fo-row__icon fo-row__icon--rec"><svg class="fo-i" aria-hidden="true"><use href="#i-readiness"/></svg></span>
                   <div style="flex:1;min-width:0;"><div style="font-weight:650;">Oura Ring</div></div>
@@ -2361,7 +2219,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-13 07:07';
+    const APP_BUILD = '2026-11-14 18:59';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2390,7 +2248,7 @@
     // ── Garmin (Phase 1b, 01.11.2026): nur lesend, siehe refreshGarminData ───────
     // ingestGarmin/garminHealthCheck (Cloud Functions, nicht Teil dieses Auftrags) schreiben
     // garminDaily/{date}, garminActivities/{activityId} und integrations/garminHealth. Die App führt
-    // diese Daten beim Anzeigen/Rechnen mit Google Fit zusammen (siehe getStepsSourceForDate,
+    // diese Daten beim Anzeigen/Rechnen mit den Google-Fit-Altdaten zusammen (siehe getStepsSourceForDate,
     // getEffectiveTrainingEntries) – entries/-Dokumente bleiben dabei unverändert.
     let garminDailyByDate = {};    // { [date]: { steps, garminLastSync, fetchedAt, source } }
     let garminActivitiesAll = [];  // [{ id, mappedTyp, garminType, startLocal, steps, durationSec, distanceM, avgHr, maxHr, garminKcal }]
@@ -2459,7 +2317,7 @@
     const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
     const userIntervalTemplateCol = () => collection(db, 'users', userId, 'intervalTemplates'); // Intervall-Zirkel-Vorlagen, Doc-ID = Vorlagen-ID
-    const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte fließen nur als Kalorien-Fallback ein (siehe getKcalStepsForDate)
+    const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte: Kalorien-Fallback (getKcalStepsForDate) und ab 15.11.2026 Tagesquelle ohne Garmin-Wert (getStepsSourceForDate)
     const userGarminDailyCol = () => collection(db, 'users', userId, 'garminDaily'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminActivitiesCol = () => collection(db, 'users', userId, 'garminActivities'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminHiddenCol = () => collection(db, 'users', userId, 'garminHidden'); // einzige neue Schreibquelle der App für Garmin-Daten (Korrektur 3, 01.11.2026): {activityId}: {hiddenAt}
@@ -2472,9 +2330,8 @@
 
     // Mittelwert eines Oura-Feldes über `days` Tage bis UND MIT endDateStr (Berliner Zeit), aus den
     // vorhandenen Werten – fehlende Tage werden übersprungen, nicht als 0 gezählt. Einzige Stelle für
-    // diese Mittelung: die Analyse-Tab-Erholungsbasis (7 Tage bis heute, buildAnalysisContextData)
-    // UND der Tagescheck (14-/28-Tage-Baseline bis GESTERN, damit "heute" nicht in seine eigene
-    // Baseline einfließt) rufen dieselbe Funktion mit unterschiedlichen Parametern auf.
+    // diese Mittelung: Tagescheck und übrige Oura-Auswertungen (z. B. 14-/28-Tage-Baseline bis GESTERN, damit "heute"
+    // nicht in seine eigene Baseline einfließt) rufen dieselbe Funktion mit unterschiedlichen Parametern auf.
     //
     // Bugreport 2026-10-21: korrupte/unvollständige Nächte (z.B. ein 03:00-Sync-Lauf, der nur ein
     // 14-Minuten-Fragment statt der echten Hauptschlafperiode gespeichert hatte) verzerrten die
@@ -2830,8 +2687,12 @@
     // HH:MM' - die Uhrzeit der letzten Uhr-Übertragung ist so immer sichtbar, unabhängig davon wer
     // gewinnt. Bei fehlendem/ungültigem receivedAt ohne Zeit-Anhang ('Garmin'), damit nie "Invalid
     // Date" angezeigt wird.
+    // 012b: 'oura' -> 'Oura', 'none' -> 'keine Daten' (Rückfall ab STEPS_OURA_FALLBACK_FROM).
     function stepsSourceLabel(date) {
-      if (getStepsSourceForDate(date) !== 'garmin') return 'Google Fit';
+      const source = getStepsSourceForDate(date);
+      if (source === 'googlefit') return 'Google Fit';
+      if (source === 'oura') return 'Oura';
+      if (source === 'none') return 'keine Daten';
       if (!(ciqStepsToday && ciqStepsToday.date === date)) return 'Garmin';
       const ms = ciqReceivedAtMs(ciqStepsToday.receivedAt);
       if (ms == null) return 'Garmin';
@@ -2843,14 +2704,21 @@
 
     // Welche Quelle liefert die Tagesschritte UND welche Aktivitäten werden davon abgezogen – nie
     // gemischt (Korrektur 2, 01.11.2026). Vor garminActivityCutoff immer Google Fit, sonst Garmin
-    // sobald garminDaily ODER ciqSteps (nur heute, R1) echte Schritte hat, sonst Google-Fit-Fallback.
-    // ciqSteps bleibt dabei Teil der "Garmin-Familie" (keine eigene dritte Quelle) - die Aktivitäts-
-    // Abzugsliste in getActivityStepsForDate bleibt deshalb unverändert bei den Garmin-Aktivitäten (R4).
+    // sobald garminDaily ODER ciqSteps (nur heute, R1) echte Schritte hat. ciqSteps bleibt dabei Teil
+    // der "Garmin-Familie" (keine eigene Quelle) - Abzugsliste siehe getActivityStepsForDate (R4).
+    // Ohne Garmin-Wert (012b, Google Fit abgeschaltet): Tage vor STEPS_OURA_FALLBACK_FROM behalten den
+    // bisherigen Google-Fit-Rückfall (tageslog.steps), damit die Historie unverändert bleibt; ab dann
+    // Oura (oura_daily/{date}.steps, nur vergangene Tage - Oura liefert den Tageswert erst nach
+    // Mitternacht, gleiche Regel wie getKcalStepsForDate), sonst 'none' (0 Schritte, "keine Daten").
+    const STEPS_OURA_FALLBACK_FROM = '2026-11-15';
     function getStepsSourceForDate(date) {
       if (garminActivityCutoff && date < garminActivityCutoff) return 'googlefit';
       const garminSteps = garminDailyByDate[date]?.steps || 0;
       const steps = Math.max(garminSteps, ciqStepsForDate(date));
-      return steps > 0 ? 'garmin' : 'googlefit';
+      if (steps > 0) return 'garmin';
+      if (date < STEPS_OURA_FALLBACK_FROM) return 'googlefit';
+      if (date < berlinTodayStr() && (ouraDaily[date]?.steps || 0) > 0) return 'oura';
+      return 'none';
     }
     window.getStepsSourceForDate = getStepsSourceForDate;
 
@@ -2858,9 +2726,11 @@
     // R1: für heute der höhere Wert aus garminDaily/ciqSteps; für alle anderen Tage liefert
     // ciqStepsForDate ohnehin immer 0 (siehe dort), Math.max ändert dort also nichts.
     function getRawStepsForDate(date, dayLog) {
-      return getStepsSourceForDate(date) === 'garmin'
-        ? Math.max(garminDailyByDate[date]?.steps || 0, ciqStepsForDate(date))
-        : (dayLog?.steps || 0);
+      const source = getStepsSourceForDate(date);
+      if (source === 'garmin') return Math.max(garminDailyByDate[date]?.steps || 0, ciqStepsForDate(date));
+      if (source === 'googlefit') return dayLog?.steps || 0;
+      if (source === 'oura') return ouraDaily[date]?.steps || 0;
+      return 0; // 'none'
     }
 
     // Weekly stats state
@@ -3037,10 +2907,9 @@
         if (hasCachedData) {
           renderAll();
           showToast('Synchronisiere...', 'wait');
-          loadAllData(true).then(() => { autoSyncGoogleFit('start'); initDailyCheck(); afterDataLoadedForSnapshots(); }); // Hintergrund-Sync, kein await
+          loadAllData(true).then(() => { initDailyCheck(); afterDataLoadedForSnapshots(); }); // Hintergrund-Sync, kein await (Google-Fit-Auto-Sync entfernt, 012b)
         } else {
           await loadAllData(false); // Erststart: blockierend laden
-          autoSyncGoogleFit('start');
           initDailyCheck(); // asynchron, blockiert den Start nicht (siehe Funktion)
           afterDataLoadedForSnapshots(); // Tages-Snapshot (B2), kein await - Fehler werden intern abgefangen
         }
@@ -3272,7 +3141,8 @@
     const ACTIVITY_FACTOR = 1.375;
 
     // Einzige Auflösung von Alltagsschritten pro Datum für das Kalorienziel:
-    // 1. getRawStepsForDate (Garmin direkt, sonst Google Fit – nie gemischt, siehe getStepsSourceForDate) hat Vorrang.
+    // 1. getRawStepsForDate (Garmin direkt, sonst Google Fit bzw. ab STEPS_OURA_FALLBACK_FROM Oura – nie
+    //    gemischt, siehe getStepsSourceForDate) hat Vorrang.
     // 2. Fallback: Oura (oura_daily/{date}.steps), nur wenn weder Garmin noch Google Fit einen Wert
     //    liefern UND das Datum vor heute liegt (Berlin). Oura liefert den Tageswert erst nach Mitternacht, daher nie für heute.
     // Garmin/Google Fit und Oura werden nie addiert. Die Oura-Werte und der Platzhalter sind ausschließlich für
@@ -3315,8 +3185,10 @@
     // Kalorienziel UND Anzeigen. Quelle richtet sich NACH getStepsSourceForDate (nie gemischt, Korrektur
     // 2, 01.11.2026): bei 'garmin' nur sichtbare (nicht ausgeblendete) Garmin-Aktivitäten dieses Tages,
     // bei 'googlefit' wie bisher die Trainingseinträge (ohne Tageslog/Phonesteps) mit Schritten.
+    // 'oura'/'none' (012b): ebenfalls die Garmin-Aktivitäten - Aktivitäten kommen ab dem Cutoff nur noch
+    // von Garmin, Oura zählt wie Google Fit alle Tagesschritte inkl. Aktivitäten.
     function getActivityStepsForDate(date) {
-      if (getStepsSourceForDate(date) === 'garmin') {
+      if (getStepsSourceForDate(date) !== 'googlefit') {
         return garminActivitiesAll
           .filter(a => garminActivityDateKey(a) === date && !garminHiddenIds.has(String(a.id)))
           .reduce((sum, a) => sum + (a.steps || 0), 0);
@@ -3338,9 +3210,10 @@
     }
     window.getAlltagsschritteForDate = getAlltagsschritteForDate;
 
-    // Alltagsschritte NUR für Anzeigen (Dashboard, Tagesansicht, Charts/Kacheln, Analyse-Tab-Export):
-    // ausschließlich echte Garmin- oder Google-Fit-Tagesschritte (getRawStepsForDate), ohne Oura-
-    // Fallback und ohne den Platzhalter für den laufenden Tag (anders als getAlltagsschritteForDate,
+    // Alltagsschritte NUR für Anzeigen (Dashboard, Tagesansicht, Charts/Kacheln):
+    // ausschließlich die Tagesschritte der Tagesquelle (getRawStepsForDate: Garmin, Google Fit oder ab
+    // STEPS_OURA_FALLBACK_FROM Oura, Label über stepsSourceLabel), ohne den Kalorien-Oura-Rückfall alter
+    // Tage und ohne den Platzhalter für den laufenden Tag (anders als getAlltagsschritteForDate,
     // das Kalorienziel nutzt beides weiter). null, solange für den Tag keine echten Tagesschritte
     // vorliegen (z.B. heute vor dem Sync) – damit zeigt die Anzeige nie den Platzhalter oder einen
     // Oura-Wert als Schrittzahl an.
@@ -4337,7 +4210,9 @@
       document.getElementById('stat-diary').textContent = fmt(diaryCount);
       document.getElementById('stat-days').textContent = fmt(Object.keys(foodLog).length);
       
-      const trainingCount = trainingEntries.filter(e => e.typ !== 'tageslog').length;
+      // Wie die Trainingsliste (renderTrainingHistory, 012b): inkl. Garmin-Live-Aktivitäten, ohne deren
+      // gfit-Dubletten und ohne "abgedeckte" Garmin-Kraft (covered) – sonst zählte eine Einheit doppelt.
+      const trainingCount = getEffectiveTrainingEntries().filter(e => e.typ !== 'tageslog' && !e.covered).length;
       document.getElementById('stat-training').textContent = fmt(trainingCount);
       
       document.getElementById('fooddb-count').textContent = fmt(foodDB.length);
@@ -7544,7 +7419,7 @@
       dashboard: 'analyse'    // Dashboard ist jetzt Analyse › Grafiken
     };
     const resolveTab = name => OLD_TAB_ALIASES[name] || name;
-    // Panel-id je Tab, falls sie nicht <tab>-tab lautet (dashboard-tab/analyse-tab sind jetzt Unterbereiche)
+    // Panel-id je Tab, falls sie nicht <tab>-tab lautet (Analyse: Hülle analyse-bereich-tab um dashboard-tab)
     const TAB_PANEL_IDS = { analyse: 'analyse-bereich-tab' };
     const tabPanelId = tab => TAB_PANEL_IDS[tab] || tab + '-tab';
 
@@ -7582,17 +7457,15 @@
         const target = tab.dataset.tab;
         showTabPanel(target);
         if (target === 'einstellungen' && userId) {
-          // Verbindungen und Backup (bisher beim Öffnen des Daten-Tabs geladen)
-          loadGoogleFitStatus();
+          // Verbindungen (Oura; Google Fit entfernt 012b) und Backup (bisher beim Öffnen des Daten-Tabs geladen)
           // Health Connect Section nur in App anzeigen
           const hcSection = document.getElementById('health-connect-section');
           if (hcSection) hcSection.style.display = 'block';
           loadOuraStatus();
         }
         if (target === 'analyse') showAnalyseSubtab();
-        else uninstallAnalyseComposerSizeObserver(); // KI-Analyse-Ansicht verlassen (Bericht Teil 0a)
         if ((target === 'ernaehrung' || target === 'uebersicht') && userId) {
-          // Silent background sync for last 2 days (gedrosselt, siehe tabSyncRecentEntries)
+          // Gedrosselter Hintergrund-Reload (siehe tabSyncRecentEntries; ohne Google Fit nur im Training-Tab wirksam)
           tabSyncRecentEntries(target);
         }
         // Reload training entries when switching to training tab
@@ -7610,7 +7483,7 @@
             const timeEl = document.getElementById('training-time');
             if (timeEl && !timeEl.value) timeEl.value = hh + ':' + mm;
           }, 50);
-          // Silent 2-day sync + Neuladen der entries der letzten Tage (gedrosselt, siehe tabSyncRecentEntries)
+          // Neuladen der entries der letzten Tage (gedrosselt, siehe tabSyncRecentEntries)
           tabSyncRecentEntries('training');
         }
       });
@@ -7939,27 +7812,18 @@
         document.getElementById(e.target.dataset.subtabPanel || (target + '-subtab')).classList.add('active');
 
         if (target === 'training-plan') renderTrainingPlan();
-        if (target === 'grafiken' || target === 'ki-analyse') showAnalyseSubtab();
         updateSharedDateNav();
       }
     });
 
-    // Analyse-Tab: Lade-/Render-Schritte des sichtbaren Unterbereichs (wie bisher beim Öffnen von Dashboard bzw. Analyse)
+    // Analyse-Tab (nur noch Grafiken, KI-Analyse entfernt 012b): Lade-/Render-Schritte wie bisher beim Öffnen
     function showAnalyseSubtab() {
-      if (document.getElementById('dashboard-tab')?.classList.contains('active')) {
-        // Grafiken: KI-Analyse-Ansicht verlassen, Composer-Größenbeobachter abmelden (Bericht Teil 0a)
-        uninstallAnalyseComposerSizeObserver();
-        // Re-render dashboard when it becomes visible (canvas needs to be in DOM)
-        requestAnimationFrame(() => {
-          renderDashboard();
-          populateWorkoutTypeSelect();
-          renderWorkoutChart();
-        });
-      } else if (userId) {
-        updateAnalyseKeyState();
-        updateAnalysisContextSizeEstimate();
-        requestAnimationFrame(() => { syncAnalyseComposerOffset(); installAnalyseViewportHandler(); installAnalyseComposerSizeObserver(); });
-      }
+      // Re-render dashboard when it becomes visible (canvas needs to be in DOM)
+      requestAnimationFrame(() => {
+        renderDashboard();
+        populateWorkoutTypeSelect();
+        renderWorkoutChart();
+      });
     }
 
     // Einklappbare Abschnitte in den Einstellungen (Verbindungen, Backup, Statistik), Muster wie toggleActivityGroup
@@ -8710,7 +8574,6 @@
 
           calcTDEE();
         }
-        updateAnalyseKeyState();
       } catch (err) {
         console.error('Load settings error:', err);
       }
@@ -8806,7 +8669,6 @@
 
         // Update display
         renderFoodLog();
-        updateAnalyseKeyState();
 
         showToast('Einstellungen gespeichert', 'ok');
       } catch (err) {
@@ -8815,277 +8677,9 @@
       }
     };
 
-    // ── KI-Analyse (Anthropic Claude API über Cloud Function anthropicProxy) ───────────
-    let analysisMessages = []; // { role: 'user'|'assistant', content: string } — nur im Speicher, kein Firestore-Sync
-    let analyseRequestInFlight = false; // steuert zusammen mit leerem Feld den Senden-Button (D)
-
-    // Zeitraum des Kontexts (betrifft Ernährungsbilanz, Tageslog und Oura-Zeilen – nicht die
-    // Trainingseinträge, die bewusst ihr eigenes 365-Tage-Fenster behalten, siehe Bericht, und
-    // nicht die 7-Tage-Erholungs-Basis). Einzige Stelle, an der diese Werte festgelegt werden.
-    const ANALYSIS_WINDOW_OPTIONS = [30, 60, 90];
-    const ANALYSIS_WINDOW_DEFAULT = 90;
-    const CHARS_PER_TOKEN_ESTIMATE = 3.5; // grobe Schätzung für deutschen Text, keine echte Tokenizer-Zählung
-    // Nur für die Sitzung gemerkt: saveSettings() überschreibt settings/main ohne merge (setDoc ohne
-    // {merge:true}), ein sicherer Einzel-Feld-Schreibpfad existiert nicht – siehe Bericht Punkt F.
-    let analysisWindowDays = ANALYSIS_WINDOW_DEFAULT;
-
-    // Hält den stickyen Eingabebereich über der unteren Navigation frei: #bottom-nav ist nur auf
-    // schmalen Bildschirmen (≤768px) position:fixed (siehe CSS) – dort braucht #analyse-composer
-    // einen bottom-Versatz in Höhe der Navigation, sonst (Navigation im normalen Fluss) bleibt er 0,
-    // weil sticky sich ohnehin automatisch innerhalb von .app-container "aufbraucht".
-    function syncAnalyseComposerOffset() {
-      const composer = document.getElementById('analyse-composer');
-      if (!composer) return;
-      const nav = document.getElementById('bottom-nav');
-      const navIsFixed = nav && window.getComputedStyle(nav).position === 'fixed';
-      composer.style.bottom = navIsFixed ? nav.getBoundingClientRect().height + 'px' : '0px';
-    }
-    window.addEventListener('resize', syncAnalyseComposerOffset);
-    window.addEventListener('orientationchange', () => setTimeout(syncAnalyseComposerOffset, 200));
-
-    // Schreibt die tatsächliche (gerenderte) Höhe von #analyse-composer als --composer-h auf das
-    // gemeinsame Elternelement #analyse-tab (CSS-Variablen vererben sich nur an Nachfahren, nicht an
-    // Geschwister) – damit kann #analyse-messages seinen unteren Abstand an der realen Composer-Höhe
-    // ausrichten (wachsendes Textfeld, umbrechende Größenzeile, Querformat), siehe Bericht Teil 0a.
-    // Nur registriert, solange die KI-Analyse-Ansicht aktiv ist (siehe showAnalyseSubtab/Tab-Wechsel).
-    let analyseComposerSizeObserver = null;
-    function installAnalyseComposerSizeObserver() {
-      if (analyseComposerSizeObserver || !window.ResizeObserver) return;
-      const composer = document.getElementById('analyse-composer');
-      const tab = document.getElementById('analyse-tab');
-      if (!composer || !tab) return;
-      analyseComposerSizeObserver = new ResizeObserver(entries => {
-        const h = entries[0].borderBoxSize?.[0]?.blockSize ?? composer.getBoundingClientRect().height;
-        tab.style.setProperty('--composer-h', h + 'px');
-      });
-      analyseComposerSizeObserver.observe(composer);
-    }
-    function uninstallAnalyseComposerSizeObserver() {
-      if (!analyseComposerSizeObserver) return;
-      analyseComposerSizeObserver.disconnect();
-      analyseComposerSizeObserver = null;
-    }
-
-    // Hält den Eingabebereich über der eingeblendeten Bildschirmtastatur (visualViewport verkleinert
-    // sich dabei, das Layout-Viewport in der Regel nicht). Versatz nur per transform, nur solange
-    // #analyse-input fokussiert ist, danach restlos zurückgesetzt. Ereignisse nur einmal registriert.
-    // Kein Eingriff am viewport-Meta-Tag oder an globalen Stilen.
-    let analyseViewportHandlerInstalled = false;
-    function installAnalyseViewportHandler() {
-      if (analyseViewportHandlerInstalled) return;
-      analyseViewportHandlerInstalled = true;
-      const input = document.getElementById('analyse-input');
-      const vv = window.visualViewport;
-      if (!input || !vv) return; // ohne visualViewport: Eingabebereich bleibt im normalen Fluss (sticky), siehe Bericht
-      const update = () => {
-        const composer = document.getElementById('analyse-composer');
-        if (!composer) return;
-        const active = document.activeElement === input && document.getElementById('analyse-tab')?.classList.contains('active');
-        if (!active) { composer.style.transform = ''; return; }
-        const overlap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-        composer.style.transform = overlap > 0 ? `translateY(-${overlap}px)` : '';
-      };
-      vv.addEventListener('resize', update);
-      vv.addEventListener('scroll', update);
-      input.addEventListener('focus', update);
-      input.addEventListener('blur', () => {
-        const composer = document.getElementById('analyse-composer');
-        if (composer) composer.style.transform = '';
-      });
-    }
-
-    // KI-Zugang liegt serverseitig (anthropicProxy, 005c2) – Eingabe ist immer verfügbar.
-    function updateAnalyseKeyState() {
-      const input = document.getElementById('analyse-input');
-      if (input) input.disabled = false;
-      updateAnalyseSendButtonState();
-    }
-    window.updateAnalyseKeyState = updateAnalyseKeyState;
-
-    // Senden-Button: deaktiviert bei leerem Feld oder laufender Anfrage (D)
-    function updateAnalyseSendButtonState() {
-      const sendBtn = document.getElementById('analyse-send-btn');
-      const input = document.getElementById('analyse-input');
-      if (!sendBtn || !input) return;
-      sendBtn.disabled = analyseRequestInFlight || !input.value.trim();
-    }
-    window.updateAnalyseSendButtonState = updateAnalyseSendButtonState;
-
-    // Baut komprimierte Datenzusammenfassung (keine rohen Firestore-Dokumente, keine Einzel-Lebensmittel)
-    function buildAnalysisContextData() {
-      const today = new Date();
-      const cutoffTraining = new Date(today); cutoffTraining.setDate(today.getDate() - 365);
-      const cutoffNutrition = new Date(today); cutoffNutrition.setDate(today.getDate() - analysisWindowDays);
-      const cutoffTrainingStr = cutoffTraining.toISOString().split('T')[0];
-      const cutoffNutritionStr = cutoffNutrition.toISOString().split('T')[0];
-
-      const profile = {
-        geschlecht: settings.gender === 'female' ? 'weiblich' : 'männlich',
-        alter: settings.age || null,
-        groesse_cm: settings.height || null,
-        gewicht_kg: settings.weight || null,
-        aktivitaetsfaktor: settings.activityLevel || null,
-        tdee_kcal: settings.tdee || null,
-        ziel_protein_g: settings.proteinGoal || null,
-        ziel_carbs_g: settings.carbsGoal || null,
-        ziel_fett_g: settings.fatGoal || null
-      };
-
-      // Trainingseinträge (ohne Tageslogs/Phonesteps), letzte 365 Tage
-      const trainingRows = trainingEntries
-        .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && e.datum >= cutoffTrainingStr)
-        .sort((a, b) => a.datum.localeCompare(b.datum))
-        .map(e => {
-          const distanz = parseFloat(e.distanz) || 0;
-          const zeit = e.zeit || '';
-          let pace = '-';
-          if (distanz > 0 && zeit) {
-            const parts = zeit.split('.')[0].split(':').map(Number);
-            const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60
-                            : parts.length === 2 ? parts[0] + parts[1] / 60 : 0;
-            if (totalMin > 0) {
-              const paceMin = totalMin / distanz;
-              const pm = Math.floor(paceMin);
-              const ps = Math.round((paceMin - pm) * 60);
-              pace = pm + ':' + String(ps).padStart(2, '0');
-            }
-          }
-          const kcal = e.kcal || calcActivityKcal(e) || 0;
-          const notiz = (e.notiz || '').slice(0, 60).replace(/\|/g, '/').replace(/\n/g, ' ');
-          return [e.datum, e.typ, distanz || '-', zeit || '-', pace, Math.round(kcal), notiz].join('|');
-        });
-
-      // Zirkel-/Halte-Übungen pro Trainingsart, letzte 365 Tage (aggregiert je Eintrag, KEINE Einzelzeilen
-      // pro Runde – hält den Kontext klein). Normalisiert über zirkelNormalizedExerciseLabel, damit z.B.
-      // "Plank" aus Zirkel-Details und aus manuellen Halte-Einträgen zusammen auswertbar sind (Teil 3.2).
-      const exerciseRows = [];
-      trainingEntries
-        .filter(e => e.typ === 'zirkel' && Array.isArray(e.details) && e.details.length && e.datum >= cutoffTrainingStr)
-        .forEach(e => {
-          zirkelExerciseSummaryRows(e.details).forEach(r => {
-            exerciseRows.push([
-              e.datum, r.label, r.mode, r.perSide ? 'ja' : 'nein',
-              r.mode === 'time' ? r.avgSec : r.avgWdh, r.mode === 'time' ? 's' : 'Wdh', r.rounds
-            ].join('|'));
-          });
-        });
-      trainingEntries
-        .filter(e => isHoldEntry(e) && e.datum >= cutoffTrainingStr)
-        .forEach(e => {
-          const secs = (e.holdSec || []).map(s => parseInt(s) || 0).filter(s => s > 0);
-          if (!secs.length) return;
-          const avg = Math.round(secs.reduce((a, b) => a + b, 0) / secs.length);
-          exerciseRows.push([e.datum, zirkelNormalizedExerciseLabel(e.typ, e.variant), 'manual-hold', '-', avg, 's', secs.length].join('|'));
-        });
-      exerciseRows.sort((a, b) => a.localeCompare(b));
-
-      // Tägliche Ernährungsbilanz, letzte analysisWindowDays Tage (aggregiert pro Tag, keine Einzel-Lebensmittel)
-      const dayMap = {};
-      Object.keys(foodLog).forEach(d => {
-        if (d < cutoffNutritionStr) return;
-        const entries = foodLog[d] || [];
-        if (!entries.length) return;
-        let kcal = 0, protein = 0, carbs = 0, fat = 0;
-        entries.forEach(e => { kcal += e.kcal || 0; protein += e.protein || 0; carbs += e.carbs || 0; fat += e.fat || 0; });
-        dayMap[d] = { kcal: Math.round(kcal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat), count: entries.length };
-      });
-      const nutritionRows = Object.keys(dayMap).sort().map(d => {
-        const goal = window.calcHistoricalKcalGoal(d);
-        const n = dayMap[d];
-        const diff = n.kcal - Math.round(goal.total || 0);
-        return [d, n.kcal, n.protein, n.carbs, n.fat, n.count, Math.round(goal.total || 0), (diff > 0 ? '+' : '') + diff].join('|');
-      });
-
-      // Tageslog: Gewicht, Alltagsschritte & Aktivitätsschritte, letzte analysisWindowDays Tage.
-      // Alltagsschritte NUR aus echten Garmin- oder Google-Fit-Tagesschritten (getDisplaySchritteForDate,
-      // wie alle anderen Anzeigen) – '-' statt Platzhalter/Oura-Wert, solange für den Tag keine echten
-      // Tagesschritte vorliegen. Aktivitätsschritte wie gewohnt (getActivityStepsForDate).
-      const dayLogRows = trainingEntries
-        .filter(e => e.typ === 'tageslog' && e.datum >= cutoffNutritionStr)
-        .sort((a, b) => a.datum.localeCompare(b.datum))
-        .map(e => [e.datum, e.weight ?? '-', getDisplaySchritteForDate(e.datum) ?? '-', getActivityStepsForDate(e.datum)].join('|'));
-
-      // Oura-Erholungsdaten, gleicher Zeitraum wie die übrige Tages-Aggregation (90 Tage). Tage ganz
-      // ohne Oura-Dokument fehlen in der Liste (wie dayLogRows ohne Tageslog-Eintrag), einzelne fehlende
-      // Felder innerhalb eines vorhandenen Tages werden als '-' ausgegeben (wie e.steps ?? '-' oben) –
-      // nie als 0. Nur wenn Oura für den Nutzer verbunden ist, werden Zeilen/Basis überhaupt gebildet.
-      const ouraConnected = !!ouraStatus?.connected;
-      const ouraRows = ouraConnected ? Object.keys(ouraDaily)
-        .filter(d => d >= cutoffNutritionStr)
-        .sort()
-        .filter(d => {
-          const o = ouraDaily[d];
-          return o && (o.hrvAvg != null || o.restingHr != null || o.deepSleepSec || o.sleepDurationSec || o.tempDeviation != null || o.sleepScore != null || o.readinessScore != null);
-        })
-        .map(d => {
-          const o = ouraDaily[d];
-          const hrv = o.hrvAvg != null ? Math.round(o.hrvAvg) : '-';
-          const rhr = o.restingHr != null ? Math.round(o.restingHr) : '-';
-          const deep = o.deepSleepSec ? Math.round(o.deepSleepSec / 60) : '-';
-          const sleep = o.sleepDurationSec
-            ? `${Math.floor(o.sleepDurationSec / 3600)}:${String(Math.round((o.sleepDurationSec % 3600) / 60)).padStart(2, '0')}`
-            : '-';
-          const temp = o.tempDeviation != null ? `${o.tempDeviation >= 0 ? '+' : ''}${o.tempDeviation.toFixed(1)}` : '-';
-          // Scores kompakt als Readiness,Schlaf (Beschriftung einmal im Format-Header, wie bei den übrigen Tabellen)
-          const scores = (o.readinessScore != null ? o.readinessScore : '-') + ',' + (o.sleepScore != null ? o.sleepScore : '-');
-          return [d, hrv, rhr, deep, sleep, temp, scores].join('|');
-        }) : [];
-
-      // Erholungs-Basis: 7-Tage-Mittel aus den vorhandenen Werten der letzten 7 Tage bis heute
-      // (Berliner Zeit) – gleiche Berechnung (Mittel der vorhandenen Werte, mindestens 3 Tage nötig)
-      // wie der HRV-Trend der Oura-Karte, dort als HRV_TREND_MIN_VALUES = 3.
-      const OURA_BASELINE_MIN_DAYS = 3;
-      const ouraBaselineHrv = ouraConnected ? ouraWindowAvg('hrvAvg', 7, berlinTodayStr()) : { avg: null, count: 0 };
-      const ouraBaselineRhr = ouraConnected ? ouraWindowAvg('restingHr', 7, berlinTodayStr()) : { avg: null, count: 0 };
-
-      return { profile, trainingRows, exerciseRows, nutritionRows, dayLogRows, ouraConnected, ouraRows, ouraBaselineHrv, ouraBaselineRhr, OURA_BASELINE_MIN_DAYS };
-    }
-
-    function buildAnalysisSystemPrompt() {
-      const ctx = buildAnalysisContextData();
-      const p = ctx.profile;
-      return `Du bist ein Fitness- und Ernährungs-Analyseassistent für die persönliche Tracking-App "Fuelofit". Der Nutzer ist Hybrid-Athlet (Laufen, Radfahren, Wandern) mit Garmin-Uhr.
-Antworte auf Deutsch, präzise und mit konkreten Zahlen aus den unten stehenden Daten. Wenn Daten fehlen oder unklar sind, sag das explizit statt zu raten.
-
-=== Nutzerprofil ===
-Geschlecht: ${p.geschlecht}
-Alter: ${p.alter ?? 'unbekannt'}
-Größe: ${p.groesse_cm ?? '?'} cm
-Gewicht: ${p.gewicht_kg ?? '?'} kg
-Aktivitätsfaktor: ${p.aktivitaetsfaktor ?? '?'}
-TDEE: ${p.tdee_kcal ?? '?'} kcal
-Ziele: ${p.ziel_protein_g ?? '?'}g Protein, ${p.ziel_carbs_g ?? '?'}g Kohlenhydrate, ${p.ziel_fett_g ?? '?'}g Fett
-
-=== Trainingseinträge (letzte 365 Tage, ohne Tageslogs) ===
-Format: Datum|Typ|Distanz(km)|Zeit|Pace(min/km)|Kcal|Notiz
-${ctx.trainingRows.join('\n') || '(keine Einträge)'}
-
-=== Zirkel-/Halte-Übungen pro Trainingsart (letzte 365 Tage, je Eintrag aggregiert) ===
-Format: Datum|Trainingsart|Modus|jeSeite|Ø Wert|Einheit|Runden/Sätze
-Modus 'time'/'reps' = aus einem Zirkel, 'manual-hold' = einzeln geloggte Haltezeit (kein Zirkel).
-${ctx.exerciseRows.join('\n') || '(keine Einträge)'}
-
-=== Tägliche Ernährungsbilanz (letzte ${analysisWindowDays} Tage, aggregiert) ===
-Format: Datum|Kcal|Protein(g)|Carbs(g)|Fett(g)|AnzahlMahlzeiten|KcalZiel|Differenz
-${ctx.nutritionRows.join('\n') || '(keine Einträge)'}
-
-=== Tageslog: Gewicht, Alltags- & Aktivitätsschritte (letzte ${analysisWindowDays} Tage) ===
-Format: Datum|Gewicht(kg)|Alltagsschritte|Aktivitätsschritte
-${ctx.dayLogRows.join('\n') || '(keine Einträge)'}
-
-=== Oura-Erholungsdaten (letzte ${analysisWindowDays} Tage, Fingerring) ===
-${!ctx.ouraConnected ? 'Keine Oura-Daten vorhanden (nicht verbunden).' :
-`Erholungs-Basis (Ø letzte 7 Tage): HRV ${ctx.ouraBaselineHrv.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineHrv.avg) + ' ms'} (${ctx.ouraBaselineHrv.count} Tage), Ruhepuls ${ctx.ouraBaselineRhr.count < ctx.OURA_BASELINE_MIN_DAYS ? 'nicht genug Daten' : Math.round(ctx.ouraBaselineRhr.avg) + ' bpm'} (${ctx.ouraBaselineRhr.count} Tage)
-Format: Datum|HRV (Mittel der Nacht, ms)|Ruhepuls (bpm)|Tiefschlaf (Min)|Gesamtschlaf (Std:Min)|Temperaturabweichung (°C)|Oura-Readiness-Score,Oura-Schlaf-Score
-${ctx.ouraRows.join('\n') || '(keine Tage mit Oura-Daten)'}`}
-
-=== Hinweise zu Oura-Daten ===
-Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der Mittelwert der Nacht in Millisekunden, dazu Ruhepuls, Schlaf und Temperaturabweichung. Bewerte HRV und Ruhepuls immer relativ zur eigenen Erholungs-Basis des Nutzers (7-Tage-Mittel oben), nicht anhand allgemeiner Normwerte. Einzelne Nächte schwanken natürlich; ein einzelner Wert allein beweist nichts. Stelle keine medizinischen Diagnosen; nenne bei auffälligen Werten über mehrere Tage eine ärztliche Abklärung, wenn der Nutzer Beschwerden schildert. Benenne Unsicherheit und die Grenzen der Messung. Ein Zusammenhang zu Training oder Ernährung ist eine Möglichkeit, kein bewiesener Grund. Fehlen Daten für einen Tag oder ist Oura nicht verbunden, sage das klar – behaupte nie, du hättest keinen Zugriff, wenn Daten oben im Kontext stehen.`;
-    }
-
     // ═══ Tagescheck: KI-Morgenkarte oben in der Übersicht ═══════════════════════════════════════
     // Einmal pro Tag generiert (dailyCheck/{YYYY-MM-DD} in Firestore + IndexedDB-Cache), nutzt
-    // denselben Anthropic-Call wie der Analyse-Tab (über anthropicProxy, selbes Modell).
+    // anthropicProxy (wie der Workout-Builder, selbes Modell).
 
     const DAILY_CHECK_ILLNESS_HRV_DROP_FRACTION = 0.15; // HRV ≥15% unter dem eigenen 28-Tage-Schnitt
     const DAILY_CHECK_ILLNESS_RHR_RISE_BPM = 4;          // Ruhepuls ≥4 bpm über dem eigenen 28-Tage-Schnitt
@@ -9486,8 +9080,11 @@ Die Oura-Werte stammen von einem Fingerring und sind Erholungsdaten: HRV ist der
       const alcoholRecent = getAlcoholEntries(dailyCheckShiftDate(todayStr, -3), todayStr);
       const alcoholPattern = getAlcoholHistoricalPattern();
 
-      const trainingHistory = trainingEntries
-        .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && e.datum >= dailyCheckShiftDate(todayStr, -7) && e.datum < todayStr)
+      // Wie Übersicht/Plan über getEffectiveTrainingEntries (012b): Garmin-Live-Aktivitäten statt der
+      // passenden gfit-Dubletten; "abgedeckte" Garmin-Kraft (covered, zählt 0 ins Ziel) wie in der
+      // Trainingsliste nicht als eigene Einheit, die abhakende Plan-Einzelübung steht schon drin.
+      const trainingHistory = getEffectiveTrainingEntries()
+        .filter(e => e.typ !== 'tageslog' && e.typ !== 'phonesteps' && !e.covered && e.datum >= dailyCheckShiftDate(todayStr, -7) && e.datum < todayStr)
         .sort((a, b) => a.datum.localeCompare(b.datum))
         .map(e => ({
           datum: e.datum, typ: e.typ, dauer: e.zeit || null,
@@ -9614,7 +9211,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }
     }
 
-    // Ruft denselben Anthropic-Call wie der Analyse-Tab auf (über anthropicProxy, Modell
+    // Ruft anthropicProxy auf (Modell
     // claude-sonnet-5) – keine neue Schlüsselverwaltung. max_tokens 3000 statt vorher 1024: der echte
     // Call (Bugreport 2026-10-17, reproduziert) zeigt durchgängig 800-950 Output-Tokens, davon
     // 500-665 für modellinternes "thinking" (nicht abschaltbar über diesen Endpunkt) – bei 1024 blieb
@@ -10178,111 +9775,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       </div>`;
     }
 
-    // Umschalter "Zeitraum der Daten": setzt analysisWindowDays, aktualisiert den aktiven Zustand
-    // der Segmente und die Größenzeile. Gilt ab der nächsten Frage (Kontext wird je Nachricht neu
-    // gebaut, siehe sendAnalysisMessage) – ein laufender Chat-Verlauf bleibt unangetastet.
-    window.setAnalysisWindow = function(days) {
-      if (!ANALYSIS_WINDOW_OPTIONS.includes(days)) return;
-      analysisWindowDays = days;
-      document.querySelectorAll('#analyse-window-seg .fo-seg__btn').forEach(btn => {
-        const active = Number(btn.dataset.window) === days;
-        btn.classList.toggle('active', active);
-        btn.setAttribute('aria-selected', active ? 'true' : 'false');
-      });
-      updateAnalysisContextSizeEstimate();
-    };
-
-    // Grobe Größenschätzung des tatsächlich gebauten Kontexts (System-Prompt inkl. Kontext-Daten),
-    // ohne die API aufzurufen. Kein Preis/Eurobetrag – nur Zeichen- und geschätzte Tokenzahl.
-    function updateAnalysisContextSizeEstimate() {
-      const el = document.getElementById('analyse-context-size');
-      if (!el) return;
-      try {
-        const chars = buildAnalysisSystemPrompt().length;
-        const tokens = Math.round(chars / CHARS_PER_TOKEN_ESTIMATE);
-        el.textContent = `Kontext: ca. ${fmt(chars)} Zeichen, etwa ${fmt(tokens)} Tokens (grobe Schätzung) pro Frage, zuzüglich Gesprächsverlauf`;
-      } catch (e) {
-        el.textContent = 'Kontext: keine Daten';
-      }
-    }
-    window.updateAnalysisContextSizeEstimate = updateAnalysisContextSizeEstimate;
-
-    let analyseMsgCounter = 0;
-    // Leseansicht im normalen Seitenfluss (kein eigener Scroll-Container mehr): Nachrichten werden
-    // per CSS-Klasse gestaltet (.analyse-msg--user/--assistant), nicht mehr per Inline-Flex-Stil.
-    // Text bleibt reiner textContent (kein Markdown, keine innerHTML-Interpretation, siehe Bericht).
-    function appendAnalysisMessage(role, text, isLoading) {
-      const container = document.getElementById('analyse-messages');
-      const hint = document.getElementById('analyse-empty-hint');
-      if (hint) hint.style.display = 'none';
-      const id = 'analyse-msg-' + (++analyseMsgCounter);
-      const isUser = role === 'user';
-      const bubble = document.createElement('div');
-      bubble.id = id;
-      bubble.className = 'analyse-msg ' + (isUser ? 'analyse-msg--user' : 'analyse-msg--assistant');
-      bubble.textContent = isLoading ? '…' : text;
-      container.appendChild(bubble);
-      // Eigene Frage: nach dem Absenden sichtbar. Springt an den Anfang (nicht ans Ende), kein
-      // automatisches Weiterscrollen beim bloßen Tippen (es wird nur hier, beim Anhängen, gescrollt).
-      if (isUser) bubble.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      return id;
-    }
-
-    function updateAnalysisMessage(id, text, icon) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (icon) setIconText(el, icon, text); else el.textContent = text;
-      // Beim Eintreffen der Antwort (oder einer Fehlermeldung) an deren Anfang springen, damit lange
-      // Antworten von oben gelesen werden – kein Springen ans Ende der Leseansicht.
-      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }
-
-    // presetText (Chips) entfällt mit den Chips (A) – sendAnalysisMessage liest nur noch das Feld.
-    window.sendAnalysisMessage = async function() {
-      const input = document.getElementById('analyse-input');
-      const text = (input?.value || '').trim();
-      if (!text) return;
-
-      input.value = '';
-      input.style.height = 'auto';
-      appendAnalysisMessage('user', text);
-      analysisMessages.push({ role: 'user', content: text });
-
-      const loadingId = appendAnalysisMessage('assistant', '', true);
-      analyseRequestInFlight = true;
-      updateAnalyseSendButtonState();
-      // Eingabetext bei Fehlschlag wiederherstellen (D), damit er nicht verloren geht
-      const restoreInputOnFailure = () => {
-        input.value = text;
-        input.style.height = 'auto';
-        input.style.height = input.scrollHeight + 'px';
-      };
-
-      try {
-        const systemPrompt = buildAnalysisSystemPrompt();
-        const data = await callAnthropicProxy({
-          model: 'claude-sonnet-5',
-          max_tokens: 8192,
-          system: systemPrompt,
-          messages: analysisMessages
-        });
-
-        const textBlock = (data.content || []).find(b => b.type === 'text');
-        const answer = textBlock?.text || '(keine Antwort erhalten)';
-        analysisMessages.push({ role: 'assistant', content: answer });
-        updateAnalysisMessage(loadingId, answer);
-      } catch (err) {
-        console.error('Analyse API error:', err);
-        updateAnalysisMessage(loadingId, err.message, 'alertCircle');
-        analysisMessages.pop(); // fehlgeschlagene Anfrage nicht in History behalten
-        restoreInputOnFailure();
-      } finally {
-        analyseRequestInFlight = false;
-        updateAnalyseSendButtonState();
-      }
-    };
-
-
     window.calcMacroSuggestion = function() {
       const weight = parseFloat(document.getElementById('settings-weight')?.value) || settings.weight || 75;
       const tdee = parseInt(document.getElementById('settings-tdee')?.value) || settings.tdee || 2300;
@@ -10340,29 +9832,19 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     };
 
 
-    // ── Google Fit Integration ───────────────────────────────────────────────
-    const FUNCTIONS_BASE = 'https://us-central1-fitness-tracker-c6f97.cloudfunctions.net';
-    const GOOGLE_CLIENT_ID = '187864668697-e4mulna75rvbcqsb2igd0r0ubbk1am46.apps.googleusercontent.com';
+    // ── Google Fit: in der App abgeschaltet (012b, 14.11.2026) ───────────────────────────
+    // Keine googleFitSync-Aufrufe mehr (Start, visibilitychange, Tab-Wechsel, Buttons), keine
+    // Google-Fit-Karte in den Einstellungen. Bestehende gfit_*-Einträge und tageslog-Schritte bleiben in
+    // Firestore unverändert und werden wie bisher angezeigt (Historie, Quelle "Google Fit").
 
-    // ── Automatischer Google-Fit-Sync (Start + Rückkehr aus dem Hintergrund) ──
-    // GFIT_AUTOSYNC_MIN_INTERVAL_MS: Mindestabstand zwischen automatisch ausgelösten Syncs,
-    // unabhängig vom Auslöser (Start, visibilitychange, Tab-Tipp, Button) — nur im Speicher
-    // gemerkt (gfitLastSyncAt), nicht in Firestore persistiert. Einzige Stelle, an der der
-    // Intervall-Wert festgelegt wird.
-    const GFIT_AUTOSYNC_MIN_INTERVAL_MS = 15 * 60 * 1000;
-    let gfitSyncInProgress = false; // true während irgendein Google-Fit-Sync läuft (Tab-Tipp, Button oder Auto)
-    let gfitLastSyncAt = 0; // Zeitpunkt (Date.now()) des letzten gestarteten Syncs, gleich welcher Auslöser
-
-    // Tab-Wechsel (Übersicht/Ernährung/Training): Mindestabstand zwischen zwei Hintergrund-Syncs
-    // inkl. Neuladen der entries, analog GARMIN_AUTOSYNC_MIN_INTERVAL_MS. Zählt ab dem letzten
-    // gestarteten Google-Fit-Sync (gfitLastSyncAt) oder dem letzten Laden der entries (entriesLoadedAt).
-    const GFIT_TAB_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000;
-    // googleFitSync schreibt nur Tage aus [jetzt − 48 h, jetzt] (Berlin-Kalender: heute, gestern,
-    // vorgestern; Sessions mit datum = Starttag, eine über den Fensterbeginn reichende Session kann
-    // einen Tag früher liegen). Deshalb werden nach dem Sync nur entries mit datum >= heute − 3 neu
-    // gelesen statt der ganzen Collection (vorher ~1.250 Reads pro Aufruf).
-    const GFIT_RELOAD_DAYS = 3;
+    // Tab-Wechsel: Mindestabstand zwischen zwei Hintergrund-Reloads der entries (analog
+    // GARMIN_AUTOSYNC_MIN_INTERVAL_MS), gezählt ab dem letzten Laden der entries (entriesLoadedAt).
+    const TAB_RELOAD_MIN_INTERVAL_MS = 5 * 60 * 1000;
+    // Nach einem Tab-Wechsel werden nur entries mit datum >= heute − 3 neu gelesen statt der ganzen
+    // Collection (früher das Fenster des Google-Fit-Syncs, Wert unverändert übernommen).
+    const RECENT_RELOAD_DAYS = 3;
     let entriesLoadedAt = 0; // Date.now() des letzten Lesens der entries (loadAllData oder Fenster-Reload)
+    let tabReloadInProgress = false;
 
     // Liest nur entries mit datum >= sinceStr und ersetzt in trainingEntries genau diesen Bereich;
     // ältere Einträge bleiben unverändert (Stand aus loadAllData). Schritte-Schutz wie bisher.
@@ -10378,77 +9860,28 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       window.trainingEntries = trainingEntries;
       window.dayLogs = dayLogs;
     }
-    function gfitReloadSinceStr() {
-      return new Date(Date.now() - GFIT_RELOAD_DAYS * 24 * 3600 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    function recentReloadSinceStr() {
+      return new Date(Date.now() - RECENT_RELOAD_DAYS * 24 * 3600 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
     }
 
-    // Gemeinsame Sync-Routine für Tab-Wechsel und Auto-Sync: ruft googleFitSync für die letzten
-    // 2 Tage auf und lädt danach nur die entries der abgeglichenen Tage neu (für die Schritte).
-    async function runGfitSync() {
-      const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
-      const endMs = Date.now();
-      const startMs = endMs - (2 * 24 * 3600 * 1000);
-      await syncFn({ startMs, endMs });
-      await reloadRecentTrainingEntries(gfitReloadSinceStr());
-      renderFoodLog(); // Refresh kcal goal
-    }
-
-    // Tab-Wechsel auf Übersicht/Ernährung/Training: höchstens alle GFIT_TAB_SYNC_MIN_INTERVAL_MS.
-    // Mit Google Fit: Sync + Fenster-Reload; ohne Google Fit (nur Training-Tab, wie bisher):
-    // nur Fenster-Reload. Drosselprüfung VOR jedem Firestore-Zugriff.
+    // Tab-Wechsel: nur der Training-Tab lädt (gedrosselt) die entries der letzten Tage neu – genau der
+    // bisherige Pfad "ohne Google Fit". Drosselprüfung VOR jedem Firestore-Zugriff.
     async function tabSyncRecentEntries(target) {
-      if (!userId) return;
-      if (gfitSyncInProgress) return;
-      if (Date.now() - Math.max(gfitLastSyncAt, entriesLoadedAt) < GFIT_TAB_SYNC_MIN_INTERVAL_MS) return;
-      gfitSyncInProgress = true;
+      if (!userId || target !== 'training') return;
+      if (tabReloadInProgress) return;
+      if (Date.now() - entriesLoadedAt < TAB_RELOAD_MIN_INTERVAL_MS) return;
+      tabReloadInProgress = true;
       try {
-        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-        if (gfitSnap.exists()) {
-          gfitLastSyncAt = Date.now();
-          await runGfitSync();
-        } else if (target === 'training') {
-          await reloadRecentTrainingEntries(gfitReloadSinceStr());
-        } else {
-          return;
-        }
-        if (target === 'training') {
-          renderTrainingHistory();
-          renderDashboard();
-          renderFoodLog(); // Übersicht (ggf. im Hintergrund) auf denselben Stand bringen wie der Training-Tab
-        }
+        await reloadRecentTrainingEntries(recentReloadSinceStr());
+        renderTrainingHistory();
+        renderDashboard();
+        renderFoodLog(); // Übersicht (ggf. im Hintergrund) auf denselben Stand bringen wie der Training-Tab
       } catch (e) {
-        console.warn('Tab-Sync (' + target + ') fehlgeschlagen:', e); // Silent fail wie bisher
+        console.warn('Tab-Reload (' + target + ') fehlgeschlagen:', e); // Silent fail wie bisher
       } finally {
-        gfitSyncInProgress = false;
+        tabReloadInProgress = false;
       }
     }
-
-    // Automatischer Sync beim App-Start (nach dem ersten Laden) und bei Rückkehr aus dem Hintergrund.
-    // grund: 'start' oder 'visible', nur für die Konsolen-Meldung bei einem Fehler, kein Toast/Popup.
-    async function autoSyncGoogleFit(grund) {
-      if (!userId || auth.currentUser?.isAnonymous) return; // Gast/nicht angemeldet
-      if (!navigator.onLine) return;
-      if (gfitSyncInProgress) return; // Tab-Tipp, Button oder ein anderer Auto-Sync läuft bereits
-      if (Date.now() - gfitLastSyncAt < GFIT_AUTOSYNC_MIN_INTERVAL_MS) return;
-
-      gfitSyncInProgress = true; // synchron VOR dem ersten await setzen, damit ein gleichzeitiger
-                                  // zweiter Auslöser (z.B. Start + visibilitychange im selben Moment)
-                                  // sofort an der obigen Prüfung abbricht
-      try {
-        const gfitSnap = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-        if (!gfitSnap.exists()) return; // Google Fit nicht verbunden
-        gfitLastSyncAt = Date.now();
-        await runGfitSync();
-      } catch(e) {
-        console.warn('Auto-Sync (' + grund + ') fehlgeschlagen:', e); // kein Toast, App läuft normal weiter
-      } finally {
-        gfitSyncInProgress = false;
-      }
-    }
-    // Rückkehr aus dem Hintergrund: Handler wird nur hier, einmalig, registriert
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') autoSyncGoogleFit('visible');
-    });
 
     // ── Automatischer Garmin-Reload (Rückkehr + periodisch, solange sichtbar, 01.11.2026) ──────
     // Diagnose vom selben Tag: refreshGarminData() lief bisher nur einmal beim Start (in
@@ -10522,124 +9955,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       if (garminLastSyncAt && Date.now() - garminLastSyncAt < GARMIN_RENDER_STALE_MS) return;
       autoSyncGarmin('render-stale');
     }
-
-    async function loadGoogleFitStatus() {
-      try {
-        const gfitDoc = await getDoc(doc(db, 'users', userId, 'integrations', 'googlefit'));
-        if (gfitDoc.exists()) {
-          const data = gfitDoc.data();
-          document.getElementById('gfit-disconnected').style.display = 'none';
-          document.getElementById('gfit-connected').style.display = 'block';
-          if (data.lastSyncAt) {
-            const d = data.lastSyncAt.toDate ? data.lastSyncAt.toDate() : new Date(data.lastSyncAt);
-            document.getElementById('gfit-last-sync').textContent =
-              'Letzter Sync: ' + d.toLocaleDateString('de-DE') + ' ' +
-              d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) +
-              (data.lastSyncSteps ? ' · ' + data.lastSyncSteps + ' Tage Schritte' : '') +
-              (data.lastSyncActivities ? ' · ' + data.lastSyncActivities + ' Aktivitäten' : '');
-          }
-        } else {
-          document.getElementById('gfit-disconnected').style.display = 'block';
-          document.getElementById('gfit-connected').style.display = 'none';
-        }
-      } catch(e) { console.warn('Google Fit status error:', e); }
-    }
-
-    window.connectGoogleFit = function() {
-      const redirectUri = encodeURIComponent(FUNCTIONS_BASE + '/googleFitCallback');
-      const scope = encodeURIComponent([
-        'https://www.googleapis.com/auth/fitness.activity.read',
-        'https://www.googleapis.com/auth/fitness.body.read',
-        'https://www.googleapis.com/auth/fitness.location.read'
-      ].join(' '));
-      const url = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + GOOGLE_CLIENT_ID +
-        '&response_type=code&redirect_uri=' + redirectUri +
-        '&scope=' + scope + '&access_type=offline&prompt=consent&state=' + userId;
-
-      const popup = window.open(url, 'gfit_auth', 'width=600,height=700');
-      window.addEventListener('message', async function handler(e) {
-        if (e.data?.type === 'googlefit_connected') {
-          window.removeEventListener('message', handler);
-          popup?.close();
-          await loadGoogleFitStatus();
-          await loadAllData();
-          showToast('Google Fit verbunden!', 'ok');
-        }
-      });
-    };
-
-    window.syncGoogleFit = async function(fullSync = false) {
-      gfitSyncInProgress = true; // gemeinsamer Schutz mit Tab-Tipp-Sync und Auto-Sync
-      try {
-      const syncFn = httpsCallable(fbFunctions, 'googleFitSync');
-
-      if (!fullSync) {
-        // Neue Daten: letzte 7 Tage
-        showToast('Google Fit wird synchronisiert...', 'wait');
-        try {
-          const endMs = Date.now();
-          const startMs = endMs - (7 * 24 * 3600 * 1000);
-          const result = await syncFn({ startMs, endMs });
-          showToast((result.data.steps || 0) + ' Tage Schritte, ' + (result.data.activities || 0) + ' Aktivitäten importiert', 'ok');
-        } catch(e) {
-          console.error('Google Fit sync error:', e);
-          showToast('Sync fehlgeschlagen: ' + e.message, 'bad');
-          return;
-        }
-      } else {
-        // Alles neu laden: 180 Tage in 30-Tage-Batches
-        const BATCH_DAYS = 30;
-        const totalDays = 180;
-        const batches = totalDays / BATCH_DAYS;
-        let totalSteps = 0, totalActivities = 0;
-
-        for (let i = 0; i < batches; i++) {
-          const endMs = Date.now() - (i * BATCH_DAYS * 24 * 3600 * 1000);
-          const startMs = endMs - (BATCH_DAYS * 24 * 3600 * 1000);
-          showToast('Lade Batch ' + (i + 1) + '/' + batches + '...', 'wait');
-          try {
-            const result = await syncFn({ startMs, endMs });
-            totalSteps += result.data.steps || 0;
-            totalActivities += result.data.activities || 0;
-          } catch(e) {
-            console.warn('Batch ' + (i+1) + ' übersprungen:', e.message);
-            // Weiter mit nächstem Batch statt abbrechen
-          }
-        }
-        showToast(totalSteps + ' Tage Schritte, ' + totalActivities + ' Aktivitäten importiert', 'ok');
-      }
-
-      // Entries neu laden
-      const snap = await getDocs(userTrainingCol());
-      const freshEntries = [];
-      snap.forEach(d => freshEntries.push(d.data()));
-      trainingEntries = mergeTrainingEntriesPreservingSteps(freshEntries, trainingEntries);
-      dayLogs = trainingEntries.filter(e => e.typ === 'tageslog');
-      window.trainingEntries = trainingEntries;
-      window.dayLogs = dayLogs;
-      renderTrainingHistory();
-      renderDashboard();
-      renderFoodLog(); // Übersicht auf denselben Stand bringen wie der Training-Tab
-      await loadGoogleFitStatus();
-      gfitLastSyncAt = Date.now();
-      } finally {
-        gfitSyncInProgress = false;
-      }
-    };
-
-    window.disconnectGoogleFit = async function() {
-      if (!await showConfirm('Google Fit trennen?', 'Die Verbindung wird getrennt. Bestehende Daten bleiben erhalten.', 'unlink', 'Trennen')) return;
-      try {
-        const disconnectFn = httpsCallable(fbFunctions, 'googleFitDisconnect');
-        await disconnectFn();
-        document.getElementById('gfit-disconnected').style.display = 'block';
-        document.getElementById('gfit-connected').style.display = 'none';
-        showToast('Google Fit getrennt', 'ok');
-      } catch(e) {
-        showToast('Fehler: ' + e.message, 'bad');
-      }
-    };
-
 
     // ── Oura Ring Integration ────────────────────────────────────────────────
     // OAuth-Flow läuft komplett serverseitig in Cloud Functions (europe-west1) –
@@ -10977,38 +10292,6 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     function zirkelExerciseLabelFor(typ, variant) {
       return (planTypLabel(typ) + ' ' + (variant || '')).trim();
-    }
-
-    // Anzeigename einer Übung, normalisiert über alle Quellen hinweg (Zirkel-details, manuelle Halte-
-    // Einträge) – für die Analyse-Tab-Auswertung pro Übung (Teil 3.2). Die frühere Zuordnung alter
-    // typ:'kraft'+Freitext-Varianten (zirkelLegacyVariantTyp/ZIRKEL_VARIANT_TYP_MAP) wurde entfernt, siehe
-    // ID-Bereinigung 30.10.2026 Teil 1.4: 0 Zirkel-Einträge mit typ:'kraft' hingen real noch davon ab.
-    function zirkelNormalizedExerciseLabel(typ, variant) {
-      const v = String(variant || '').trim();
-      return planTypLabel(typ) + (v ? ' · ' + v : '');
-    }
-
-    // Detail-Zeilen (eines Zirkel-Eintrags) zu einer Zeile je Übung zusammenfassen: Ø Wert pro Runde
-    // (Sekunden bei mode 'time', Wdh. bei 'reps'; bei perSide+time werden beide Seiten je Runde addiert),
-    // Anzahl Runden, je Seite ja/nein. Gruppiert über den normalisierten Namen, nicht über typ/variant
-    // direkt, damit alte typ:'kraft'-Varianten mit derselben Trainingsart zusammenfallen.
-    function zirkelExerciseSummaryRows(details) {
-      const groups = new Map();
-      details.forEach(h => {
-        const label = zirkelNormalizedExerciseLabel(h.typ, h.variant);
-        const key = label + '|' + h.mode;
-        if (!groups.has(key)) groups.set(key, { label, mode: h.mode, perSide: false, roundSec: new Map(), wdhs: [] });
-        const g = groups.get(key);
-        if (h.perSide || h.side) g.perSide = true;
-        g.roundSec.set(h.round, (g.roundSec.get(h.round) || 0) + h.sec);
-        if (h.mode === 'reps') g.wdhs.push(h.wdh);
-      });
-      return [...groups.values()].map(g => {
-        const roundSecs = [...g.roundSec.values()];
-        const avgSec = roundSecs.length ? Math.round(roundSecs.reduce((a, b) => a + b, 0) / roundSecs.length) : 0;
-        const avgWdh = g.wdhs.length ? Math.round(g.wdhs.reduce((a, b) => a + b, 0) / g.wdhs.length) : 0;
-        return { label: g.label, mode: g.mode, perSide: g.perSide, avgSec, avgWdh, rounds: g.roundSec.size };
-      });
     }
 
     // Klasse/perSide einer Trainingsart: zentrale Übungseinstellungen (exerciseSettings), sonst (nur für

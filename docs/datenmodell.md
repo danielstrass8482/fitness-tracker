@@ -650,7 +650,7 @@ App selbst mit ihrer eigenen Berechnungslogik geschrieben (`buildDailySnapshotPa
 `index.html`) – ersetzt NICHT die Formeln in der Analyse-DB, liefert nur deren Ergebnis:
 `date`, `appBuild`, `computedAt` (Server-Timestamp), `final`, `backfilled`,
 `kcalGoal: {base, activity, daily, total}` (aus `calcHistoricalKcalGoal`),
-`steps: {raw, activitySteps, display, source}`, `activities: [{id, typ, dauerMin,
+`steps: {raw, activitySteps, display, source}` (`source`: `garmin`, `googlefit`; ab 012b/15.11.2026 zusätzlich `oura` = Rückfall auf `oura_daily.steps` ohne Garmin-Tageswert, `none` = keine Daten, `raw` 0), `activities: [{id, typ, dauerMin,
 kcalGezaehlt, formel?, garminNetto?, covered?}]` (je Trainingseintrag; `formel`/`garminNetto` nur bei
 verknüpftem Zirkel, siehe `zirkelPulseBreakdown`; `covered:true` ab 004b/07.11.2026 bei einer durch
 eine Plan-Einzelübung abgedeckten unverknüpften Garmin-Kraft-Einheit, `kcalGezaehlt` dann 0), `intake: {kcal, protein, carbs, fat}`

@@ -319,7 +319,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 | `integrations/garminHealth` | `ok` (bool), `checkedAt` (timestamp), `reason`, `staleSince` (null) | – |
 | `integrations/garminParity` | `days` (array), `computedAt` (timestamp) | – |
 | `integrations/garminStatus` | `lastDate`, `lastGarminSync` (string), `lastSteps` (number), `lastIngestAt` (timestamp) | – |
-| `oura_tokens/{uid}` (Top-Level) | `accessToken`, `refreshToken` (string), `expiresAt` (number), `connectedAt` (timestamp) | **`accessToken`, `refreshToken`** |
+| `oura_tokens/{uid}` (Top-Level) | `accessToken`, `refreshToken` (string), `expiresAt` (number), `connectedAt` (timestamp); `refreshLockUntil` (number, additiv seit 14) – Zeitstempel bis zu dem ein Token-Refresh läuft (Mutex gegen parallele Oura-Refreshes aus `syncOura`/`syncOuraMorning`/`syncOuraManual`), wird nach jedem Refresh (Erfolg oder Fehler) wieder gelöscht | **`accessToken`, `refreshToken`** |
 
 Hinweis: Die Existenz-Queries liefen über die automatischen Einzelfeld-Indizes. Diese Secret-Felder
 sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.

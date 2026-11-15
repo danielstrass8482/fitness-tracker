@@ -307,7 +307,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 
 | Dokument | Felder (Typ) | Secret-Felder |
 |---|---|---|
-| `settings/main` | `activityLevel`, `age`, `assumedDailySteps`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`) | – |
+| `settings/main` | `activityLevel`, `age`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`); `assumedDailySteps` ungenutzt seit 012d (15.11.2026, Platzhalter "Angenommene Alltagsschritte" entfernt) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht | – |
 | `settings/favorites` | `ids` (array) | – |
 | `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName`, `lastDriveBackupAttempt` (ISO-Zeitstempel, seit 04.11.2026), `lastDriveBackupError` (Kurztext oder null, seit 04.11.2026) (string) | – (Drive-Referenzen; Auto-Backup nur wenn letzter Versuch > 24 h) |
 | `settings/exercises` | 11 Übungsschlüssel (`pullups`, `pushups`, `lunges`, `terraband_knie`, `custom_*`) je map | – |

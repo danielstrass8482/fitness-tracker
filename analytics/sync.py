@@ -212,23 +212,61 @@ def sync_collection(conn: psycopg.Connection, collection: str, table: str, mode:
     }
 
 
+def record_sync_run(mode: str, days: int, started_at: datetime, finished_at: datetime,
+                     rows_by_table: dict, ok: bool) -> None:
+    """Protokolliert JEDEN Lauf (erfolgreich UND fehlgeschlagen) in raw.sync_runs (016 Teil C) -
+    nicht nur erfolgreiche: der Analytics-Sync-Alarm (siehe MCP /status) braucht sowohl den
+    letzten ERFOLGREICHEN Lauf (26h/days>=7-Schwelle) als auch den letzten Lauf UEBERHAUPT (2h-
+    Schwelle tagsueber, erkennt einen komplett ausgefallenen Cron/Prozess). Eigene Verbindung,
+    unabhaengig von der Haupt-Transaktion in run() - ein fehlgeschlagener Sync (z. B. Firestore-
+    Fehler vor jedem Commit) kann so trotzdem noch eine Fehlerzeile schreiben. Fehler beim
+    Schreiben dieser Protokollzeile selbst werden nur geloggt, nie weitergeworfen (Migration 010
+    muss existieren, siehe analytics/migrations/010_sync_runs.sql).
+    """
+    try:
+        with psycopg.connect(DB_CONNINFO) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO raw.sync_runs (started_at, finished_at, mode, days, rows, ok)
+                    VALUES (%(started_at)s, %(finished_at)s, %(mode)s, %(days)s, %(rows)s, %(ok)s)
+                    """,
+                    {
+                        "started_at": started_at, "finished_at": finished_at, "mode": mode,
+                        "days": days if mode == "window" else None,
+                        "rows": json.dumps(rows_by_table), "ok": ok,
+                    },
+                )
+    except Exception as e:
+        log.error("raw.sync_runs konnte nicht geschrieben werden: %s", e)
+
+
 def run(mode: str, days: int) -> int:
     secret = read_secret()
     results = []
-    with psycopg.connect(DB_CONNINFO) as conn:
-        for collection, table, supports_window in COLLECTIONS:
-            if mode == "window" and not supports_window:
-                continue  # Collections ohne Datumsfeld nur im woechentlichen full-Lauf
-            try:
-                r = sync_collection(conn, collection, table, mode, secret, days)
-                results.append(r)
-                log.info(
-                    "OK %-20s mode=%-6s docs=%-6d reads=%-6d deleted=%-4d dauer=%.1fs",
-                    r["collection"], r["mode"], r["docs"], r["reads"], r["deleted"], r["duration_sec"],
-                )
-            except Exception as e:
-                log.error("FEHLER bei %s: %s", collection, e)
-                raise
+    started_at = datetime.now(timezone.utc)
+    ok = True
+    try:
+        with psycopg.connect(DB_CONNINFO) as conn:
+            for collection, table, supports_window in COLLECTIONS:
+                if mode == "window" and not supports_window:
+                    continue  # Collections ohne Datumsfeld nur im woechentlichen full-Lauf
+                try:
+                    r = sync_collection(conn, collection, table, mode, secret, days)
+                    results.append(r)
+                    log.info(
+                        "OK %-20s mode=%-6s docs=%-6d reads=%-6d deleted=%-4d dauer=%.1fs",
+                        r["collection"], r["mode"], r["docs"], r["reads"], r["deleted"], r["duration_sec"],
+                    )
+                except Exception as e:
+                    log.error("FEHLER bei %s: %s", collection, e)
+                    raise
+    except Exception:
+        ok = False
+        raise
+    finally:
+        record_sync_run(mode, days, started_at, datetime.now(timezone.utc),
+                         {r["table"]: r["docs"] for r in results}, ok)
 
     total_docs = sum(r["docs"] for r in results)
     total_reads = sum(r["reads"] for r in results)

@@ -219,6 +219,22 @@ CREATE TABLE IF NOT EXISTS raw.garmin_hidden (
   deleted_at timestamptz
 );
 
+-- Lauf-Protokoll von sync.py selbst (Betriebsdaten, keine Fuelofit-Fachdaten; Migration 010,
+-- Aufgabe 016 Teil C) - jeder Lauf, erfolgreich UND fehlgeschlagen, siehe record_sync_run in
+-- sync.py und migrations/010_sync_runs.sql fuer die Begruendung.
+CREATE TABLE IF NOT EXISTS raw.sync_runs (
+  id          bigserial PRIMARY KEY,
+  started_at  timestamptz NOT NULL,
+  finished_at timestamptz NOT NULL,
+  mode        text NOT NULL CHECK (mode IN ('window', 'full')),
+  days        integer,
+  rows        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ok          boolean NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sync_runs_mode_finished_idx ON raw.sync_runs (mode, finished_at DESC);
+CREATE INDEX IF NOT EXISTS sync_runs_finished_idx ON raw.sync_runs (finished_at DESC);
+
 -- ===== Rechte: fuelofit_sync schreibt raw.*, fuelofit_ro liest NUR views.* =====
 -- views.* gehoeren dem ausfuehrenden Superuser und laufen mit Owner-Rechten (kein
 -- security_invoker), fuelofit_ro braucht daher keinen Zugriff auf raw (008b/008b3).
@@ -507,3 +523,39 @@ WHERE alkohol = 'ja'
 GROUP BY day;
 
 GRANT SELECT ON views.alkohol_tage TO fuelofit_ro;
+
+-- 7) Sync-Status: letzter erfolgreicher Lauf je mode + letzter Lauf ueberhaupt (Migration 010,
+-- Aufgabe 016 Teil C - Betriebsdaten des Sync-Jobs, nicht Fuelofit-Fachdaten). Schwellen
+-- (26h/2h/days>=7) wertet der MCP-/status-Endpunkt aus, nicht diese View.
+CREATE OR REPLACE VIEW views.sync_status AS
+WITH last_any AS (
+  SELECT DISTINCT ON (mode) mode, finished_at AS last_run_at, ok AS last_run_ok
+  FROM raw.sync_runs
+  ORDER BY mode, finished_at DESC
+),
+last_success AS (
+  SELECT mode, max(finished_at) AS last_success_at, max(days) AS last_success_days
+  FROM raw.sync_runs
+  WHERE ok
+  GROUP BY mode
+)
+SELECT
+  a.mode,
+  s.last_success_at,
+  s.last_success_days,
+  a.last_run_at,
+  NOT a.last_run_ok AS last_run_failed
+FROM last_any a
+LEFT JOIN last_success s ON s.mode = a.mode;
+
+GRANT SELECT ON views.sync_status TO fuelofit_ro;
+
+-- Einzeilige Ergaenzung zu views.sync_status: "big sync"-Schwelle ueber beide modes hinweg
+-- (Fenster-Lauf mit days>=7 ODER Voll-Lauf), siehe migrations/010_sync_runs.sql.
+CREATE OR REPLACE VIEW views.sync_health AS
+SELECT
+  (SELECT max(finished_at) FROM raw.sync_runs
+    WHERE ok AND (mode = 'full' OR (mode = 'window' AND days >= 7))) AS last_big_success_at,
+  (SELECT max(finished_at) FROM raw.sync_runs) AS last_run_at;
+
+GRANT SELECT ON views.sync_health TO fuelofit_ro;

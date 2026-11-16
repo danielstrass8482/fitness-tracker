@@ -79,11 +79,15 @@ log = logging.getLogger("analytics_sync")
 
 
 def setup_logging():
+    # NUR die Datei (016 Teil D, 16.11.2026): cron leitet stdout zusaetzlich nach cron.out um
+    # (siehe Crontab) - mit einem StreamHandler stand jede Zeile doppelt da (sync.log UND
+    # cron.out). Ein nicht abgefangener Absturz vor/ausserhalb des logging-Setups (z. B. Syntax-/
+    # Importfehler) landet trotzdem weiter in cron.out, weil Python Tracebacks auf stderr
+    # schreibt und cron `2>&1` auch stderr mit umleitet.
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     handler = logging.FileHandler(LOG_FILE)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     log.addHandler(handler)
-    log.addHandler(logging.StreamHandler(sys.stdout))
     log.setLevel(logging.INFO)
 
 

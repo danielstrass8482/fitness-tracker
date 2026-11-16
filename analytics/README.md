@@ -36,9 +36,11 @@ zu (gilt fuer alle Rollen inkl. der trading_bot-Rolle) -- keine zusaetzliche Zei
 
 ## Sync-Zeiten (Crontab von `fuelofit-analytics`)
 
-Der installierte Debian-`cron` (3.0pl1) kennt `CRON_TZ` nicht (die Zeile steht noch in der
-Crontab, ist aber wirkungslos); die VPS-Systemzeit ist UTC. Die Zeiten der beiden alten Jobs sind
-deshalb **UTC** (008c belegt, bewusst so belassen).
+Der installierte Debian-`cron` (3.0pl1) kennt `CRON_TZ` nicht; die VPS-Systemzeit ist UTC. Die
+Zeiten der beiden alten Jobs sind deshalb **UTC** (008c belegt, bewusst so belassen). Die
+wirkungslose `CRON_TZ=Europe/Berlin`-Zeile selbst wurde am 16.11.2026 aus der Crontab entfernt
+(Aufgabe 016 Teil D, reine Aufräumarbeit ohne Zeitänderung - Backup unter
+`/home/fuelofit-analytics/app/crontab.bak-20261116`).
 
 | Zeit | Modus | Was |
 |---|---|---|

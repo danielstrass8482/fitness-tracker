@@ -12,6 +12,19 @@ function ensureStore() {
   return window.__TEST_STORE__;
 }
 
+// Künstliche Latenz je Lesezugriff (Aufgabe 016, S4 Stufe 1) - opt-in über
+// window.__TEST_LATENCY_MS__ (Default 0, bestehende Tests unverändert). window.__TEST_INFLIGHT__/
+// __TEST_MAX_INFLIGHT__ zählen gleichzeitig offene Reads mit, als Beleg für echte Parallelität
+// (nicht nur zufällig kurze Gesamtzeit).
+async function simulateReadLatency() {
+  const ms = window.__TEST_LATENCY_MS__ || 0;
+  if (!ms) return;
+  window.__TEST_INFLIGHT__ = (window.__TEST_INFLIGHT__ || 0) + 1;
+  window.__TEST_MAX_INFLIGHT__ = Math.max(window.__TEST_MAX_INFLIGHT__ || 0, window.__TEST_INFLIGHT__);
+  await new Promise(r => setTimeout(r, ms));
+  window.__TEST_INFLIGHT__--;
+}
+
 // ── App ──────────────────────────────────────────────────────────────────
 export function initializeApp(config) { return { __fakeApp: true, config }; }
 
@@ -72,6 +85,7 @@ function applyConstraints(rows, constraints) {
 }
 
 export async function getDocs(ref) {
+  await simulateReadLatency();
   const store = ensureStore();
   const rows = applyConstraints(store[ref.path] || [], ref.constraints);
   return {
@@ -83,6 +97,7 @@ export async function getDocs(ref) {
 }
 
 export async function getDoc(ref) {
+  await simulateReadLatency();
   const store = ensureStore();
   const segs = ref.path.split('/');
   const id = segs.pop();

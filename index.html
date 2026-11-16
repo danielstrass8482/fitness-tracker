@@ -2212,7 +2212,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-16 11:34';
+    const APP_BUILD = '2026-11-16 12:52';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2379,38 +2379,42 @@
     // (garminDaily max. 1 Dok./Tag, garminActivities wenige/Woche, garminHidden nur manuell
     // befüllt) – deshalb ohne Datums-Cutoff, anders als die 365-Tage-Grenze bei entries/logEntries.
     async function refreshGarminData() {
-      const dailySnap = await getDocs(userGarminDailyCol());
+      // S4 Stufe 1 (16.11.2026, Aufgabe 016): die vier Collections (garminDaily, garminActivities,
+      // garminHidden, garminLinks) sind unabhängig voneinander, nur die ciqSteps-Tagesdoc-Abfrage
+      // hat ihre eigene Fehlerbehandlung - alle fünf parallel statt nacheinander. Die Berechnung von
+      // garminActivityCutoff hängt zwar vom Ergebnis von actSnap ab, ist aber reine Verarbeitung
+      // NACH dem await, keine zusätzliche Abfrage - unverändert.
+      const ciqDateStr = berlinTodayStr(); // heutiger Tag ZUM ZEITPUNKT DIESES LESENS, siehe ciqStepsForDate
+      const [dailySnap, actSnap, hiddenSnap, linksSnap, ciqSnap] = await Promise.all([
+        getDocs(userGarminDailyCol()),
+        getDocs(userGarminActivitiesCol()),
+        getDocs(userGarminHiddenCol()),
+        getDocs(userGarminLinksCol()),
+        getDoc(userCiqStepsDoc(ciqDateStr)).catch(e => { console.warn('ciqSteps load error:', e); return null; }), // bei Fehler: ignorieren, fällt auf garminDaily/Google Fit zurück
+      ]);
+
       const nextDaily = {};
       dailySnap.forEach(d => { nextDaily[d.id] = d.data(); });
       garminDailyByDate = nextDaily;
       window.garminDailyByDate = garminDailyByDate;
 
-      const actSnap = await getDocs(userGarminActivitiesCol());
       const nextActivities = [];
       actSnap.forEach(d => nextActivities.push({ id: d.id, ...d.data() }));
       garminActivitiesAll = nextActivities;
       window.garminActivitiesAll = garminActivitiesAll;
       garminActivityCutoff = computeGarminActivityCutoff(garminActivitiesAll);
 
-      const hiddenSnap = await getDocs(userGarminHiddenCol());
       const nextHidden = new Set();
       hiddenSnap.forEach(d => nextHidden.add(d.id));
       garminHiddenIds = nextHidden;
       window.garminHiddenIds = garminHiddenIds;
 
-      const linksSnap = await getDocs(userGarminLinksCol());
       const nextUnlinked = new Set();
       linksSnap.forEach(d => { if (d.data()?.unlinked) nextUnlinked.add(d.id); });
       garminUnlinkedIds = nextUnlinked;
       window.garminUnlinkedIds = garminUnlinkedIds;
 
-      // ciqSteps/{heute} (R6: im selben Zyklus wie oben, nur das eine Tagesdokument). date = der
-      // heutige Tag ZUM ZEITPUNKT DIESES LESENS - siehe ciqStepsForDate für den Mitternachtsfall.
-      const ciqDateStr = berlinTodayStr();
-      try {
-        const ciqSnap = await getDoc(userCiqStepsDoc(ciqDateStr));
-        ciqStepsToday = ciqSnap.exists() ? { date: ciqDateStr, steps: ciqSnap.data().steps || 0, receivedAt: ciqSnap.data().receivedAt } : null;
-      } catch (e) { console.warn('ciqSteps load error:', e); ciqStepsToday = null; } // bei Fehler: ignorieren, fällt auf garminDaily/Google Fit zurück
+      ciqStepsToday = (ciqSnap && ciqSnap.exists()) ? { date: ciqDateStr, steps: ciqSnap.data().steps || 0, receivedAt: ciqSnap.data().receivedAt } : null;
       window.ciqStepsToday = ciqStepsToday;
     }
 
@@ -2980,8 +2984,83 @@
       if (!backgroundSync) showToast('Lade Daten...', 'wait');
 
       try {
-        // Load Foods
-        const foodSnap = await getDocs(userFoodCol());
+        // Load last 365 days of diary entries
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 365);
+        const cutoffStr = localDateStr(cutoff);
+
+        // S4 Stufe 1 (16.11.2026, Aufgabe 016): alle Abfragen unten sind voneinander unabhängig
+        // (greifen auf getrennte Collections/Dokumente zu, keine liest ein Zwischenergebnis einer
+        // anderen - siehe Bericht 016 für die Abhängigkeitsanalyse) und laufen deshalb per
+        // Promise.all parallel statt nacheinander. Einzige echte Kette: loadCustomTypes ->
+        // ensureZirkelExerciseCatalog -> loadExerciseSettings (letztere braucht die custom_-IDs aus
+        // den ersten beiden, siehe Kommentar bei ZIRKEL_EXERCISE_SETTINGS_SEED) - bleibt als eigene
+        // sequentielle Kette erhalten, läuft aber parallel zu den übrigen Aufgaben. Leseanzahl pro
+        // Start ändert sich dadurch NICHT (Stufe 2 ist Aufgabe 019).
+        const exerciseCatalogChain = (async () => {
+          try { await loadCustomTypes(); } catch (e) { console.error('loadCustomTypes fehlgeschlagen:', e); }
+          try { await ensureZirkelExerciseCatalog(); } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
+          try { await loadExerciseSettings(); } catch (e) { console.error('loadExerciseSettings fehlgeschlagen:', e); }
+        })();
+
+        const subjectiveStatusTask = (async () => {
+          try { await loadSubjectiveStatusHistory(); } catch (e) { console.error('loadSubjectiveStatusHistory fehlgeschlagen:', e); }
+        })();
+
+        // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
+        const intervalTemplatesTask = (async () => {
+          try { await loadIntervalTemplates(); } catch(e) { console.warn('Interval templates load error:', e); }
+        })();
+
+        // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
+        const ouraTask = (async () => {
+          try { await refreshOuraDaily(); } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
+        })();
+
+        // Load Garmin (Phase 1b, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
+        // Nur laden, wenn weder schon ein Sync läuft noch bereits einer gelaufen ist (002c): pageshow
+        // feuert laut Spec bei JEDEM Laden, auch beim allerersten - während der await-Kette oben
+        // (u.a. IndexedDB-Zugriffe) kann das Ereignis schon vor dieser Stelle einen eigenen
+        // autoSyncGarmin-Lauf gestartet oder beendet haben. Prüfung+Setzen in einem synchronen
+        // Schritt (kein await dazwischen) - kein doppelter Reload, siehe Playwright-Beleg im Bericht.
+        const garminTask = (async () => {
+          if (!garminAutoSyncInProgress && garminLastSyncAt === 0) {
+            garminAutoSyncInProgress = true;
+            try {
+              await refreshGarminData();
+              garminLastSyncAt = Date.now(); // zählt für die 5-Minuten-Drosselung des Auto-Reloads mit (siehe autoSyncGarmin)
+            } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
+            finally { garminAutoSyncInProgress = false; }
+          }
+        })();
+
+        const [foodSnap, recipeSnap, , diarySnap, trainingSnap, favSnap] = await Promise.all([
+          // Load Foods
+          getDocs(userFoodCol()),
+          // Load Recipes
+          getDocs(userRecipeCol()),
+          // Load settings
+          loadSettings(),
+          // Eine Abfrage über 'date' (04.11.2026): Count-Prüfung ergab, dass ALLE logEntries 'date'
+          // tragen (31.354 von 31.354) und pro Tag datum ⊆ date gilt. Die frühere zweite Abfrage über
+          // 'datum' lieferte nur Dokumente, die diese Abfrage ohnehin enthält (≈10.000 Reads pro Start
+          // gespart). Neue Einträge müssen deshalb weiterhin 'date' UND 'datum' schreiben.
+          getDocs(query(userLogCol(), where('date', '>=', cutoffStr))),
+          // Load Training (last 365 days)
+          getDocs(query(userTrainingCol(), where('datum', '>=', cutoffStr))),
+          // Load Favorites
+          getDoc(doc(db, 'users', userId, 'settings', 'favorites')),
+          // Eigene Trainingsarten/Übungskatalog/Übungseinstellungen (Kette, siehe oben)
+          exerciseCatalogChain,
+          subjectiveStatusTask,
+          intervalTemplatesTask,
+          ouraTask,
+          garminTask,
+          // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
+          // bereits try/catch-geschützt (fällt auf settings/trainingplan zurück), kann nicht mehr werfen
+          loadCurrentTrainingPlan(),
+        ]);
+
         foodDB = [];
         foodSnap.forEach(d => {
           const data = d.data();
@@ -2989,9 +3068,7 @@
           foodDB.push(data);
         });
         window.foodDB = foodDB;
-        
-        // Load Recipes
-        const recipeSnap = await getDocs(userRecipeCol());
+
         recipes = [];
         recipeSnap.forEach(d => {
           const data = d.data();
@@ -3000,19 +3077,6 @@
         });
         window.recipes = recipes;
 
-        // Load settings first (needed for detailDays)
-        await loadSettings();
-
-        // Load last 365 days of diary entries
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 365);
-        const cutoffStr = localDateStr(cutoff);
-
-        // Eine Abfrage über 'date' (04.11.2026): Count-Prüfung ergab, dass ALLE logEntries 'date'
-        // tragen (31.354 von 31.354) und pro Tag datum ⊆ date gilt. Die frühere zweite Abfrage über
-        // 'datum' lieferte nur Dokumente, die diese Abfrage ohnehin enthält (≈10.000 Reads pro Start
-        // gespart). Neue Einträge müssen deshalb weiterhin 'date' UND 'datum' schreiben.
-        const diarySnap = await getDocs(query(userLogCol(), where('date', '>=', cutoffStr)));
         foodLog = {};
         diarySnap.forEach(d => {
           const entry = d.data();
@@ -3023,8 +3087,6 @@
         });
         window.foodLog = foodLog;
 
-        // Load Training (last 365 days)
-        const trainingSnap = await getDocs(query(userTrainingCol(), where('datum', '>=', cutoffStr)));
         const freshTrainingEntries = [];
         trainingSnap.forEach(d => freshTrainingEntries.push(d.data()));
         trainingEntries = mergeTrainingEntriesPreservingSteps(freshTrainingEntries, trainingEntries);
@@ -3033,52 +3095,9 @@
         window.dayLogs = dayLogs;
         entriesLoadedAt = Date.now(); // zählt für die Tab-Wechsel-Drosselung (siehe tabSyncRecentEntries)
 
-        // Load Favorites
-        const favSnap = await getDoc(doc(db, 'users', userId, 'settings', 'favorites'));
         if (favSnap.exists()) {
           favorites = new Set(favSnap.data().ids || []);
         }
-
-        // Eigene Trainingsarten (Anzeigenamen) für alle Tabs laden. Einzeln try/catch (wie die
-        // Aufrufe unten): trainingEntries/foodLog sind an dieser Stelle bereits geladen – ein
-        // Fehler hier darf saveToCache()/renderAll() am Ende nicht mehr verhindern, sonst bleibt
-        // z.B. die Übersicht (die nur über renderAll() hierhin aktualisiert wird, siehe
-        // showTabPanel(START_TAB)) stillschweigend auf dem alten Cache-Stand stehen.
-        try { await loadCustomTypes(); } catch (e) { console.error('loadCustomTypes fehlgeschlagen:', e); }
-        // Pflicht-Übungen für den Zirkel ergänzen (nur fehlende, siehe ensureZirkelExerciseCatalog),
-        // dann die zentralen Übungseinstellungen laden/erstmalig vorbelegen
-        try { await ensureZirkelExerciseCatalog(); } catch (e) { console.warn('Übungskatalog ergänzen fehlgeschlagen:', e); }
-        try { await loadExerciseSettings(); } catch (e) { console.error('loadExerciseSettings fehlgeschlagen:', e); }
-        try { await loadSubjectiveStatusHistory(); } catch (e) { console.error('loadSubjectiveStatusHistory fehlgeschlagen:', e); }
-
-        // Intervall-Zirkel-Vorlagen (Fehler dürfen den restlichen Load nicht stoppen, Cache-Stand bleibt)
-        try {
-          await loadIntervalTemplates();
-        } catch(e) { console.warn('Interval templates load error:', e); }
-
-        // Load Oura Daily (Anzeige-Cache, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
-        try {
-          await refreshOuraDaily();
-        } catch(e) { console.warn('Oura daily load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
-
-        // Load Garmin (Phase 1b, read-only – Fehler hier dürfen den restlichen Load nicht stoppen)
-        // Nur laden, wenn weder schon ein Sync läuft noch bereits einer gelaufen ist (002c): pageshow
-        // feuert laut Spec bei JEDEM Laden, auch beim allerersten - während der await-Kette oben
-        // (u.a. IndexedDB-Zugriffe) kann das Ereignis schon vor dieser Stelle einen eigenen
-        // autoSyncGarmin-Lauf gestartet oder beendet haben. Prüfung+Setzen in einem synchronen
-        // Schritt (kein await dazwischen) - kein doppelter Reload, siehe Playwright-Beleg im Bericht.
-        if (!garminAutoSyncInProgress && garminLastSyncAt === 0) {
-          garminAutoSyncInProgress = true;
-          try {
-            await refreshGarminData();
-            garminLastSyncAt = Date.now(); // zählt für die 5-Minuten-Drosselung des Auto-Reloads mit (siehe autoSyncGarmin)
-          } catch(e) { console.warn('Garmin load error:', e); } // bei Fehler bleibt der Cache-Stand stehen
-          finally { garminAutoSyncInProgress = false; }
-        }
-
-        // Load Trainingsplan (aktuelle Version, ggf. Migration aus settings/trainingplan) – intern
-        // bereits try/catch-geschützt (fällt auf settings/trainingplan zurück), kann nicht mehr werfen
-        await loadCurrentTrainingPlan();
 
         console.log(`Loaded: ${foodDB.length} foods, ${recipes.length} recipes, ${Object.keys(foodLog).length} days, ${trainingEntries.length} trainings`);
         if (backgroundSync) showToast(`Synchronisiert`, 'ok');

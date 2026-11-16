@@ -716,6 +716,7 @@ Fundstelle einer `samples`-Collection ist der Schreibzugriff in `ingestCiqSteps`
 Additive Felder (ab Deploy 16.11.2026, nur neu geschriebene Dokumente, Altbestand ohne
 `expireAt` wird von der TTL-Richtlinie nicht erfasst):
 - `ciqSteps/{date}/samples.expireAt` (timestamp) = Schreibzeitpunkt + 30 Tage.
+  Bestand am 16.11.2026 nachgetragen (016c), 3.955 Dokumente (`expireAt` = `receivedAt` + 30 Tage).
 - `oura_oauth_state.expireAt` (timestamp) = Schreibzeitpunkt + 1 Tag. Bestehendes Feld
   `expiresAt` (number, 10 Minuten) bleibt für die Ablauf-Prüfung in `ouraCallback` unverändert.
 

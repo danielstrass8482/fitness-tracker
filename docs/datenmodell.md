@@ -224,7 +224,8 @@ Bewegungszeit, kann leicht von `distanceM`/`durationSec` abweichen), `avgCadence
 #### `ciqSteps/{date}` (4) und `ciqSteps/{date}/samples` (20 Stichproben, je 5 pro Tag)
 
 Tagesdokument: `ts` (int, Epoch-Sekunden), `steps` (int), `v` (string), `receivedAt` (timestamp).
-Sample: `ts`, `steps` (int), `receivedAt` (timestamp).
+Sample: `ts`, `steps` (int), `receivedAt` (timestamp), `expireAt` (timestamp, additiv seit 016,
+TTL-Richtlinie, nur bei neu geschriebenen Samples ab Deploy - siehe Abschnitt 9).
 
 #### `dailyCheck` (18, vollständig)
 
@@ -697,6 +698,31 @@ Zeilen, Distanz, Dauer unverändert.
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die
 hat kein eigenes Backup, ist aus Firestore ableitbar, s. `analytics/README.md`).
+
+---
+
+## 9. Firestore-Wachstum/TTL (Aufgabe 016 Teil B, 16.11.2026)
+
+Beleg (Count-Abfragen per Firestore-REST-API, `runAggregationQuery`): `ciqSteps/{date}/samples`
+3953 Dokumente über 16 Tage (2026-11-01 – 2026-11-16, Ø 247/Tag; `collectionGroup('samples')`-
+Count ohne Pfadeinschränkung ergibt exakt denselben Wert 3953 - keine weitere Collection namens
+`samples` im Projekt). `oura_oauth_state` zum Zeitpunkt der Prüfung 0 Dokumente (wird bei
+erfolgreichem OAuth-Abschluss in `ouraCallback` sofort gelöscht; das additive Feld unten schützt
+vor liegenbleibenden States bei abgebrochenem Flow). Grep über `index.html`, `~/functions`
+(`index.js`, `vps/`) und `analytics/` (inkl. `sync.py`, `schema.sql`, Migrationen): einzige
+Fundstelle einer `samples`-Collection ist der Schreibzugriff in `ingestCiqSteps`
+(`dayRef.collection('samples').add(...)`), kein Lesezugriff irgendwo.
+
+Additive Felder (ab Deploy 16.11.2026, nur neu geschriebene Dokumente, Altbestand ohne
+`expireAt` wird von der TTL-Richtlinie nicht erfasst):
+- `ciqSteps/{date}/samples.expireAt` (timestamp) = Schreibzeitpunkt + 30 Tage.
+- `oura_oauth_state.expireAt` (timestamp) = Schreibzeitpunkt + 1 Tag. Bestehendes Feld
+  `expiresAt` (number, 10 Minuten) bleibt für die Ablauf-Prüfung in `ouraCallback` unverändert.
+
+TTL-Richtlinien (`gcloud firestore fields ttls update expireAt --collection-group=<id>
+--enable-ttl`) auf beiden Collection-Groups aktiviert - siehe Bericht 016 für Status/Zeitpunkt.
+`ciqSteps/{date}` selbst (Tageswert) bleibt ohne TTL erhalten, nur die Sub-Subcollection
+`samples` ist betroffen.
 
 ---
 

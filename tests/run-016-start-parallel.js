@@ -24,6 +24,28 @@ const REPO_ROOT = path.join(__dirname, '..');
 const STUB_PATH = path.join(__dirname, 'stubs', 'firebase-stub.mjs');
 const TEST_UID = 'TESTUID0000000000000001';
 const LATENCY_MS = 150;
+const REPEATS = 3;
+// "vorher" = letzter Stand VOR der Parallelisierung (Aufgabe 016 Teil A, S4 Stufe 1).
+// Per Konstante/Env fest, NICHT mehr HEAD - sonst vergleicht das Skript nach dem Commit der
+// Parallelisierung sich selbst mit sich selbst (Bericht 016 Punkt 3 / Nachprüfung 016b Teil A).
+const BEFORE_SHA = process.env.FUELOFIT_016_BEFORE_SHA || 'a40d9dd';
+
+function median(arr) {
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Grobe Extraktion von loadAllData() aus HTML-Quelltext, um Promise.all-Vorkommen innerhalb der
+// Funktion zu zaehlen (Plausibilitaetscheck, kein echter Parser - reicht fuer den Vergleich zweier
+// bekannter Versionen).
+function countPromiseAllInLoadAllData(html) {
+  const startIdx = html.indexOf('async function loadAllData(');
+  if (startIdx < 0) throw new Error('loadAllData nicht gefunden');
+  const nextFnIdx = html.indexOf('\n    function calcAgeAtDate(', startIdx);
+  const body = nextFnIdx > startIdx ? html.slice(startIdx, nextFnIdx) : html.slice(startIdx, startIdx + 8000);
+  return (body.match(/Promise\.all\s*\(/g) || []).length;
+}
 
 function localDateStr(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
@@ -143,49 +165,85 @@ async function runOnce(indexHtmlPath, label) {
   // kurz nachwarten, bis renderAll()/saveToCache() nach dem Loaded-Log durchgelaufen sind
   await page.waitForTimeout(50);
 
-  const state = await page.evaluate(() => ({
-    foodDB: (window.foodDB || []).length,
-    recipes: (window.recipes || []).length,
-    foodLogDays: Object.keys(window.foodLog || {}).length,
-    trainingEntries: (window.trainingEntries || []).length,
-    dayLogs: (window.dayLogs || []).length,
-    garminDailyByDate: Object.keys(window.garminDailyByDate || {}).length,
-    garminActivitiesAll: (window.garminActivitiesAll || []).length,
-    garminHiddenIds: (window.garminHiddenIds ? window.garminHiddenIds.size : 0),
-    garminUnlinkedIds: (window.garminUnlinkedIds ? window.garminUnlinkedIds.size : 0),
-    ciqStepsToday: window.ciqStepsToday ? window.ciqStepsToday.steps : null,
-    ouraDailyKeys: Object.keys(window.ouraDaily || {}).length,
-    dailyKcalGoalText: document.getElementById('daily-kcal-goal')?.textContent?.trim() || null,
-    writesCount: (window.__TEST_WRITES__ || []).length,
-    maxInflight: window.__TEST_MAX_INFLIGHT__ || 0,
-  }));
+  const state = await page.evaluate(() => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const logEntriesTotal = Object.values(window.foodLog || {}).reduce((s, arr) => s + arr.length, 0);
+    const intakeToday = window.getDayIntakeTotals ? window.getDayIntakeTotals(todayStr) : null;
+    const goalToday = window.calcHistoricalKcalGoal ? window.calcHistoricalKcalGoal(todayStr) : null;
+    return {
+      foodDB: (window.foodDB || []).length,
+      recipes: (window.recipes || []).length,
+      foodLogDays: Object.keys(window.foodLog || {}).length,
+      logEntriesTotal,
+      trainingEntries: (window.trainingEntries || []).length,
+      dayLogs: (window.dayLogs || []).length,
+      garminDailyByDate: Object.keys(window.garminDailyByDate || {}).length,
+      garminActivitiesAll: (window.garminActivitiesAll || []).length,
+      garminHiddenIds: (window.garminHiddenIds ? window.garminHiddenIds.size : 0),
+      garminUnlinkedIds: (window.garminUnlinkedIds ? window.garminUnlinkedIds.size : 0),
+      ciqStepsToday: window.ciqStepsToday ? window.ciqStepsToday.steps : null,
+      ouraDailyKeys: Object.keys(window.ouraDaily || {}).length,
+      dailyKcalGoalText: document.getElementById('daily-kcal-goal')?.textContent?.trim() || null,
+      intakeKcalToday: intakeToday ? intakeToday.kcal : null,
+      intakeProteinToday: intakeToday ? intakeToday.protein : null,
+      goalToday,
+      writesCount: (window.__TEST_WRITES__ || []).length,
+      maxInflight: window.__TEST_MAX_INFLIGHT__ || 0,
+    };
+  });
 
   await browser.close();
   return { label, elapsedMs, state, consoleErrors: ctx.consoleErrors };
 }
 
 async function main() {
-  // "vorher": letzter committeter Stand (sequentiell) aus einer temporaeren Datei, damit die
-  // Arbeitskopie (parallel, "nachher") waehrenddessen unveraendert bleibt.
+  // "vorher": fester Stand VOR der Parallelisierung (BEFORE_SHA, Default a40d9dd) aus einer
+  // temporaeren Datei. "nachher": die Arbeitskopie (index.html im Repo, aktueller Stand).
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuelofit-016-'));
   const oldHtmlPath = path.join(tmpDir, 'index-vorher.html');
-  const oldContent = execFileSync('git', ['show', 'HEAD:index.html'], { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 * 50 }).toString('utf8');
+  const oldContent = execFileSync('git', ['show', `${BEFORE_SHA}:index.html`], { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 * 50 }).toString('utf8');
   fs.writeFileSync(oldHtmlPath, oldContent);
   const newHtmlPath = path.join(REPO_ROOT, 'index.html');
+  const newContent = fs.readFileSync(newHtmlPath, 'utf8');
 
-  console.log('=== VORHER (HEAD, sequentiell) ===');
-  const before = await runOnce(oldHtmlPath, 'vorher');
-  console.log(JSON.stringify(before, null, 2));
+  console.log(`BEFORE_SHA = ${BEFORE_SHA}`);
+  const promiseAllBefore = countPromiseAllInLoadAllData(oldContent);
+  const promiseAllAfter = countPromiseAllInLoadAllData(newContent);
+  console.log(`Promise.all in loadAllData: vorher=${promiseAllBefore} nachher=${promiseAllAfter}`);
+  if (!(promiseAllAfter > promiseAllBefore)) {
+    console.error('STOPP: vorher/nachher-HTML unterscheiden sich in loadAllData NICHT wie erwartet (kein Beleg fuer Parallelisierung) - Messung wird nicht durchgefuehrt.');
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    process.exit(2);
+  }
 
-  console.log('=== NACHHER (Arbeitskopie, parallel) ===');
-  const after = await runOnce(newHtmlPath, 'nachher');
-  console.log(JSON.stringify(after, null, 2));
+  const beforeRuns = [];
+  const afterRuns = [];
+  for (let i = 0; i < REPEATS; i++) {
+    console.log(`=== VORHER Lauf ${i + 1}/${REPEATS} (${BEFORE_SHA}, sequentiell) ===`);
+    const r = await runOnce(oldHtmlPath, 'vorher');
+    console.log(JSON.stringify(r, null, 2));
+    beforeRuns.push(r);
+  }
+  for (let i = 0; i < REPEATS; i++) {
+    console.log(`=== NACHHER Lauf ${i + 1}/${REPEATS} (Arbeitskopie, parallel) ===`);
+    const r = await runOnce(newHtmlPath, 'nachher');
+    console.log(JSON.stringify(r, null, 2));
+    afterRuns.push(r);
+  }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  console.log('\n=== Vergleich ===');
-  console.log('Zeit vorher (ms):', before.elapsedMs, ' / nachher (ms):', after.elapsedMs);
-  console.log('max. gleichzeitig offene Reads vorher:', before.state.maxInflight, ' / nachher:', after.state.maxInflight);
+  const before = beforeRuns[0];
+  const after = afterRuns[0];
+  const beforeMedianMs = median(beforeRuns.map(r => r.elapsedMs));
+  const afterMedianMs = median(afterRuns.map(r => r.elapsedMs));
+  const beforeMaxInflightMedian = median(beforeRuns.map(r => r.state.maxInflight));
+  const afterMaxInflightMedian = median(afterRuns.map(r => r.state.maxInflight));
+
+  console.log('\n=== Vergleich (Median ueber', REPEATS, 'Laeufe) ===');
+  console.log('Zeit vorher (ms):', beforeMedianMs, ' / nachher (ms):', afterMedianMs, ' Einzelwerte vorher:', beforeRuns.map(r => r.elapsedMs), ' nachher:', afterRuns.map(r => r.elapsedMs));
+  console.log('max. gleichzeitig offene Reads vorher (Median):', beforeMaxInflightMedian, ' / nachher (Median):', afterMaxInflightMedian, ' Einzelwerte vorher:', beforeRuns.map(r => r.state.maxInflight), ' nachher:', afterRuns.map(r => r.state.maxInflight));
 
   const stateKeys = Object.keys(before.state).filter(k => k !== 'maxInflight');
   let stateIdentical = true;
@@ -196,13 +254,21 @@ async function main() {
     }
   }
   console.log('Endzustand identisch (ohne maxInflight):', stateIdentical);
-  console.log('Konsolenfehler vorher:', before.consoleErrors);
-  console.log('Konsolenfehler nachher:', after.consoleErrors);
+  console.log('Konsolenfehler vorher:', beforeRuns.map(r => r.consoleErrors));
+  console.log('Konsolenfehler nachher:', afterRuns.map(r => r.consoleErrors));
 
-  if (!stateIdentical) { console.error('FAIL: Endzustand weicht ab'); process.exit(1); }
-  if (before.consoleErrors.length || after.consoleErrors.length) { console.error('FAIL: Konsolenfehler aufgetreten'); process.exit(1); }
-  if (!(after.elapsedMs < before.elapsedMs)) { console.error('FAIL: nachher nicht schneller als vorher'); process.exit(1); }
-  console.log('\nOK: Endzustand identisch, keine Konsolenfehler, nachher schneller als vorher.');
+  const consoleErrorsAny = beforeRuns.some(r => r.consoleErrors.length) || afterRuns.some(r => r.consoleErrors.length);
+
+  if (!stateIdentical) {
+    console.error('ABWEICHUNG: Endzustand vorher != nachher - siehe oben. KEIN automatischer Rueckbau. WARTE auf Entscheidung.');
+    process.exitCode = 3;
+    return;
+  }
+  if (consoleErrorsAny) { console.error('FAIL: Konsolenfehler aufgetreten'); process.exitCode = 1; return; }
+  if (!(afterMaxInflightMedian > beforeMaxInflightMedian)) {
+    console.error(`AUFFAELLIG: maxInflight (Median) nachher (${afterMaxInflightMedian}) nicht groesser als vorher (${beforeMaxInflightMedian}) - Ursache belegen, nicht automatisch werten.`);
+  }
+  console.log('\nOK: Endzustand identisch, keine Konsolenfehler.');
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

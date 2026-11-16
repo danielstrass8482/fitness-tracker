@@ -30,5 +30,18 @@ ausgeführt. Uhr fest über `page.clock.install(...)`, Viewport 360px.
   genau 366 Tage vor "heute" fälschlich mitgeladen wird (`toISOString()` statt lokalem Datum).
   Vorher/Nachher-Werte und Herleitung siehe Bericht 015 in fuelofit-ops.
 
+- `run-016-start-parallel.js` (Aufgabe 016 Teil A / Nachprüfung 016b Teil A, `loadAllData()`
+  per `Promise.all` parallelisiert statt sequenziell): vergleicht einen festen "vorher"-Stand
+  (Konstante `BEFORE_SHA`, Default `a40d9dd` - letzter Commit vor der Parallelisierung, per
+  `git show <SHA>:index.html`, NICHT `HEAD`) gegen die Arbeitskopie ("nachher"). Bricht vorher mit
+  STOPP ab, falls beide Stände in `loadAllData` dieselbe Anzahl `Promise.all`-Aufrufe haben (kein
+  Beleg für einen Unterschied). Künstliche Latenz 150ms/Abfrage, je 3 Wiederholungen pro Stand,
+  Median von Laufzeit und `__TEST_MAX_INFLIGHT__`. Vergleicht den Endzustand (u. a. Summen
+  kcal/Protein des heutigen Tags über `getDayIntakeTotals`, Zieldetails über
+  `calcHistoricalKcalGoal`, Anzahl geladener logEntries/entries/garminActivities) - bei Abweichung
+  kein automatischer Rückbau, Skript wartet (Exit-Code 3) auf Entscheidung. Kein `page.clock`
+  (echte Latenz-Timer, siehe Kommentar im Skript). Werte und Herleitung siehe Bericht
+  016b-nachpruefung-start-und-reste in fuelofit-ops.
+
 Wird von Aufgabe 017 (Testsammlung) übernommen/konsolidiert - diese Dateien bleiben bis dahin als
 Einzelskripte bestehen.

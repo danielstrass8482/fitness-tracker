@@ -24,6 +24,11 @@ ausgeführt. Uhr fest über `page.clock.install(...)`, Viewport 360px.
   Kalorienziel-Szenarien (heute ohne Schritte / heute mit echten Schritten / gestern nur
   Oura-Schritte) plus Einstellungen öffnen/speichern ohne Konsolenfehler, kein Schreiben von
   `assumedDailySteps` mehr. Erwartete Werte und Herleitung siehe Bericht 012d in fuelofit-ops.
+- `run-015-datum-zeitzone.js` (Aufgabe 015, UTC-Fehler im 365-Tage-Cutoff von `loadAllData`):
+  vier Uhrzeit-/Zeitzonen-Szenarien (00:30 / 23:30 / Zeitumstellungswoche / Montag 00:30,
+  Europe/Berlin, `page.clock` + `timezoneId`), prüft ob ein synthetischer logEntries-Eintrag
+  genau 366 Tage vor "heute" fälschlich mitgeladen wird (`toISOString()` statt lokalem Datum).
+  Vorher/Nachher-Werte und Herleitung siehe Bericht 015 in fuelofit-ops.
 
-Wird von Aufgabe 017 (Testsammlung) übernommen/konsolidiert - diese Datei bleibt bis dahin als
-Einzelskript bestehen.
+Wird von Aufgabe 017 (Testsammlung) übernommen/konsolidiert - diese Dateien bleiben bis dahin als
+Einzelskripte bestehen.

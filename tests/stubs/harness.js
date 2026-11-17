@@ -15,14 +15,9 @@ async function installHarness(page, { fixedTimeIso, store }) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => {
     route.fulfill({ status: 200, contentType: 'text/javascript', body: stubSrc });
   });
-  // Chart.js (unbedingt per <script src> geladen, aber fuer die 012d-Tests ohne Analyse-Charts
-  // nicht gebraucht) als leeres Skript ausliefern statt echtes Netz zu brauchen.
-  await page.route('https://cdnjs.cloudflare.com/**', route => {
-    route.fulfill({ status: 200, contentType: 'text/javascript', body: '/* stub: nicht benoetigt fuer 012d */' });
-  });
-  // Alles andere Externe (Open Food Facts, Oura-Functions, Fonts) blocken statt haengen zu
-  // lassen - in diesen Tests nicht aufgerufen, kein Netz noetig.
-  await page.route(/^https:\/\/(?!www\.gstatic\.com|cdnjs\.cloudflare\.com)/, route => route.abort());
+  // Alles andere Externe (Chart.js seit 016f entfernt, Open Food Facts, Oura-Functions, Fonts)
+  // blocken statt haengen zu lassen - in diesen Tests nicht aufgerufen, kein Netz noetig.
+  await page.route(/^https:\/\/(?!www\.gstatic\.com)/, route => route.abort());
 
   await page.addInitScript(({ store }) => {
     window.__TEST_STORE__ = store;

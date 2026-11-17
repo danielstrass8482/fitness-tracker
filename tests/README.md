@@ -53,5 +53,16 @@ ausgeführt. Uhr fest über `page.clock.install(...)`, Viewport 360px.
   jede Sub-Tab-Interaktion) - siehe Bericht 016e in fuelofit-ops, nicht behoben (außerhalb des
   Auftrags).
 
+- `run-016f-analyse-entfernen.js` (Aufgabe 016f, Analyse-Tab inkl. Chart.js komplett entfernt -
+  Auswertungen laufen seitdem über den MCP-Connector in claude.ai): App-Start ohne Konsolenfehler
+  und ohne Request an cdnjs.cloudflare.com, nur noch 4 Haupt-Tabs (alle rendern), alte Tab-Werte
+  `analyse`/`dashboard` (switchTab() und Deeplink `?tab=analyse`) fallen auf `uebersicht` zurück,
+  Lebensmittel loggen/Training loggen/Plan abhaken/Einstellungen speichern ohne Konsolenfehler
+  (früher riefen diese renderDashboard() auf). Zusätzlich Zeilenzahl- und Startzeit-Vergleich
+  vorher (Commit vor 016f) / nachher, gleiches Setup wie run-016-start-parallel.js. Es gibt keine
+  persistente "letzter Tab"-Speicherung in localStorage/IndexedDB (grep-geprüft) - der Deeplink
+  ist das nächstliegende reale Äquivalent zu einem alten gespeicherten Tab-Wert. Werte und
+  Herleitung siehe Bericht 016f in fuelofit-ops.
+
 Wird von Aufgabe 017 (Testsammlung) übernommen/konsolidiert - diese Dateien bleiben bis dahin als
 Einzelskripte bestehen.

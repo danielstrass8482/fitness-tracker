@@ -279,7 +279,7 @@ WHERE deleted_at IS NULL
   AND data->>'typ' = 'tageslog'
   AND data->>'weight' IS NOT NULL;
 
--- 3) Trainings (Stand Migration 008, Aufgabe 012b; Garmin primaer seit 007/012).
+-- 3) Trainings (Stand Migration 009, Aufgabe 012c; Garmin primaer seit 007/012).
 -- Je Garmin-Aktivitaet (nicht geloescht, nicht in garmin_hidden) eine Zeile mit
 -- entry_id 'garmin_<id>', source 'garmin', typ wie garminActivityToEntry() in index.html
 -- (strength_training -> kraft, sonst mappedTyp, unmapped -> sonstiges_garmin), Werte aus Garmin.
@@ -287,9 +287,11 @@ WHERE deleted_at IS NULL
 -- ist keine eigene Zeile. act_kcal_calc der Garmin-Zeilen = App-Wert: zuerst
 -- dailySnapshots.activities[].kcalGezaehlt fuer 'garmin_<id>', sonst fuer die id des passenden
 -- Google-Fit-Eintrags (22.-28.10.2026), sonst act_kcal_calc des Google-Fit-Eintrags, sonst NULL.
--- Zirkel-verknuepfte Kraft: der Wert des Zirkel-Eintrags wird nicht zugeordnet (nicht doppelt).
--- Alle uebrigen entries (manual, plan/zirkel, Google Fit ohne Garmin-Gegenstueck; ohne
--- tageslog/phonesteps) bleiben eigene Zeilen mit Garmin-Feldern NULL. distance_m/duration_sec:
+-- Kraft-Zeilen mit Zirkel: Kalorien stehen im Zirkel-Eintrag -- eine Garmin-Kraft-Aktivitaet ohne
+-- eigenen 'garmin_<id>'-Snapshot-Eintrag an einem Tag mit Zirkel-Eintrag bekommt act_kcal_calc =
+-- NULL (Migration 009, nicht der alte Google-Fit-Fallback; der Zirkel-Wert wird nicht zugeordnet,
+-- sonst doppelt). Alle uebrigen entries (manual, plan/zirkel, Google Fit ohne Garmin-Gegenstueck;
+-- ohne tageslog/phonesteps) bleiben eigene Zeilen mit Garmin-Feldern NULL. distance_m/duration_sec:
 -- Garmin-Werte, sonst entries.distanz (km->m) bzw. entries.zeit ("HH:MM:SS"->Sekunden).
 -- pace_min_km nur bei laufen/gehen/wandern und distance_m > 0, speed_kmh bei allen Typen mit
 -- distance_m > 0 und duration_sec > 0.
@@ -323,6 +325,11 @@ snap_kcal AS (
     AND x->>'kcalGezaehlt' IS NOT NULL
   ORDER BY x->>'id', s.day DESC
 ),
+zirkel_days AS (
+  -- Tage mit mindestens einem Zirkel-Eintrag (fuer die Zirkel-Erkennung unten, Migration 009).
+  SELECT DISTINCT e.day FROM raw.entries e
+  WHERE e.deleted_at IS NULL AND e.data->>'typ' = 'zirkel'
+),
 base AS (
   -- 1) Garmin-Aktivitaeten
   SELECT
@@ -342,7 +349,13 @@ base AS (
            || lpad((round((g.data->>'durationSec')::numeric)::int % 60)::text, 2, '0')
          ELSE '' END AS zeit,
     NULL::numeric AS kalorien_device,
-    COALESCE(sk.kcal, skg.kcal, m.act_kcal_calc) AS act_kcal_calc,
+    CASE
+      WHEN g.data->>'garminType' = 'strength_training'
+       AND sk.kcal IS NULL
+       AND g.day IN (SELECT day FROM zirkel_days)
+      THEN NULL
+      ELSE COALESCE(sk.kcal, skg.kcal, m.act_kcal_calc)
+    END AS act_kcal_calc,
     (g.data->>'steps')::numeric AS steps,
     (g.data->>'avgHr')::numeric AS avg_hr,
     (g.data->>'maxHr')::numeric AS max_hr,

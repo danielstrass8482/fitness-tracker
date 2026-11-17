@@ -694,6 +694,18 @@ Google-Fit-Eintrags (22.–28.10.2026), erst dann `act_kcal_calc` des Google-Fit
 Der Wert eines Zirkel-Eintrags wird einer zirkel-verknüpften Garmin-Kraft-Zeile nicht zugeordnet.
 Zeilen, Distanz, Dauer unverändert.
 
+**Kraft-Zeilen mit Zirkel: NULL statt Google-Fit-Fallback (012c, 17.11.2026)**: Migration
+`analytics/migrations/009_training_sessions_zirkel_kraft_null.sql`. Eine Garmin-Kraft-Zeile
+(`garminType = strength_training`) ohne eigenen `garmin_<id>`-Snapshot-Eintrag an einem Tag mit
+mindestens einem Zirkel-Eintrag (`raw.entries.typ = zirkel`) bekommt `act_kcal_calc = NULL` statt des
+bisherigen Google-Fit-Fallbacks (Schritt 3 der Kette oben) – die Kalorien stehen bereits im
+Zirkel-Eintrag (eigene Zeile, `typ = zirkel`); Kraft und Zirkel nicht addieren. Betroffen: die 8
+Zeilen aus 012b (01./02./04./06./08./09./11./13.11.2026) sowie neue zirkel-verknüpfte Garmin-Kraft-
+Zeilen ab 15.11.2026 (ab 15.11. ohnehin kein Google-Fit-Fallback mehr vorhanden, dort macht die
+Migration die NULL zur ausdrücklichen Regel statt dem Zufall der fehlenden Kette). Unverändert:
+Kraft-Zeilen mit eigenem Snapshot-Eintrag (z. B. „covered“, `kcalGezaehlt = 0`), alle anderen Zeilen,
+Spalten, Distanz, Dauer.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

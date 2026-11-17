@@ -43,5 +43,15 @@ ausgeführt. Uhr fest über `page.clock.install(...)`, Viewport 360px.
   (echte Latenz-Timer, siehe Kommentar im Skript). Werte und Herleitung siehe Bericht
   016b-nachpruefung-start-und-reste in fuelofit-ops.
 
+- `run-016e-training-plan-first.js` (Aufgabe 016e, Training-Tab: "Plan" ist erster Unter-Tab und
+  wird bei jedem Öffnen des Training-Tabs aktiviert): (1) App-Start → Training-Tab öffnen → Plan
+  aktiv und gerendert, Loggen versteckt, Button-Reihenfolge Plan|Loggen; (2) auf Loggen wechseln,
+  Wiederholungen eintragen → anderer Haupt-Tab → zurück zu Training → Plan aktiv → erneut Loggen →
+  Wert noch da; (3) `openPlanToday()` (Link "Planvorschlag für heute" von der Übersicht) aktiviert
+  weiterhin Training-Tab + Plan. Filtert einen vorbestehenden, von 016e unabhängigen Fehler heraus
+  (`updateHiddenSets` nicht auf `window` exponiert, reproduziert auch auf unverändertem Stand ohne
+  jede Sub-Tab-Interaktion) - siehe Bericht 016e in fuelofit-ops, nicht behoben (außerhalb des
+  Auftrags).
+
 Wird von Aufgabe 017 (Testsammlung) übernommen/konsolidiert - diese Dateien bleiben bis dahin als
 Einzelskripte bestehen.

@@ -572,3 +572,117 @@ SELECT
   (SELECT max(finished_at) FROM raw.sync_runs) AS last_run_at;
 
 GRANT SELECT ON views.sync_health TO fuelofit_ro;
+
+-- 10/11) food_log_entries + exercise_sets (Migration 012, Aufgabe 016g/016h) -- Begruendung
+-- und Regeln siehe analytics/migrations/012_views_food_entries_exercise_sets.sql.
+CREATE OR REPLACE VIEW views.food_log_entries AS
+WITH l AS (
+  SELECT
+    le.id,
+    le.day,
+    le.data->>'time' AS uhrzeit,
+    le.data->>'name' AS lebensmittel,
+    (le.data->>'amount')::numeric AS menge,
+    le.data->>'unit' AS unit_raw,
+    (le.data->>'kcal')::numeric AS kcal,
+    (le.data->>'protein')::numeric AS protein,
+    (le.data->>'carbs')::numeric AS carbs,
+    (le.data->>'fat')::numeric AS fat,
+    NULLIF(le.data->>'recipeId', '') AS recipe_id,
+    NULLIF(le.data->>'_fromRecipe', '') AS from_recipe,
+    le.data->>'foodId' AS food_id,
+    split_part(le.id, '_', 1) || '_' || right(le.id, 4) AS entry_id_kurz
+  FROM raw.log_entries le
+  WHERE le.deleted_at IS NULL AND le.day IS NOT NULL
+)
+SELECT
+  l.day,
+  l.uhrzeit,
+  l.lebensmittel,
+  l.menge,
+  CASE l.unit_raw WHEN 'grams' THEN 'g' WHEN 'portions' THEN 'portion' ELSE 'g' END AS einheit,
+  l.kcal,
+  l.protein,
+  l.carbs,
+  l.fat,
+  CASE
+    WHEN l.recipe_id IS NOT NULL OR r_food.id IS NOT NULL THEN 'gerichte'
+    ELSE COALESCE(f.data->>'kategorie', 'unbekannt')
+  END AS kategorie,
+  COALESCE(r_rid.data->>'name', l.from_recipe) AS aus_rezept,
+  f.data->>'alkohol' AS alkohol,
+  l.entry_id_kurz AS entry_id
+FROM l
+LEFT JOIN raw.foods f ON f.id = l.food_id AND f.deleted_at IS NULL
+LEFT JOIN raw.recipes r_food ON r_food.id = l.food_id AND r_food.deleted_at IS NULL
+LEFT JOIN raw.recipes r_rid ON r_rid.id = l.recipe_id AND r_rid.deleted_at IS NULL;
+
+GRANT SELECT ON views.food_log_entries TO fuelofit_ro;
+
+CREATE OR REPLACE VIEW views.exercise_sets AS
+WITH base AS (
+  SELECT
+    e.id,
+    e.day,
+    COALESCE(
+      e.data->>'typ',
+      CASE e.data->>'type' WHEN 'pull' THEN 'pullups' WHEN 'push' THEN 'pushups' ELSE e.data->>'type' END
+    ) AS uebung,
+    e.data->>'source' AS quelle,
+    NULLIF(e.data->>'sets', '') AS sets_raw,
+    e.data->'holdSec' AS hold_sec_raw,
+    lower(trim(COALESCE(NULLIF(e.data->>'variant', ''), NULLIF(e.data->>'variante', ''), 'regulaer'))) AS variant_raw,
+    split_part(e.id, '_', 1) || '_' || right(e.id, 4) AS entry_id_kurz
+  FROM raw.entries e
+  WHERE e.deleted_at IS NULL
+),
+filtered AS (
+  SELECT *
+  FROM base
+  WHERE uebung IN ('pullups', 'pushups', 'lunges') OR uebung ~ '^custom_'
+),
+parsed AS (
+  SELECT
+    f.*,
+    ARRAY(
+      SELECT n::int
+      FROM unnest(string_to_array(COALESCE(f.sets_raw, ''), '-')) AS n
+      WHERE n ~ '^[0-9]+$' AND n::int > 0
+    ) AS nums,
+    ARRAY(
+      SELECT (h)::numeric::int
+      FROM jsonb_array_elements_text(COALESCE(f.hold_sec_raw, '[]'::jsonb)) AS h
+    ) AS hold_nums
+  FROM filtered f
+)
+SELECT
+  p.day,
+  p.uebung,
+  CASE p.variant_raw
+    WHEN 'regulär' THEN 'regulaer'
+    WHEN 'regular' THEN 'regulaer'
+    WHEN 'regulaer' THEN 'regulaer'
+    WHEN 'reverse' THEN 'reverse'
+    WHEN 'hammer grip' THEN 'hammer'
+    WHEN 'hammer' THEN 'hammer'
+    WHEN 'weit' THEN 'weit'
+    WHEN 'eng' THEN 'eng'
+    WHEN 'diamond' THEN 'diamond'
+    WHEN 'normal' THEN 'normal'
+    WHEN 'elevated feet' THEN 'elevated_feet'
+    WHEN 'elevated_feet' THEN 'elevated_feet'
+    WHEN 'mit gewichten' THEN 'weighted'
+    WHEN 'weighted' THEN 'weighted'
+    ELSE p.variant_raw
+  END AS variante,
+  p.quelle,
+  COALESCE(array_length(p.nums, 1), 0) AS saetze,
+  COALESCE((SELECT sum(x) FROM unnest(p.nums) x), 0) AS wdh_gesamt,
+  COALESCE((SELECT max(x) FROM unnest(p.nums) x), 0) AS wdh_max,
+  p.sets_raw AS wdh_je_satz,
+  CASE WHEN array_length(p.hold_nums, 1) > 0 THEN (SELECT sum(x) FROM unnest(p.hold_nums) x) END AS haltezeit_sek_gesamt,
+  CASE WHEN array_length(p.hold_nums, 1) > 0 THEN array_to_string(p.hold_nums, '-') END AS haltezeit_je_satz,
+  p.entry_id_kurz AS entry_id
+FROM parsed p;
+
+GRANT SELECT ON views.exercise_sets TO fuelofit_ro;

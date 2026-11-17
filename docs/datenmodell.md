@@ -706,6 +706,31 @@ Migration die NULL zur ausdrücklichen Regel statt dem Zufall der fehlenden Kett
 Kraft-Zeilen mit eigenem Snapshot-Eintrag (z. B. „covered“, `kcalGezaehlt = 0`), alle anderen Zeilen,
 Spalten, Distanz, Dauer.
 
+**`views.food_log_entries` + `views.exercise_sets` (016g/016h, 17.11.2026)**: Migration
+`analytics/migrations/012_views_food_entries_exercise_sets.sql`. Zwei neue Sichten fuer den
+MCP-Connector, eine Zeile je `raw.log_entries`- bzw. (gefilterter) `raw.entries`-Zeile, keine
+Aggregation. `views.food_log_entries`: `day` (gleiche Herkunft wie `views.daily_nutrition`,
+Summen je Tag stimmen exakt), `uhrzeit`, `lebensmittel`, `menge`, `einheit` ('g' normal, bei
+kollabierten Rezept-Bloecken `unit` 'grams'→'g'/'portions'→'portion'), `kcal`/`protein`/`carbs`/
+`fat`, `kategorie` (wie `kat_breakdown` aus Bericht 016g: `recipeId` gesetzt ODER `foodId` ist
+eine aktive Rezept-ID → 'gerichte'; expandierte Rezept-Zutaten `_fromRecipe` ohne `recipeId`
+fallen unter die Kategorie der Zutat, nicht 'gerichte'; sonst `foods.kategorie`, fehlt sie →
+'unbekannt'), `aus_rezept` (Name aus `recipeId` oder `_fromRecipe`, sonst NULL — 32 Alt-Eintraege
+04-05/2026 ohne `recipeId`-Feld bekommen `kategorie='gerichte'` ueber die `foodId`-Regel, aber
+`aus_rezept=NULL`, siehe Migrationskommentar), `alkohol` (`foods.alkohol`, sonst NULL), `entry_id`
+gekuerzt (Zeitstempel-Praefix der Original-ID + letzte 4 Zeichen, keine uid-Spalte).
+`views.exercise_sets`: Option A aus Bericht 016g (Daniel informiert) — nur `typ` (nach
+Altformat-Mapping) `pullups`/`pushups`/`lunges` oder `custom_*`, exakt die Menge aus
+`populateWorkoutTypeSelect`/`renderWorkoutChart`; `typ='zirkel'` nie (steht in
+`views.training_sessions`). `variante` normalisiert wie das alte Diagramm (`variantLabelToKey`),
+`saetze`/`wdh_gesamt`/`wdh_max` nur aus `sets` (Haltezeit-Eintraege liefern hier bewusst 0, wie im
+alten Chart), `haltezeit_sek_gesamt`/`haltezeit_je_satz` NEU aus `holdSec` (im alten Chart gar
+nicht ausgewertet). Kein Gewicht-Feld. Probelauf (Transaktion mit ROLLBACK) belegt: Summe `kcal`
+je Tag = `views.daily_nutrition` fuer ALLE Tage (0 Abweichungen), kcal je Kategorie fuer 3 echte
+Tage unabhaengig aus den Rohdaten nachgerechnet (0 Abweichungen), `exercise_sets`-Zeilenzahl =
+Referenzzaehlung (190 von 1290 aktiven `entries`), Summe Wdh je Uebung fuer 3 echte Tage
+unabhaengig nachgerechnet (0 Abweichungen). SELECT fuer `fuelofit_ro` auf beiden Sichten.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

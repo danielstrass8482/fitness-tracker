@@ -1,9 +1,13 @@
 #!/usr/bin/env node
-// 017 Punkt 9 - saveSettings() Charakterisierungstests (NICHT bewertet/geaendert, haelt den
-// heutigen Stand fest). saveSettings() (index.html ~7607) schreibt users/{uid}/settings/main per
-// setDoc OHNE merge, mit genau 11 Feldern: tdee, proteinGoal, carbsGoal, fatGoal, gender, age,
-// height, weight, activityLevel, detailDays, recipeDisplay. Jedes andere Feld im Dokument würde
-// beim nächsten Speichern verschwinden (siehe Bericht 017, Punkt 9).
+// 017 Punkt 9 - saveSettings() Charakterisierungstests. saveSettings() (index.html ~7607) schreibt
+// users/{uid}/settings/main per setDoc OHNE merge, mit genau 11 Feldern: tdee, proteinGoal,
+// carbsGoal, fatGoal, gender, age, height, weight, activityLevel, detailDays, recipeDisplay. Jedes
+// andere Feld im Dokument würde beim nächsten Speichern verschwinden (siehe Bericht 017, Punkt 9).
+// Aufgabe 020 Teil 1 (Befund 017 9d): settingsLoaded-Flag, NUR nach erfolgreichem getDoc() gesetzt
+// (auch wenn kein Dokument existiert - Neuinstallation). Ohne das Flag verweigert saveSettings() das
+// Schreiben und zeigt showConfirm() statt stillschweigend zu ueberschreiben (Szenario d unten, jetzt
+// NICHT mehr nur eine Charakterisierung/ein Befund, sondern die behobene Erwartung). Szenario (e)
+// neu: kein Dokument vorhanden (Neuinstallation) -> Speichern bleibt erlaubt.
 const { chromium } = require('playwright');
 const { installHarness, TEST_UID } = require('./stubs/harness.js');
 
@@ -76,8 +80,9 @@ async function testNormalSavePayload(browser) {
   check('keine Konsolenfehler (normale Speicherung)', consoleErrors.length === 0, consoleErrors);
 }
 
-// (d) loadSettings() schlaegt fehl (Firestore-Lesefehler simuliert) -> leeres Formular ->
-// saveSettings() schreibt Standardwerte/null und UEBERSCHREIBT damit die echten Werte (kein merge).
+// (d) loadSettings() schlaegt fehl (Firestore-Lesefehler simuliert) -> settingsLoaded bleibt false ->
+// saveSettings() schreibt NICHT (kein setDoc auf settings/main) und zeigt showConfirm() statt
+// stillschweigend zu ueberschreiben (020 Teil 1, Befund 017 9d behoben).
 async function testSaveAfterLoadFailure(browser) {
   const existing = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'female', age: 42, height: 165, weight: 60, activityLevel: 1.55, detailDays: 31, recipeDisplay: 'block' };
   const page = await browser.newPage();
@@ -94,25 +99,63 @@ async function testSaveAfterLoadFailure(browser) {
   });
   await page.evaluate(() => window.switchTab('einstellungen'));
   await page.waitForTimeout(80);
+  // saveSettings() haengt am offenen showConfirm()-Dialog (Promise loest erst beim Klick auf) -
+  // NICHT awaiten, sonst blockiert dieser Aufruf fuer immer.
+  page.evaluate(() => { window.saveSettings(); });
+  await page.waitForTimeout(100);
+  const writesAfterSave = await page.evaluate(() => window.__TEST_WRITES__);
+  const dialogVisible = await page.evaluate(() => {
+    const d = document.getElementById('confirm-dialog');
+    return { display: d?.style.display, message: document.getElementById('confirm-message')?.textContent };
+  });
+  // "Erneut laden" klicken (confirmDialogResolve(true)) - loadSettings() erneut aufrufen; da
+  // __TEST_FAIL_PATHS__ weiterhin greift, schlaegt der Retry ebenfalls fehl, settingsLoaded bleibt
+  // false. In BEIDEN Faellen (OK oder Abbrechen) darf saveSettings() in diesem Aufruf nicht
+  // geschrieben haben - das pruefen wir bereits oben vor dem Klick.
+  await page.evaluate(() => window.confirmDialogResolve && window.confirmDialogResolve(true));
+  await page.waitForTimeout(80);
+  const writesAfterRetry = await page.evaluate(() => window.__TEST_WRITES__);
+  await page.close();
+
+  const settingsWrites = writesAfterRetry.filter(w => w.path === SETTINGS_PATH);
+
+  check('simulierter Lesefehler griff (Formular "Alter" leer statt 42)', loadFailed === true, loadFailed);
+  check('saveSettings() schreibt NICHT auf settings/main (Flag settingsLoaded fehlt)', writesAfterSave.filter(w => w.path === SETTINGS_PATH).length === 0, writesAfterSave);
+  check('Dialog (showConfirm) erscheint statt stillschweigendem Ueberschreiben', dialogVisible.display === 'flex', dialogVisible);
+  check('Dialogtext warnt vor dem Ueberschreiben', (dialogVisible.message || '').includes('nicht geladen werden'), dialogVisible.message);
+  check('auch nach "Erneut laden" (Retry schlaegt wieder fehl) weiterhin KEIN Write auf settings/main', settingsWrites.length === 0, settingsWrites);
+  console.log('Befund 017 9d behoben (020 Teil 1): settingsLoaded-Flag verhindert, dass ein fehlgeschlagenes Laden Alter/Groesse/Gewicht auf null und die Ziele auf die Standardwerte zurueckschreibt.');
+}
+
+// (e) Kein Dokument vorhanden (Neuinstallation): getDoc() liefert exists():false, aber KEINE
+// Exception - settingsLoaded wird trotzdem gesetzt (020 Teil 1, Punkt 1), Speichern bleibt erlaubt.
+async function testSaveWithoutExistingDocument(browser) {
+  const page = await browser.newPage();
+  const { consoleErrors } = await installHarness(page, { fixedTimeIso: FIXED_TIME_ISO, store: { [`users/${TEST_UID}/settings`]: [] } });
+
+  await page.evaluate(() => window.switchTab('einstellungen'));
+  await page.waitForTimeout(80);
+  await page.fill('#settings-age', '30');
+  await page.fill('#settings-height', '175');
+  await page.fill('#settings-weight', '70');
   await page.evaluate(() => window.saveSettings());
   await page.waitForTimeout(100);
   const writes = await page.evaluate(() => window.__TEST_WRITES__);
+  const dialogVisible = await page.evaluate(() => document.getElementById('confirm-dialog')?.style.display === 'flex');
   await page.close();
 
   const fullWrite = writes.find(w => w.path === SETTINGS_PATH && !w.merge);
-  const expectedDefaults = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'male', age: null, height: null, weight: null, activityLevel: 1.55, detailDays: 31, recipeDisplay: 'block' };
-
-  check('simulierter Lesefehler griff (Formular "Alter" leer statt 42)', loadFailed === true, loadFailed);
-  check('setDoc OHNE merge trotz fehlgeschlagenem Laden (volles Ueberschreiben)', !!fullWrite, writes);
-  check('Payload = Standardwerte/null (tdee 2700, Protein 150, KH 325, Fett 95, gender male, age/height/weight null) - ueberschreibt Daniels echte Werte (42/165/60/female)', JSON.stringify(fullWrite?.data) === JSON.stringify(expectedDefaults), fullWrite?.data);
-  console.log('RISIKO: Speichert jemand die Einstellungen nach einem fehlgeschlagenen Laden (z.B. kurzer Netzausfall beim App-Start), werden Alter/Groesse/Gewicht auf null gesetzt und Kalorien-/Makro-Ziele auf die Standardwerte zurueckgesetzt - OHNE Warnung. Vorschlag (NICHT umgesetzt, nur Befund): saveSettings() koennte bei fehlendem geladenem Zustand (z.B. ein Flag "settingsLoaded") das Speichern verweigern/warnen, statt stillschweigend zu ueberschreiben.');
+  check('kein Dialog (Laden war erfolgreich, auch ohne vorhandenes Dokument)', dialogVisible === false, dialogVisible);
+  check('saveSettings() schreibt trotz fehlendem Vorgaenger-Dokument (Neuinstallation, Speichern erlaubt)', !!fullWrite, writes);
+  check('keine Konsolenfehler (Neuinstallation)', consoleErrors.length === 0, consoleErrors);
 }
 
 async function main() {
   const browser = await chromium.launch();
-  console.log('\n=== 017 Punkt 9: saveSettings() Charakterisierungstests ===');
+  console.log('\n=== 017 Punkt 9 / 020 Teil 1: saveSettings()-Schutz ===');
   await testNormalSavePayload(browser);
   await testSaveAfterLoadFailure(browser);
+  await testSaveWithoutExistingDocument(browser);
   await browser.close();
 
   if (!ok) { console.error('\nFEHLER: mindestens eine saveSettings-Erwartung nicht erfuellt.'); process.exit(1); }

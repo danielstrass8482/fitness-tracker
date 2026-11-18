@@ -2055,7 +2055,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-18 10:35';
+    const APP_BUILD = '2026-11-18 11:40';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4609,10 +4609,10 @@
 
         // Eine Aktivitätszeile (Einzeldarstellung; child = Einzelzeile in einer aufgeklappten Gruppe, ohne Symbol)
         const activityRowHtml = (a, child = false) => {
-          const typName = TYP_LABELS[a.typ] || customTypeLabel(a.typ, a) || 'Aktivität';
+          const typName = TYP_LABELS[a.typ] || escHtml(customTypeLabel(a.typ, a)) || 'Aktivität';
           const emoji = typIcon(a.typ);
           // Variante anhängen wenn vorhanden (pullups/pushups)
-          const variantSuffix = a.variantLabel ? ` · ${a.variantLabel}` : '';
+          const variantSuffix = a.variantLabel ? ` · ${escHtml(a.variantLabel)}` : '';
           const displayName = typName + variantSuffix;
 
           const kcal = activityRowKcal(a);
@@ -4626,7 +4626,7 @@
           const baseMeta = isHoldEntry(a) ? fmtHoldSets(a.holdSec) : (a.sets || autoMeta);
           const meta = [baseMeta, entryStepsLabel(a.schritte), a.garminLive ? garminHrLabel(a) : '', a.zuordnungUnklar ? 'Zuordnung unklar' : '']
             .filter(Boolean).join(' · ');
-          const details = a.notiz && a.notiz !== a.sets ? a.notiz : '';
+          const details = a.notiz && a.notiz !== a.sets ? escHtml(a.notiz) : '';
           // Zirkel mit zugeordneter Garmin-Kraftaktivität (Zirkel-Zusammenführung, 01.11.2026): eine
           // zusätzliche Zeile mit der HF der Uhr + Uhr-Symbol als Hinweis auf die Verknüpfung
           // (Entscheidung 2) - die Garmin-Aktivität selbst erscheint nicht mehr als eigene Zeile.
@@ -4650,7 +4650,7 @@
           if (g.items.length === 1) { html += activityRowHtml(g.items[0]); return; }
 
           const first = g.items[0];
-          const typName = TYP_LABELS[first.typ] || customTypeLabel(first.typ, first) || 'Aktivität';
+          const typName = TYP_LABELS[first.typ] || escHtml(customTypeLabel(first.typ, first)) || 'Aktivität';
           const emoji = typIcon(first.typ);
 
           // Summen: Distanz und Dauer nur, falls vorhanden; Kalorien = Summe der angezeigten Zeilenwerte
@@ -6847,6 +6847,9 @@
       const hidden = document.getElementById('training-sets');
       if (hidden) hidden.value = reps.join('-');
     }
+    // Inline-Handler-Audit (020 Teil 3): oninput/onchange="updateHiddenSets()" auf #set-reps-* lief ins
+    // Leere, da die Funktion nie auf window exponiert war (ReferenceError, siehe tests/stubs/known-errors.js).
+    window.updateHiddenSets = updateHiddenSets;
 
     window.adjustSets = function(delta) {
       setsCount = Math.max(1, Math.min(20, setsCount + delta));
@@ -7279,9 +7282,9 @@
         const typ = e.typ || oldTypeMap[e.type] || e.type || '';
         // typeLabels[typ] enthält für vordefinierte Typen das Icon bereits fest im String; eigene
         // Übungen (customTypeLabel-Zweig) haben dort keines, daher hier wie im Plan über typIcon() ergänzen.
-        const typeLabel = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + customTypeLabel(typ, e);
+        const typeLabel = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + escHtml(customTypeLabel(typ, e));
         const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
-        const variantLabel = e.variantLabel || e.variante || e.variant || '';
+        const variantLabel = escHtml(e.variantLabel || e.variante || e.variant || '');
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
         const isPlan = e.source === 'plan';
         const isManual = !isGarmin && !isPlan;
@@ -7341,7 +7344,7 @@
             </div>
             ${linkedGarminNote ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
             ${strengthNettoLabel ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${strengthNettoLabel}</div>` : ''}
-            <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + e.notiz : ''}</div>
+            <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + escHtml(e.notiz) : ''}</div>
             ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
           <div class="fo-row__actions" onclick="event.stopPropagation()">
@@ -7505,16 +7508,24 @@
       weight: null,
       activityLevel: 1.55
     };
-    
+
+    // Befund 017 9d: saveSettings() schreibt per setDoc ohne merge – schlägt loadSettings() beim
+    // Start fehl, würden die (leeren) Default-Werte echte gespeicherte Werte überschreiben. Das Flag
+    // wird NUR nach einem erfolgreichen getDoc() gesetzt (auch wenn das Dokument – Neuinstallation –
+    // nicht existiert: dann bleiben die Defaults gültig und Speichern ist erlaubt); bei einer
+    // Exception bleibt es false und saveSettings() verweigert das Schreiben.
+    let settingsLoaded = false;
+
     async function loadSettings() {
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
           settings = { ...settings, ...docSnap.data() };
           delete settings.anthropicApiKey; // Altfeld (005c2): KI läuft nur noch über anthropicProxy
         }
+        settingsLoaded = true;
 
         // Auto-fill weight from most recent dayLog
         const latestWeight = getLatestWeight();
@@ -7612,6 +7623,14 @@
     }
 
     window.saveSettings = async function() {
+      if (!settingsLoaded) {
+        const retry = await showConfirm(
+          'Einstellungen konnten nicht geladen werden – bitte App neu laden, sonst würden deine Werte überschrieben.',
+          '', 'alertCircle', 'Erneut laden', false, 'Abbrechen'
+        );
+        if (retry) await loadSettings();
+        return;
+      }
       const tdee = parseInt(document.getElementById('settings-tdee').value) || 2700;
       const protein = parseInt(document.getElementById('settings-protein').value) || 150;
       const carbs = parseInt(document.getElementById('settings-carbs').value) || 325;
@@ -9711,7 +9730,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const vorschlagTag = `<span class="fo-tag" style="margin-right:6px;background:var(--fo-primary);color:var(--fo-on-primary);">Vorschlag</span>`;
       const title = vorschlagTag + (isRuhetag ? 'Ruhetag' : isZirkel
         ? `${typIcon('zirkel')} ${TYP_LABELS.zirkel}`
-        : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
+        : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planEsc(planTypLabel(u.typ)) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
       const target = isRuhetag ? '' : isZirkel
         ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
         : planTarget(u);
@@ -9882,7 +9901,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
           const originalTag = hasSuggestion ? `<span class="fo-tag" style="margin-right:6px;">Original</span>` : '';
           const title = originalTag + (isZirkel
             ? `<span class="fo-tag">${typIcon('zirkel')} ${TYP_LABELS.zirkel}</span>`
-            : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planTypLabel(u.typ, u.typLabel) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
+            : (typIcon(u.typ) ? typIcon(u.typ) + ' ' : '') + planEsc(planTypLabel(u.typ, u.typLabel)) + (u.variant ? ' · ' + planEsc(u.variant) : ''));
           const target = isZirkel
             ? [`${u.runden} Runde${u.runden === 1 ? '' : 'n'}`, `${u.dauerMin} min`, `~${fmt(planZirkelKcal(u))} kcal`].join(' · ')
             : planTarget(u);
@@ -9957,7 +9976,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         });
 
         extra.forEach(e => {
-          const title = (typIcon(e.typ) ? typIcon(e.typ) + ' ' : '') + planTypLabel(e.typ) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
+          const title = (typIcon(e.typ) ? typIcon(e.typ) + ' ' : '') + planEsc(planTypLabel(e.typ)) + (e.variantLabel || e.variant ? ' · ' + planEsc(e.variantLabel || e.variant) : '');
           const meta = [e.distanz > 0 ? String(e.distanz).replace('.', ',') + ' km' : '', e.zeit || '', entryStepsLabel(e.schritte), isHoldEntry(e) ? fmtHoldSets(e.holdSec) : '', isAutoActivity(e) ? 'Garmin' : e.source === 'plan' ? 'Plan' : ''].filter(Boolean).join(' · ');
           const kcal = activityKcalForGoal(e); // Kalorienzahl nur, wenn der Eintrag ins Tagesziel zählt
           rows += `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px solid var(--fo-line);opacity:.6;">

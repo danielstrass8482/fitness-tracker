@@ -37,6 +37,6 @@
 - Jedes Modal in `MODAL_IDS` eintragen und beim Öffnen `pushModalState()` aufrufen, sonst bricht der `popstate`-Zurück-Handler.
 - Initiales `style="display:none"` nie mit `display:flex` im selben Attribut; flex nur per JS beim Öffnen.
 - `barcode-container` muss direktes Kind von `<body>` bleiben; `barcodeContext` ('food'/'recipe') steuert das Ziel.
-- Tab-Struktur (Übersicht, Ernährung, Training, Analyse, Einstellungen) nicht umbauen.
+- Tab-Struktur (Übersicht, Ernährung, Training, Einstellungen – kein Analyse-Tab mehr, seit 016f) nicht umbauen. Auswertungen laufen über den MCP-Connector in claude.ai (Views u. a. `food_log_entries`, `exercise_sets`, `zirkel_uebungen`).
 - Firestore-Collections und Dokumentstruktur nie ohne Migration ändern (Bestand: `docs/datenmodell.md`).
 - Cloud-Function-Namen und -Signaturen stabil halten; index.html ruft sie direkt auf.

@@ -42,12 +42,20 @@ export function onAuthStateChanged(auth, cb) {
 export function getFirestore() { return { __fakeDb: true }; }
 
 function pathOf(segments) { return segments.join('/'); }
+// Erster Parameter kann wie im echten modularen SDK die Firestore-Instanz (Fake-db, kein .path)
+// ODER eine Collection-/Doc-Referenz sein (z.B. doc(userRecipeCol(), id), collection(docRef, 'sub')
+// - von index.html an mehreren Stellen genutzt, u.a. saveRecipeModal) - dann deren .path voranstellen.
+function basePath(first) {
+  return (first && typeof first === 'object' && typeof first.path === 'string') ? first.path : null;
+}
 
 export function collection(db, ...segments) {
-  return { __kind: 'collection', path: pathOf(segments) };
+  const base = basePath(db);
+  return { __kind: 'collection', path: base ? [base, ...segments].join('/') : pathOf(segments) };
 }
 export function doc(db, ...segments) {
-  return { __kind: 'doc', path: pathOf(segments) };
+  const base = basePath(db);
+  return { __kind: 'doc', path: base ? [base, ...segments].join('/') : pathOf(segments) };
 }
 export function query(ref, ...constraints) {
   return { __kind: 'collection', path: ref.path, constraints };
@@ -96,8 +104,14 @@ export async function getDocs(ref) {
   };
 }
 
+// Optionale Fehler-Injektion fuer EINEN Dokumentpfad (Aufgabe 017, Punkt 9d: simuliert einen
+// fehlgeschlagenen Firestore-Lesezugriff z.B. in loadSettings()). window.__TEST_FAIL_PATHS__
+// (Array von Pfaden, vor der Navigation gesetzt) - Default unverändert (kein Test betroffen).
 export async function getDoc(ref) {
   await simulateReadLatency();
+  if ((window.__TEST_FAIL_PATHS__ || []).includes(ref.path)) {
+    throw new Error('getDoc gestubbt als fehlgeschlagen (__TEST_FAIL_PATHS__): ' + ref.path);
+  }
   const store = ensureStore();
   const segs = ref.path.split('/');
   const id = segs.pop();
@@ -117,8 +131,21 @@ export async function deleteDoc(ref) {
   window.__TEST_WRITES__.push({ type: 'delete', path: ref.path });
 }
 
-// ── Functions (in den 012d-Tests nicht aufgerufen) ──────────────────────
+// ── Functions ────────────────────────────────────────────────────────────
+// Default (012d/015/016e/016f/016/017-Formeln/017-smoke): kein echter Aufruf, wirft.
+// 017-Alkohol braucht den echten generateDailyCheck()-Codepfad (baut die KI-Payload inkl.
+// Alkoholregel), ohne je wirklich anthropicProxy/das Netz zu erreichen - daher optionales
+// Abfangen+Protokollieren via window.__TEST_AI_RESPONSE__ (vor der Navigation gesetzt),
+// Aufrufe landen in window.__TEST_AI_CALLS__ (Name + Body), nie wirklich verschickt.
 export function getFunctions() { return { __fakeFunctions: true }; }
-export function httpsCallable() {
-  return async () => { throw new Error('httpsCallable: nicht gestubbt (012d-Tests brauchen das nicht)'); };
+export function httpsCallable(functionsRef, name) {
+  return async (data) => {
+    if (!window.__TEST_WRITES__) window.__TEST_WRITES__ = [];
+    if (window.__TEST_AI_RESPONSE__) {
+      window.__TEST_AI_CALLS__ = window.__TEST_AI_CALLS__ || [];
+      window.__TEST_AI_CALLS__.push({ name, data });
+      return { data: window.__TEST_AI_RESPONSE__ };
+    }
+    throw new Error('httpsCallable: nicht gestubbt (window.__TEST_AI_RESPONSE__ nicht gesetzt)');
+  };
 }

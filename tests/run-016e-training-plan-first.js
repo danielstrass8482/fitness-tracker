@@ -9,13 +9,9 @@ const { installHarness } = require('./stubs/harness.js');
 const FIXED_TIME_ISO = '2026-11-17T07:00:00.000Z'; // 08:00 Europe/Berlin
 const SETTINGS = { height: 180, age: 35, gender: 'male', weight: 80, tdee: 2700 };
 
-// Vorbestehender, von 016e unabhaengiger Fehler (belegt auch auf unveraendertem HEAD ee15164,
-// ohne jede Sub-Tab-Interaktion): updateHiddenSets() ist nicht auf window exponiert, obwohl
-// index.html als <script type="module"> laeuft und oninput="updateHiddenSets()" im globalen
-// Scope ausgefuehrt wird -> ReferenceError bei jeder Eingabe im Wdh.-Feld. Ausserhalb des
-// Auftrags 016e, wird hier nur herausgefiltert, damit er dieses Testergebnis nicht verfaelscht.
-const KNOWN_PREEXISTING_ERROR = 'ReferenceError: updateHiddenSets is not defined';
-const filterKnown = errs => errs.filter(e => e !== KNOWN_PREEXISTING_ERROR);
+// Der vorbestehende, von 016e unabhaengige updateHiddenSets-Fehler (siehe tests/stubs/
+// known-errors.js, EINZIGE Filterstelle seit Aufgabe 017) ist schon in installHarness()
+// herausgefiltert - consoleErrors unten ist also bereits bereinigt.
 
 function buildStore() {
   return {
@@ -107,7 +103,7 @@ async function scenario3(browser) {
   console.log('  Wdh.-Wert nach erneutem Loggen-Wechsel:', r2.repsValue);
   const r2ok = r2.afterLogSwitch.logActive === true && r2.afterLogSwitch.planActive === false
     && r2.afterReturn.planActive === true && r2.afterReturn.logActive === false
-    && r2.repsValue === '12' && filterKnown(r2.consoleErrors).length === 0;
+    && r2.repsValue === '12' && r2.consoleErrors.length === 0;
   console.log(r2ok ? '  OK' : '  ABWEICHUNG');
   ok = ok && r2ok;
 

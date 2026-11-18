@@ -3,6 +3,7 @@
 // synthetische Daten, feste Uhr (page.clock), Viewport 360px. Siehe tests/README.md.
 const path = require('path');
 const fs = require('fs');
+const { filterKnownConsoleErrors } = require('./known-errors.js');
 
 const INDEX_HTML = path.join(__dirname, '..', '..', 'index.html');
 const STUB_PATH = path.join(__dirname, 'firebase-stub.mjs');
@@ -26,9 +27,13 @@ async function installHarness(page, { fixedTimeIso, store }) {
 
   await page.clock.install({ time: new Date(fixedTimeIso) });
 
+  // Bekannte, vorbestehende Konsolenfehler (stubs/known-errors.js, zentrale Stelle fuer alle
+  // Tests mit dieser Harness) werden schon hier beim Einsammeln herausgefiltert - gilt auch fuer
+  // Fehler, die erst NACH installHarness() durch weitere Test-Interaktionen entstehen.
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-  page.on('pageerror', err => consoleErrors.push(String(err)));
+  const pushIfUnknown = text => { if (filterKnownConsoleErrors([text]).length) consoleErrors.push(text); };
+  page.on('console', msg => { if (msg.type() === 'error') pushIfUnknown(msg.text()); });
+  page.on('pageerror', err => pushIfUnknown(String(err)));
 
   await page.goto('file://' + INDEX_HTML);
   await page.waitForSelector('#app-container.show', { timeout: 15000 });

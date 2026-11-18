@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Playwright-Tests fuer index.html (fitness-tracker) - nur synthetische Daten.",
   "scripts": {
-    "test": "node run-012d.js"
+    "test": "node run-all.js"
   },
   "devDependencies": {
     "playwright": "1.62.0"

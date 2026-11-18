@@ -19,6 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const { chromium } = require('playwright');
+const { filterKnownConsoleErrors } = require('./stubs/known-errors.js');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const STUB_PATH = path.join(__dirname, 'stubs', 'firebase-stub.mjs');
@@ -141,9 +142,11 @@ async function installMinimalHarness(page, { store, latencyMs }) {
     window.__TEST_LATENCY_MS__ = latencyMs;
   }, { store, latencyMs });
 
+  // Zentrale Filterstelle fuer bekannte Fehler (tests/stubs/known-errors.js) - siehe dort.
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-  page.on('pageerror', err => consoleErrors.push(String(err)));
+  const pushIfUnknown = text => { if (filterKnownConsoleErrors([text]).length) consoleErrors.push(text); };
+  page.on('console', msg => { if (msg.type() === 'error') pushIfUnknown(msg.text()); });
+  page.on('pageerror', err => pushIfUnknown(String(err)));
 
   return { consoleErrors };
 }

@@ -56,11 +56,6 @@
       --fo-bad-pressed:#9E1830;
       /* Fokus */
       --fo-focus-ring:0 0 0 3px rgba(30,91,216,.32);
-      /* Diagramme */
-      --fo-chart-1:var(--fo-primary);
-      --fo-chart-2:#4A5463;
-      --fo-chart-3:var(--fo-activity);
-      --fo-chart-grid:#EDF0F4;
       /* Overlay */
       --fo-scrim:rgba(20,26,35,.45);
       --fo-toast-bg:#141A23;
@@ -104,7 +99,6 @@
       --fo-primary:#5B8DEF; --fo-primary-pressed:#7AA3F2; --fo-primary-tint:#1B2A45; --fo-on-primary:#0B1220;
       --fo-activity:#FF7A3D; --fo-activity-strong:#FF9A66; --fo-activity-tint:#3A2216;
       --fo-ok:#3FBF85; --fo-ok-tint:#123326; --fo-bad:#FF6B7F; --fo-bad-tint:#3A1820; --fo-bad-pressed:#FF8A9A;
-      --fo-chart-2:#B4BCC8; --fo-chart-grid:#252B34;
       --fo-scrim:rgba(0,0,0,.6); --fo-toast-bg:#E8ECF2; --fo-toast-text:#141A23; --fo-toast-action:#1E5BD8;
       --fo-sh-1:none; --fo-sh-2:0 8px 24px rgba(0,0,0,.5); --fo-sh-3:0 -8px 32px rgba(0,0,0,.55);
     }
@@ -328,16 +322,6 @@
     .fo-table td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--fo-line);white-space:nowrap}
     .fo-table th:first-child,.fo-table td:first-child{text-align:left}
     .fo-table tr:last-child td{border-bottom:0}
-
-    /* ---------- DIAGRAMM-RAHMEN ---------- */
-    .fo-chart{display:flex;flex-direction:column;gap:8px;padding:var(--fo-s3);background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:var(--fo-r-lg)}
-    .fo-chart__head{display:flex;align-items:center;gap:8px}
-    .fo-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:var(--fo-fs-caption);line-height:var(--fo-lh-caption);color:var(--fo-text-2)}
-    .fo-legend__item{display:inline-flex;align-items:center;gap:6px}
-    .fo-legend__bar{width:10px;height:10px;border-radius:2px;background:var(--fo-chart-1)}
-    .fo-legend__line{width:14px;height:2px;border-radius:2px;background:var(--fo-chart-2)}
-    .fo-chart svg{display:block;width:100%;height:auto}
-    .fo-chart__axis{font:400 11px var(--fo-font);fill:var(--fo-text-3);font-variant-numeric:tabular-nums}
 
     /* ---------- PLAN / CHECKBOX ---------- */
     .fo-check{display:grid;place-items:center;width:26px;height:26px;flex:none;border:2px solid var(--fo-line-strong);border-radius:8px;background:var(--fo-surface);color:transparent}
@@ -1429,16 +1413,6 @@
           </div>
 
           <div class="fo-field">
-            <label class="fo-label" for="settings-detail-days">Detaildaten laden (Tage)</label>
-            <div class="fo-select"><select id="settings-detail-days">
-              <option value="31">Letzte 31 Tage</option>
-              <option value="60">Letzte 60 Tage</option>
-              <option value="90">Letzte 90 Tage</option>
-            </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
-            <p class="fo-help" style="margin:0;">Bestimmt wie viele Tage beim Start geladen werden. Mehr = mehr Firebase Reads.</p>
-          </div>
-
-          <div class="fo-field">
             <label class="fo-label" for="settings-recipe-display">Rezeptanzeige im Tagebuch</label>
             <div class="fo-select"><select id="settings-recipe-display">
               <option value="block">Als Block (ein Eintrag pro Rezept)</option>
@@ -2055,7 +2029,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-18 11:40';
+    const APP_BUILD = '2026-11-18 15:09';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2157,7 +2131,6 @@
     const userRecipeCol = () => collection(db, 'users', userId, 'recipes');
     const userLogCol = () => collection(db, 'users', userId, 'logEntries');
     const userTrainingCol = () => collection(db, 'users', userId, 'entries');
-    const userWeeklyCol = () => collection(db, 'users', userId, 'weeklyStats'); // kept for backward compat
     const userPlanCol = () => collection(db, 'users', userId, 'trainingplans'); // Plan-Versionen, Doc-ID = Montag ab dem gültig
     const userIntervalTemplateCol = () => collection(db, 'users', userId, 'intervalTemplates'); // Intervall-Zirkel-Vorlagen, Doc-ID = Vorlagen-ID
     const userOuraDailyCol = () => collection(db, 'users', userId, 'oura_daily'); // Oura-Tageswerte aus dem Sync (Cloud Function). Schritte: Kalorien-Fallback (getKcalStepsForDate) und ab 15.11.2026 Tagesquelle ohne Garmin-Wert (getStepsSourceForDate)
@@ -2585,9 +2558,6 @@
       if (source === 'oura') return ouraDaily[date]?.steps || 0;
       return 0; // 'none'
     }
-
-    // Weekly stats state
-    let weeklyStats = {};
 
     // ── IndexedDB Cache ──────────────────────────────────────────────────────
     const CACHE_DB_NAME = 'fuelofit-cache';
@@ -3106,81 +3076,6 @@
       }
     }
 
-    // Get ISO week string YYYY-WXX from date string
-    function getISOWeek(dateStr) {
-      const d = new Date(dateStr + 'T12:00:00');
-      const jan4 = new Date(d.getFullYear(), 0, 4);
-      const startOfWeek1 = new Date(jan4);
-      startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-      const weekNum = Math.floor((d - startOfWeek1) / (7 * 24 * 3600 * 1000)) + 1;
-      const year = weekNum >= 52 && d.getMonth() === 0 ? d.getFullYear() - 1
-                 : weekNum === 1 && d.getMonth() === 11 ? d.getFullYear() + 1
-                 : d.getFullYear();
-      return `${year}-W${String(weekNum).padStart(2, '0')}`;
-    }
-
-    // Build/update weeklyStats from foodLog entries for a given date
-    async function updateWeeklyStats(date) {
-      const week = getISOWeek(date);
-      // Gather all entries for this week from foodLog
-      const d = new Date(date + 'T12:00:00');
-      const dayOfWeek = (d.getDay() + 6) % 7; // 0=Mon
-      const weekDates = [];
-      for (let i = 0; i < 7; i++) {
-        const wd = new Date(d);
-        wd.setDate(d.getDate() - dayOfWeek + i);
-        weekDates.push(wd.toISOString().split('T')[0]);
-      }
-      
-      let kcal = 0, protein = 0, carbs = 0, fat = 0, days = 0;
-      let act_kcal_calc = 0, act_kcal_garmin = 0, run_km = 0, trainings = 0;
-      let kcal_goal = 0, steps_total = 0, steps_activity = 0;
-      let weights = [];
-
-      weekDates.forEach(wd => {
-        const entries = foodLog[wd] || [];
-        if (entries.length > 0) {
-          days++;
-          entries.forEach(e => {
-            kcal += e.kcal || 0;
-            protein += e.protein || 0;
-            carbs += e.carbs || 0;
-            fat += e.fat || 0;
-          });
-          kcal_goal += calcHistoricalKcalGoal(wd).total || 0;
-        }
-        const dayLog = trainingEntries.find(e => e.typ === 'tageslog' && e.datum === wd);
-        if (dayLog?.weight) weights.push(dayLog.weight);
-        const rawSteps = getRawStepsForDate(wd, dayLog);
-        if (rawSteps > 0) steps_total += rawSteps;
-
-        getEffectiveTrainingEntries().filter(e => e.datum === wd && countsAsActivity(e)).forEach(e => {
-          act_kcal_calc += calcActivityKcal(e);
-          act_kcal_garmin += e.kalorien || 0;
-          if (e.typ === 'laufen') run_km += parseFloat(e.distanz) || 0;
-          trainings++;
-        });
-        // Aktivitätsschritte konsistent aus derselben Quelle wie rawSteps (nie gemischt, Korrektur 2, 01.11.2026)
-        steps_activity += getActivityStepsForDate(wd);
-      });
-
-      const stat = {
-        week, kcal: Math.round(kcal), protein: Math.round(protein),
-        carbs: Math.round(carbs), fat: Math.round(fat), days,
-        kcal_goal: Math.round(kcal_goal),
-        act_kcal_calc: Math.round(act_kcal_calc),
-        act_kcal_garmin: Math.round(act_kcal_garmin),
-        run_km: Math.round(run_km * 10) / 10, trainings,
-        steps_total, steps_activity,
-        steps_daily: Math.max(0, steps_total - steps_activity),
-        weight: weights.length ? Math.round(weights.reduce((s,v) => s+v,0) / weights.length * 10) / 10 : null
-      };
-
-      weeklyStats[week] = stat;
-      window.weeklyStats = weeklyStats;
-      await setDoc(doc(userWeeklyCol(), week), stat);
-    }
-    
     // Render All
     function renderAll() {
       const activeTab = document.querySelector('.tab.active');
@@ -3691,6 +3586,7 @@
       document.getElementById('fooddb-kategorie').value = food.kategorie || '';
       fooddbServings = validServings(food).map(sv => ({ ...sv }));
       renderFoodDBServings();
+      pushModalState();
     };
 
     // 009: Portionen im Lebensmittel-Dialog (Arbeitskopie, gespeichert erst mit "Speichern")
@@ -3744,7 +3640,7 @@
       const kategorie = document.getElementById('fooddb-kategorie').value || '';
       
       if (!name) {
-        alert('Bitte Name eingeben!');
+        showToast('Bitte Name eingeben!', 'bad');
         return;
       }
       
@@ -4352,10 +4248,10 @@
     }
 
     // Zählt ein Trainingseintrag zu den Aktivitätskalorien (Kalorienziel/Statistik)?
-    // Garmin/Google Fit/Strava immer; Plan-Einträge nur, wenn am selben Tag kein
+    // Garmin/Google Fit (Altdaten) immer; Plan-Einträge nur, wenn am selben Tag kein
     // automatisch importierter Eintrag gleichen Typs existiert (sonst doppelt gezählt).
     function isAutoActivity(e) {
-      return e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
+      return e.source === 'garmin' || e.source === 'googlefit';
     }
     function countsAsActivity(e, list) {
       if (isAutoActivity(e)) return true;
@@ -4365,7 +4261,7 @@
     }
 
     // ── Einzige Regel: was ins Kalorienziel zählt und was eine Kalorienzahl anzeigt ──────────────
-    // Automatische Einträge (Garmin/Google Fit/Strava, auch Gehen/Wandern) zählen immer mit vollem Wert.
+    // Automatische Einträge (Garmin/Google Fit (Altdaten), auch Gehen/Wandern) zählen immer mit vollem Wert.
     // Manuell geloggte und im Plan abgehakte Einträge (source 'manual'/'plan', inkl. Plan-Zirkel und
     // Haltezeit) zählen nur, wenn ihre berechnete Kalorienzahl JE EINTRAG mindestens MIN_MANUAL_KCAL
     // beträgt, dann mit vollem Wert, darunter mit 0 und ohne Kalorienzahl in den Listen.
@@ -5102,6 +4998,7 @@
       selectedRecipe = null;
       document.getElementById('add-food-title').textContent = 'Essen hinzufügen';
       document.getElementById('add-food-modal').style.display = 'block';
+      document.getElementById('selected-food-source').textContent = ''; // Befund 021 7: sonst bleibt die Quelle (OFF/BLS) der letzten Auswahl stehen
       setAddFoodMode('food');
       document.getElementById('food-search').focus();
       
@@ -5895,6 +5792,10 @@
       const results = document.getElementById('food-search-results');
       if (results) results.innerHTML = '';
 
+      // Befund 021 7: Quelle-Label zurücksetzen - sonst bleibt "Open Food Facts"/"BLS" einer vorherigen
+      // Auswahl stehen, obwohl jetzt ein normales Lebensmittel gewählt wurde. OFF-/BLS-Aufrufer setzen
+      // den Text direkt nach diesem Aufruf wieder.
+      document.getElementById('selected-food-source').textContent = '';
       document.getElementById('selected-food-name').textContent = selectedFood.name;
       document.getElementById('food-form').style.display = 'block';
 
@@ -6064,6 +5965,7 @@
       editingEntryId = id;
       document.getElementById('add-food-title').textContent = 'Eintrag bearbeiten';
       document.getElementById('add-food-modal').style.display = 'block';
+      document.getElementById('selected-food-source').textContent = ''; // Befund 021 7: sonst bleibt die Quelle (OFF/BLS) der letzten Auswahl stehen
 
       // Check if this is a recipe block entry
       const recipeEntry = recipes.find(r => String(r.id) === String(entry.foodId));
@@ -7283,7 +7185,7 @@
         // typeLabels[typ] enthält für vordefinierte Typen das Icon bereits fest im String; eigene
         // Übungen (customTypeLabel-Zweig) haben dort keines, daher hier wie im Plan über typIcon() ergänzen.
         const typeLabel = typeLabels[typ] || (typIcon(typ) ? typIcon(typ) + ' ' : '') + escHtml(customTypeLabel(typ, e));
-        const isGarmin = e.source === 'garmin' || e.source === 'googlefit' || e.source === 'strava';
+        const isGarmin = e.source === 'garmin' || e.source === 'googlefit';
         const variantLabel = escHtml(e.variantLabel || e.variante || e.variant || '');
         const title = variantLabel ? `${typeLabel} · ${variantLabel}` : typeLabel;
         const isPlan = e.source === 'plan';
@@ -7525,7 +7427,6 @@
           settings = { ...settings, ...docSnap.data() };
           delete settings.anthropicApiKey; // Altfeld (005c2): KI läuft nur noch über anthropicProxy
         }
-        settingsLoaded = true;
 
         // Auto-fill weight from most recent dayLog
         const latestWeight = getLatestWeight();
@@ -7544,8 +7445,6 @@
           document.getElementById('settings-gender').value = settings.gender || 'male';
           document.getElementById('settings-age').value = settings.age || '';
           document.getElementById('settings-height').value = settings.height || '';
-          if (document.getElementById('settings-detail-days'))
-            document.getElementById('settings-detail-days').value = settings.detailDays || 31;
 
           if (latestWeight) {
             document.getElementById('settings-weight-hint').textContent =
@@ -7562,6 +7461,9 @@
 
           calcTDEE();
         }
+        // Befund 021 2: erst HIER setzen (nach dem Formular-Befüllen), damit eine Exception beim
+        // Befüllen (z. B. fehlendes Element) das Flag false lässt und saveSettings() nicht schreibt.
+        settingsLoaded = true;
       } catch (err) {
         console.error('Load settings error:', err);
       }
@@ -7642,11 +7544,10 @@
       // Kein Dropdown mehr: gespeicherten Wert unverändert zurückschreiben (setDoc ohne merge)
       const activityLevel = settings.activityLevel || 1.55;
       
-      const detailDays = parseInt(document.getElementById('settings-detail-days')?.value) || 31;
       const recipeDisplay = document.getElementById('settings-recipe-display')?.value || 'block';
       settings = {
         tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat,
-        gender, age, height, weight, activityLevel, detailDays, recipeDisplay,
+        gender, age, height, weight, activityLevel, recipeDisplay,
       };
 
       try {
@@ -9710,7 +9611,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       }
 
       // Nur ungematchte Einträge zeigen, die selbst im Plan entstanden sind (source:'plan' – Abhaken oder
-      // Ad-hoc-Zirkel). Garmin/Google-Fit/Strava-Aktivitäten und sonstige manuell geloggte Einträge gehören
+      // Ad-hoc-Zirkel). Garmin/Google-Fit-Aktivitäten (Altdaten) und sonstige manuell geloggte Einträge gehören
       // nur in die Übersicht, nicht in den Plan (siehe Bericht, Teil 1).
       const extra = dayEntries.filter(e => !used.has(e) && e.source === 'plan');
       return { result, extra, suggestionMatch };

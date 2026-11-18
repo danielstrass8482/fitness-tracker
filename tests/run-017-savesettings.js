@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // 017 Punkt 9 - saveSettings() Charakterisierungstests. saveSettings() (index.html ~7607) schreibt
-// users/{uid}/settings/main per setDoc OHNE merge, mit genau 11 Feldern: tdee, proteinGoal,
-// carbsGoal, fatGoal, gender, age, height, weight, activityLevel, detailDays, recipeDisplay. Jedes
-// andere Feld im Dokument würde beim nächsten Speichern verschwinden (siehe Bericht 017, Punkt 9).
+// users/{uid}/settings/main per setDoc OHNE merge, mit genau 10 Feldern: tdee, proteinGoal,
+// carbsGoal, fatGoal, gender, age, height, weight, activityLevel, recipeDisplay (detailDays entfernt,
+// Aufgabe 021 Punkt 1 - nirgends ausgewertet). Jedes andere Feld im Dokument würde beim nächsten
+// Speichern verschwinden (siehe Bericht 017, Punkt 9).
 // Aufgabe 020 Teil 1 (Befund 017 9d): settingsLoaded-Flag, NUR nach erfolgreichem getDoc() gesetzt
 // (auch wenn kein Dokument existiert - Neuinstallation). Ohne das Flag verweigert saveSettings() das
 // Schreiben und zeigt showConfirm() statt stillschweigend zu ueberschreiben (Szenario d unten, jetzt
@@ -13,7 +14,7 @@ const { installHarness, TEST_UID } = require('./stubs/harness.js');
 
 const FIXED_TIME_ISO = '2026-11-16T07:00:00.000Z'; // 08:00 Europe/Berlin
 const SETTINGS_PATH = `users/${TEST_UID}/settings/main`;
-const EXPECTED_11_FIELDS = ['tdee', 'proteinGoal', 'carbsGoal', 'fatGoal', 'gender', 'age', 'height', 'weight', 'activityLevel', 'detailDays', 'recipeDisplay'];
+const EXPECTED_10_FIELDS = ['tdee', 'proteinGoal', 'carbsGoal', 'fatGoal', 'gender', 'age', 'height', 'weight', 'activityLevel', 'recipeDisplay'];
 
 function buildStore(settingsData) {
   return { [`users/${TEST_UID}/settings`]: [{ id: 'main', data: settingsData }] };
@@ -25,9 +26,9 @@ function check(name, cond, detail) {
   if (!cond) ok = false;
 }
 
-// (c) Normale Speicherung: protokollierter Payload enthaelt GENAU die 11 Felder, kein merge.
+// (c) Normale Speicherung: protokollierter Payload enthaelt GENAU die 10 Felder, kein merge.
 async function testNormalSavePayload(browser) {
-  const existing = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'male', age: 35, height: 180, weight: 80, activityLevel: 1.55, detailDays: 31, recipeDisplay: 'block' };
+  const existing = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'male', age: 35, height: 180, weight: 80, activityLevel: 1.55, recipeDisplay: 'block' };
   const page = await browser.newPage();
   const { consoleErrors } = await installHarness(page, { fixedTimeIso: FIXED_TIME_ISO, store: buildStore(existing) });
 
@@ -40,7 +41,6 @@ async function testNormalSavePayload(browser) {
   await page.fill('#settings-height', '181');
   await page.fill('#settings-weight', '79.5');
   await page.selectOption('#settings-gender', 'female');
-  await page.selectOption('#settings-detail-days', '60');
   await page.selectOption('#settings-recipe-display', 'expanded');
   await page.fill('#settings-tdee', '2600');
   await page.fill('#settings-protein', '160');
@@ -64,7 +64,7 @@ async function testNormalSavePayload(browser) {
 
   check('settings/main GENAU EINMAL geschrieben (kein zweiter Write auf diesen Pfad)', settingsWrites.length === 1, settingsWrites);
   check('setDoc OHNE merge gefunden (saveSettings)', !!fullWrite, settingsWrites);
-  check('Payload hat GENAU die 11 erwarteten Felder, keine weiteren, keine fehlenden', fullWrite && JSON.stringify(Object.keys(fullWrite.data).sort()) === JSON.stringify([...EXPECTED_11_FIELDS].sort()), fullWrite && Object.keys(fullWrite.data));
+  check('Payload hat GENAU die 10 erwarteten Felder, keine weiteren, keine fehlenden', fullWrite && JSON.stringify(Object.keys(fullWrite.data).sort()) === JSON.stringify([...EXPECTED_10_FIELDS].sort()), fullWrite && Object.keys(fullWrite.data));
   check('tdee = 2600 (neuer Formularwert)', fullWrite?.data.tdee === 2600, fullWrite?.data);
   check('proteinGoal = 160', fullWrite?.data.proteinGoal === 160, fullWrite?.data);
   check('carbsGoal = 300', fullWrite?.data.carbsGoal === 300, fullWrite?.data);
@@ -74,7 +74,6 @@ async function testNormalSavePayload(browser) {
   check('height = 181', fullWrite?.data.height === 181, fullWrite?.data);
   check('weight = 79.5', fullWrite?.data.weight === 79.5, fullWrite?.data);
   check('activityLevel unveraendert aus settings.activityLevel (1.55, kein Dropdown mehr)', fullWrite?.data.activityLevel === 1.55, fullWrite?.data);
-  check('detailDays = 60', fullWrite?.data.detailDays === 60, fullWrite?.data);
   check('recipeDisplay = expanded', fullWrite?.data.recipeDisplay === 'expanded', fullWrite?.data);
   check('saveSettings() schreibt den Gewichtswert zusaetzlich als Tageslog (entries/log_..., merge:true), NICHT auf settings/main', !!weightLogWrite && weightLogWrite.merge === true && weightLogWrite.data.weight === 79.5, weightLogWrite);
   check('keine Konsolenfehler (normale Speicherung)', consoleErrors.length === 0, consoleErrors);
@@ -84,7 +83,7 @@ async function testNormalSavePayload(browser) {
 // saveSettings() schreibt NICHT (kein setDoc auf settings/main) und zeigt showConfirm() statt
 // stillschweigend zu ueberschreiben (020 Teil 1, Befund 017 9d behoben).
 async function testSaveAfterLoadFailure(browser) {
-  const existing = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'female', age: 42, height: 165, weight: 60, activityLevel: 1.55, detailDays: 31, recipeDisplay: 'block' };
+  const existing = { tdee: 2700, proteinGoal: 150, carbsGoal: 325, fatGoal: 95, gender: 'female', age: 42, height: 165, weight: 60, activityLevel: 1.55, recipeDisplay: 'block' };
   const page = await browser.newPage();
   await page.addInitScript(({ p }) => { window.__TEST_FAIL_PATHS__ = [p]; }, { p: SETTINGS_PATH });
   // installHarness wartet auf #daily-kcal-goal mit Inhalt - das klappt auch ohne geladene Settings

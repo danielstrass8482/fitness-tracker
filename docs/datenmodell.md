@@ -279,7 +279,7 @@ bei `zirkel` zusätzlich `runden`, `prepSec`, `sideSwitchSec`, `uebungen` (wie `
 | `linkedGarmin` | – | nie gespeichert, entsteht in `getEffectiveTrainingEntries()` | – |
 | `kategorie` vs. `source` | `foods` Top-Level vs. nutzereigen | unterschiedliche Felder, unterschiedliche Anzahl (2293 vs. 2263) | Import 2026-04-13/16 |
 | `steps_*` | `weeklyStats` | 111 Docs | ab 2024-W14 |
-| Fortschreibung endet | `weeklyStats` | letztes Doc 2026-W18; `updateWeeklyStats()` (`index.html:3450`) hat keine Aufrufstelle mehr | ab 2026-W19 |
+| Fortschreibung endet | `weeklyStats` | letztes Doc 2026-W18; `updateWeeklyStats()` hatte keine Aufrufstelle mehr und wurde mit 021 (18.11.2026) aus `index.html` entfernt (App-Seite; Collection/Dokumente in Firestore unverändert) | ab 2026-W19 |
 | `sleepScore`/`readinessScore`/`tempDeviation` | `oura_daily` | fehlen am ersten Tag | ab 2026-10-03 |
 | `ouraComplete` | `oura_daily` | 24/34 | ab 2026-10-03, nicht durchgehend |
 | `suggestionStatus` | `dailyCheck` | 9/18 | ab 2026-10-18, nur bei Vorschlag |
@@ -308,7 +308,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 
 | Dokument | Felder (Typ) | Secret-Felder |
 |---|---|---|
-| `settings/main` | `activityLevel`, `age`, `carbsGoal`, `detailDays`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`); `assumedDailySteps` ungenutzt seit 012d (15.11.2026, Platzhalter "Angenommene Alltagsschritte" entfernt) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht | – |
+| `settings/main` | `activityLevel`, `age`, `carbsGoal`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`); `assumedDailySteps` ungenutzt seit 012d (15.11.2026, Platzhalter "Angenommene Alltagsschritte" entfernt) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht; `detailDays` ebenso ungenutzt seit 021 (18.11.2026, Einstellung "Detaildaten laden" entfernt - nirgends ausgewertet) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht (verschwindet beim nächsten Speichern) | – |
 | `settings/favorites` | `ids` (array) | – |
 | `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName`, `lastDriveBackupAttempt` (ISO-Zeitstempel, seit 04.11.2026), `lastDriveBackupError` (Kurztext oder null, seit 04.11.2026) (string) | – (Drive-Referenzen; Auto-Backup nur wenn letzter Versuch > 24 h) |
 | `settings/exercises` | 11 Übungsschlüssel (`pullups`, `pushups`, `lunges`, `terraband_knie`, `custom_*`) je map | – |

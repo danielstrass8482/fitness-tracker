@@ -84,12 +84,60 @@ async function testModalBackButtonCloses(browser) {
   check('keine Konsolenfehler (Modal/Zurueck-Taste)', consoleErrors.length === 0, consoleErrors);
 }
 
+// 4) editFoodDB() oeffnet edit-fooddb-modal, Zurueck-Taste schliesst es (Aufgabe 021 Punkt 6 -
+// editFoodDB fehlte bisher der pushModalState()-Aufruf, obwohl das Modal in MODAL_IDS steht)
+async function testEditFoodDBBackButtonCloses(browser) {
+  const page = await browser.newPage();
+  const { consoleErrors } = await installHarness(page, { fixedTimeIso: FIXED_TIME_ISO, store: buildStore() });
+
+  await page.evaluate(() => window.editFoodDB('food0'));
+  await page.waitForTimeout(80);
+  const openDisplay = await page.evaluate(() => document.getElementById('edit-fooddb-modal').style.display);
+  await page.goBack(); // echter Browser-Back -> popstate -> MODAL_IDS-Handler schliesst edit-fooddb-modal
+  await page.waitForTimeout(80);
+  const closedDisplay = await page.evaluate(() => document.getElementById('edit-fooddb-modal').style.display);
+  await page.close();
+
+  check('edit-fooddb-modal nach editFoodDB() sichtbar (display != "none")', openDisplay !== 'none', openDisplay);
+  check('edit-fooddb-modal nach Zurueck-Taste (popstate) geschlossen (display == "none")', closedDisplay === 'none', closedDisplay);
+  check('keine Konsolenfehler (editFoodDB/Zurueck-Taste)', consoleErrors.length === 0, consoleErrors);
+}
+
+// 5) "selected-food-source"-Label (Aufgabe 021 Punkt 7, "OFF-Label-Reset"): openAddFood()/
+// selectFood()/editEntry() muessen den Quelle-Tag ("Open Food Facts"/"BLS" einer vorherigen Auswahl)
+// zuruecksetzen - sonst zeigt die App bei einer normalen Lebensmittel-Auswahl weiterhin die falsche
+// Quelle an (Befund: vorher fehlte dieser Reset komplett).
+async function testOFFLabelResets(browser) {
+  const page = await browser.newPage();
+  const { consoleErrors } = await installHarness(page, { fixedTimeIso: FIXED_TIME_ISO, store: buildStore() });
+
+  await page.evaluate(() => window.openAddFood());
+  // OFF-/BLS-Auswahl simulieren (ohne echten Netzwerk-Request): Label wie in searchOpenFoodFacts()/
+  // lookupBarcode() nach einem Treffer gesetzt wird.
+  await page.evaluate(() => { document.getElementById('selected-food-source').textContent = 'Open Food Facts'; });
+  await page.evaluate(() => window.selectFood('food0')); // normale Auswahl aus der eigenen Datenbank
+  const afterSelectFood = await page.evaluate(() => document.getElementById('selected-food-source').textContent);
+
+  await page.evaluate(() => { document.getElementById('selected-food-source').textContent = 'BLS'; });
+  await page.evaluate(() => window.closeAddFood());
+  await page.evaluate(() => window.openAddFood()); // Modal frisch oeffnen
+  const afterReopen = await page.evaluate(() => document.getElementById('selected-food-source').textContent);
+
+  await page.close();
+
+  check('selectFood() setzt das Quelle-Label zurueck (kein "Open Food Facts" mehr nach normaler Auswahl)', afterSelectFood === '', afterSelectFood);
+  check('openAddFood() setzt das Quelle-Label beim frischen Oeffnen zurueck (kein "BLS" mehr sichtbar)', afterReopen === '', afterReopen);
+  check('keine Konsolenfehler (OFF-Label-Reset)', consoleErrors.length === 0, consoleErrors);
+}
+
 async function main() {
   const browser = await chromium.launch();
   console.log('\n=== 017 Smoke-Tests ===');
   await testAppStartAndTabs(browser);
   await testLogFoodWritesDatumAndDate(browser);
   await testModalBackButtonCloses(browser);
+  await testEditFoodDBBackButtonCloses(browser);
+  await testOFFLabelResets(browser);
   await browser.close();
 
   if (!ok) { console.error('\nFEHLER: mindestens ein Smoke-Test entsprach nicht der Erwartung.'); process.exit(1); }

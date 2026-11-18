@@ -2,8 +2,11 @@
 // 020 Teil 2 - HTML-Escaping im Trainingsbereich (Rest aus 018). Gleiches Vorgehen wie 018 Teil A:
 // zwei Payloads, Playwright-Beleg VOR dem Fix (window.__xss/__xss2 wurden tatsaechlich gesetzt,
 // siehe Bericht 020) und NACH dem Fix (nie gesetzt, Text bleibt sichtbar).
-//   XSS_HTML:   <img src=x onerror="window.__xss=1">      - HTML/Tag-Injektion in innerHTML
-//   XSS_QUOTE:  '); window.__xss2=1; ('                    - Ausbruch aus onclick="...('${name}')"
+//   XSS_HTML:    <img src=x onerror="window.__xss=1">      - HTML/Tag-Injektion in innerHTML
+//   XSS_QUOTE:   '); window.__xss2=1; ('                   - Ausbruch aus onclick="...('${name}')"
+//   XSS_SPECIAL: Müller's „Bio" & Co <3                    - Aufgabe 021 Punkt 3: normale Sonderzeichen
+//                (Apostroph, Anführungszeichen, &, <3 als Text) müssen UNVERÄNDERT als Text erscheinen,
+//                insbesondere kein doppelt escapetes & (sichtbares "&amp;" statt "&").
 // Geprueft werden alle im Auftrag 020 Teil 2 genannten Stellen:
 //   - Trainingsverlauf (#training-history): Name einer eigenen Übung (customTypeLabel), variantLabel, notiz
 //   - Aktivitätsgruppen/Übersicht (#daily-activity-summary): dieselben Felder, einzeln UND als Gruppe (>=2 Einträge)
@@ -22,6 +25,7 @@ const SETTINGS = { height: 180, age: 35, gender: 'male', weight: 80, tdee: 2700 
 
 const XSS_HTML = '<img src=x onerror="window.__xss=1">';
 const XSS_QUOTE = "'); window.__xss2=1; ('";
+const XSS_SPECIAL = 'Müller\'s „Bio" & Co <3';
 
 let ok = true;
 function check(name, cond, detail) {
@@ -71,6 +75,12 @@ function reportOne(stelle, r, payload) {
   check(`${stelle}: window.__xss/__xss2 NICHT gesetzt`, !r.xss && !r.xss2, { xss: r.xss, xss2: r.xss2 });
   check(`${stelle}: kein rohes <img onerror> im innerHTML (escaped)`, !rawTagVisible);
   check(`${stelle}: Payload als Text sichtbar`, textVisible);
+  if (payload.includes('&')) {
+    // Aufgabe 021 Punkt 3: & darf nur im innerHTML als "&amp;" stehen (korrektes Escaping), NICHT im
+    // sichtbaren Text (textContent dekodiert Entities automatisch zurück - "&amp;" hier waere doppeltes
+    // Escaping und wuerde dem Nutzer woertlich "&amp;" statt "&" anzeigen).
+    check(`${stelle}: kein sichtbares "&amp;" (kein doppeltes Escaping)`, !r.textContent.includes('&amp;'), r.textContent);
+  }
 }
 
 async function runFlow(browser, payload, label) {
@@ -140,6 +150,9 @@ async function main() {
 
   const errQuote = await runFlow(browser, XSS_QUOTE, "XSS_QUOTE ('); window.__xss2=1; ('");
   check('keine Konsolenfehler/Exceptions (XSS_QUOTE)', errQuote.length === 0, errQuote);
+
+  const errSpecial = await runFlow(browser, XSS_SPECIAL, 'XSS_SPECIAL (Müller\'s „Bio" & Co <3)');
+  check('keine Konsolenfehler/Exceptions (XSS_SPECIAL)', errSpecial.length === 0, errSpecial);
 
   await browser.close();
 

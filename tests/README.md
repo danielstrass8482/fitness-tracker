@@ -107,8 +107,9 @@ Reihenfolge wie in `run-all.js`/`package.json`:
 
 - `run-017-savesettings.js` (Aufgabe 017 Punkt 9, `saveSettings()`-Charakterisierungstests, NICHT
   bewertet/geändert): (c) normale Speicherung schreibt `settings/main` GENAU EINMAL, ohne `merge`,
-  mit GENAU den 11 erwarteten Feldern (`tdee, proteinGoal, carbsGoal, fatGoal, gender, age, height,
-  weight, activityLevel, detailDays, recipeDisplay`); der zusätzliche Gewichts-Write aus
+  mit GENAU den 10 erwarteten Feldern (`tdee, proteinGoal, carbsGoal, fatGoal, gender, age, height,
+  weight, activityLevel, recipeDisplay` - `detailDays` mit 021 entfernt, nirgends ausgewertet);
+  der zusätzliche Gewichts-Write aus
   `saveSettings()` (`upsertTodayWeightLog`) geht NICHT auf `settings/main`, sondern (mit `merge`)
   auf `entries/log_YYYYMMDD` (Tageslog). (d) simulierter Firestore-Lesefehler beim Start
   (`window.__TEST_FAIL_PATHS__`, siehe `stubs/firebase-stub.mjs`) → `loadSettings()` befüllt das

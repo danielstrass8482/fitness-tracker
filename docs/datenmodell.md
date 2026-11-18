@@ -731,6 +731,34 @@ Tage unabhaengig aus den Rohdaten nachgerechnet (0 Abweichungen), `exercise_sets
 Referenzzaehlung (190 von 1290 aktiven `entries`), Summe Wdh je Uebung fuer 3 echte Tage
 unabhaengig nachgerechnet (0 Abweichungen). SELECT fuer `fuelofit_ro` auf beiden Sichten.
 
+**`views.zirkel_uebungen` (016i, 18.11.2026)**: Migration
+`analytics/migrations/013_view_zirkel_uebungen.sql`. Option C aus der Rueckfrage in Bericht 016g
+(Daniels Entscheidung 17.11.2026): Zirkel-`uebungen[]`/`details[]` je `raw.entries`-Zeile
+(`typ='zirkel'`) in einzelne Zeilen aufgeschluesselt, eine Zeile je Runde × Uebungsslot (× Seite
+bei `perSide`). Slot-Zuordnung wortgleich aus `calcZirkelEntryKcal` uebernommen (exIdx direkt,
+sonst n-tes Vorkommen typ+variant). `weg` ('timer'|'plan_abhaken'|'unbekannt') kann NICHT aus
+`source` kommen (beide Speicherwege schreiben immer `source='plan'`), sondern wird aus der
+Messsignatur von `details[].sec` abgeleitet: Live-Timer liefert bei mode 'reps' immer echte
+verstrichene Zeit (nie exakt `wdh×3`), Plan-Abhaken liefert dort immer exakt `wdh×3`
+(`zirkelEstimateWorkSec`) bzw. bei mode 'time' exakt `holdSec` — nie gemessen, trotz
+`datenbasis='details'`. Weicht eine Zeile ab → `timer`; keine Abweichung UND mind. eine
+'reps'-Zeile → `plan_abhaken`; nur 'time'-Zeilen ohne Abweichung → `unbekannt` (nicht
+entscheidbar). Bestand 18.11.2026: alle 21 Eintraege mit `details` sind `weg='timer'` (bislang
+kein Zirkel je per Plan-Abhaken gespeichert). Eintraege ohne `details[]` (6 Alteintraege vor
+10/2026, vor exIdx/mode/holdSec) → `datenbasis='geplant'`, `weg='unbekannt'`, Zeilen = Runden ×
+Anzahl Uebungen ohne Seiten-Verdopplung (die App berechnet dort nur einen kombinierten
+Schaetzwert je Slot, keine Seiten-Aufteilung — das waere neu erfundene Logik). Keine
+`wdh_ist`-Spalte: die App zaehlt bei mode 'reps' nur die verstrichene Zeit, nie Wiederholungen,
+ein Ist-Wert existiert nirgends (`details[].wdh` ist stets der kopierte Soll-Wert aus
+`uebungen[].wdh`). `haltezeit_soll_sek` kommt aus dem zugeordneten `uebungen`-Slot (`holdSec`
+steht nicht in `details[]` selbst). Keine Kalorien-Spalte (stehen in `training_sessions`, nicht
+addieren zu `exercise_sets`). Probelauf (Transaktion mit ROLLBACK) belegt: Zeilenzahl = Laenge
+`details[]` fuer alle 21 betroffenen Eintraege (0 Abweichungen), Zeilenzahl = Runden × Uebungen
+fuer alle 6 `geplant`-Eintraege (0 Abweichungen), Summe `dauer_sek` je Runde/Slot fuer 3 echte
+Eintraege unabhaengig in Python nachgerechnet (`workSecFor` aus `calcZirkelEntryKcal`, 0
+Abweichungen), Anti-Join gegen alle `typ='zirkel'`-Eintraege (0 fehlend). SELECT fuer
+`fuelofit_ro`.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

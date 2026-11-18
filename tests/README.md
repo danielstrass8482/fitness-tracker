@@ -115,6 +115,18 @@ Reihenfolge wie in `run-all.js`/`package.json`:
   Formular nie → `saveSettings()` schreibt trotzdem (ohne `merge`!) die Standardwerte/`null` und
   überschreibt damit vollständig die echten Werte - Befund und Risikobewertung siehe Bericht 017.
 
+- `run-018-xss.js` (Aufgabe 018, zentrales HTML-Escaping `escHtml()`, dauerhaft - prüft bei jedem
+  `npm test`, dass Namen aus Open Food Facts/BLS/Rezepten/Lebensmitteln NIE ungefiltert in
+  innerHTML landen): zwei gestubbte Lebensmittel - `<img src=x onerror="window.__xss=1">` und
+  `'); window.__xss2=1; ('` - werden gesucht (Einstellungen/Ernährung → Lebensmittel), geloggt
+  (Tagebuch), in einem neuen Rezept als Zutat verwendet und das Rezept gespeichert/angezeigt, und im
+  Modus "Rezept" beim Essen-hinzufügen-Dialog gesucht; geprüft werden `fooddb-list`,
+  `meals-container` (Loggen + Tagesübersicht), das Bulk-Zeit-Modal, `recipe-ingred-results`,
+  `recipe-modal-ingredients`, `recipe-list` und `recipe-search-results`. Vor dem Fix (Bericht 018)
+  löste `<img onerror>` an JEDER dieser sieben Stellen `window.__xss=1` aus; `'); window.__xss2=1; ('`
+  löste nirgends etwas aus (kein onclick nutzt Namen als JS-String, nur IDs). Zusätzlich ein
+  Umlaute-/Sonderzeichen-Test (`Müller's „Bio" & Co <3`).
+
 ## GitHub Actions - bewusst NICHT eingerichtet (Aufgabe 017 Punkt 8)
 
 Nur Abwägung, keine Einrichtung (siehe Bericht 017):

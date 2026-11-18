@@ -16,6 +16,7 @@ const TESTS = [
   { file: 'run-017-alkohol.js', args: [] },
   { file: 'run-017-smoke.js', args: [] },
   { file: 'run-017-savesettings.js', args: [] },
+  { file: 'run-018-xss.js', args: [] },
 ];
 
 function statusFor(code) {

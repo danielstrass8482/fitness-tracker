@@ -2055,7 +2055,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-17 10:05';
+    const APP_BUILD = '2026-11-18 10:35';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2116,6 +2116,13 @@
     window.garminHiddenIds = garminHiddenIds;
     window.garminUnlinkedIds = garminUnlinkedIds;
 
+    // ── Zentrales HTML-Escaping (018) ────────────────────────────────────────
+    // Einzige Stelle, die & < > " ' escaped - fuer Text- UND Attributkontext in innerHTML-Templates.
+    // Pflicht fuer jede Interpolation von Namen aus Open Food Facts/BLS/Rezepten/Notizen (von jedem
+    // bearbeitbar) in innerHTML. offEscape/planEsc bleiben als Aliase bestehen (vorhandene Aufrufstellen).
+    function escHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
     // ── Icons (Sprite im <body>) ─────────────────────────────────────────────
     // Dekoratives Sprite-Icon als HTML; Texte stehen immer daneben (Icon-only-Buttons haben aria-label)
     function foIcon(name, cls = '', filled = false) {
@@ -3262,7 +3269,7 @@
         return `
         <li><div class="fo-row fo-food-row">
           <div class="fo-row__main">
-            <div class="fo-row__title">${f.name}${katLabel}</div>
+            <div class="fo-row__title">${escHtml(f.name)}${katLabel}</div>
             <div class="fo-row__sub fo-row__sub--wrap">${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g / 100g</div>
           </div>
           <div class="fo-row__actions">
@@ -3361,7 +3368,7 @@
               return `
                 <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px;background:${bg};border:1px solid ${borderColor}30;">
                   <div style="flex:1;min-width:0;">
-                    <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}${isMaster ? ' <span style="font-size:10px;background:var(--fo-ok);color:var(--fo-on-primary);padding:1px 5px;border-radius:3px;margin-left:4px;">MASTER</span>' : ''}</div>
+                    <div style="font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.name)}${isMaster ? ' <span style="font-size:10px;background:var(--fo-ok);color:var(--fo-on-primary);padding:1px 5px;border-radius:3px;margin-left:4px;">MASTER</span>' : ''}</div>
                     <div style="font-size:11px;color:var(--muted);">${f.kcal} kcal · P ${f.protein}g · K ${f.carbs}g · F ${f.fat}g</div>
                   </div>
                   <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -3535,15 +3542,15 @@
 
       list.innerHTML = '';
       uncategorized.forEach(f => {
-        const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const safeName = escHtml(f.name || '');
         const div = document.createElement('div');
         div.className = 'bk-row';
         div.innerHTML = `
           <div class="bk-text">
-            <div class="bk-name" title="${safeName.replace(/"/g, '&quot;')}">${safeName}</div>
+            <div class="bk-name" title="${safeName}">${safeName}</div>
             <div class="bk-macros">${f.kcal} kcal · P ${f.protein}g · KH ${f.carbs}g · F ${f.fat}g</div>
           </div>
-          <select data-food-id="${f.id}" class="bk-sel" aria-label="Kategorie für ${safeName.replace(/"/g, '&quot;')}">
+          <select data-food-id="${f.id}" class="bk-sel" aria-label="Kategorie für ${safeName}">
             ${KATEGORIE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
           </select>`;
         list.appendChild(div);
@@ -3830,7 +3837,7 @@
         return `
           <li><div class="fo-row fo-food-row" style="cursor:pointer;" onclick="openRecipeModal('${r.id}')">
             <div class="fo-row__main">
-              <div class="fo-row__title">${r.name}</div>
+              <div class="fo-row__title">${escHtml(r.name)}</div>
               <div class="fo-row__sub fo-row__sub--wrap">
                 ${portions} Portion(en) · ${(r.ingredients || []).length} Zutaten${totalWeight > 0 ? ' · ' + fmt(totalWeight) + 'g gesamt' : ''}
               </div>
@@ -3952,7 +3959,7 @@
       container.innerHTML = recipeModalIngredients.map((ing, idx) => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="flex:1;">
-            <div style="font-weight:500;font-size:14px;">${ing.name}</div>
+            <div style="font-weight:500;font-size:14px;">${escHtml(ing.name)}</div>
             <div style="font-size:12px;color:var(--muted);">${fmt(ing.kcal)} kcal · P ${fmt(ing.protein,1)}g · K ${fmt(ing.carbs,1)}g · F ${fmt(ing.fat,1)}g</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
@@ -3998,7 +4005,7 @@
         <div onclick="addIngredientToRecipe('${f.id}')"
           style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div style="font-weight:500;font-size:14px;">${f.name}</div>
+            <div style="font-weight:500;font-size:14px;">${escHtml(f.name)}</div>
             <div style="font-size:11px;color:var(--muted);">${fmt(f.kcal)} kcal / 100g</div>
           </div>
           <span style="color:var(--primary);font-size:20px;">+</span>
@@ -4775,11 +4782,11 @@
           <ul class="fo-list fo-meal__body meal-entries" style="display:${isExpanded ? 'block' : 'none'};">
             ${mealEntries.length > 0 ? mealEntries.map(e => {
               const isRecipeBlock = settings.recipeDisplay !== 'expanded' && recipes.some(r => String(r.id) === String(e.foodId));
-              const fromRecipeNote = e._fromRecipe ? `<span class="fo-row__note">(aus: ${e._fromRecipe})</span>` : '';
+              const fromRecipeNote = e._fromRecipe ? `<span class="fo-row__note">(aus: ${escHtml(e._fromRecipe)})</span>` : '';
               return `
               <li><div class="fo-row fo-diary-row"${e._isExpanded ? ' style="border-left:2px solid var(--fo-line);"' : ''}>
                 <div class="fo-row__main" onclick="editEntry('${e._isExpanded ? e._originalId : e.id}')" style="cursor:pointer;">
-                  <div class="fo-row__title">${isRecipeBlock ? foIcon('recipe', 'fo-i--sm') + ' ' : ''}${e.name}${fromRecipeNote}</div>
+                  <div class="fo-row__title">${isRecipeBlock ? foIcon('recipe', 'fo-i--sm') + ' ' : ''}${escHtml(e.name)}${fromRecipeNote}</div>
                   <div class="fo-row__sub"><span>${e.time}</span>${(() => {
                     if (!e.amount) return '';
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
@@ -4901,7 +4908,7 @@
       results.innerHTML = matches.map(r => `
         <div class="fo-row fo-pick-row" onclick="selectRecipe('${r.id}')" style="cursor:pointer;">
           <div class="fo-row__main">
-            <div class="fo-row__title">${r.name}</div>
+            <div class="fo-row__title">${escHtml(r.name)}</div>
             <div class="fo-row__sub">${r.portions || 1} Portion(en) · ${(r.ingredients || []).length} Zutaten</div>
           </div>
         </div>
@@ -5162,7 +5169,7 @@
       return cats.some(c => OFF_DRINK_CATEGORIES.includes(c));
     }
     function offEscape(str) {
-      return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+      return escHtml(str);
     }
 
     // noMacros: undefined | 'drink' (0-kcal-Getränk, markiert) | 'none' (keine Nährwerte, nur nach "anzeigen")
@@ -5564,7 +5571,7 @@
       const isFav = favorites.has(key);
       const countBadge = usageCount > 0 ? ` <span class="fo-count">×${usageCount}</span>` : '';
       const typeLabel = isRecipe ? `<span class="fo-tag">Rezept</span> ` : '';
-      const safeName = (f.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const safeName = escHtml(f.name || '');
       const macroLine = `${fmt(f.kcal)} kcal · P ${fmt(f.protein,1)}g · K ${fmt(f.carbs,1)}g · F ${fmt(f.fat,1)}g`;
 
       return `
@@ -6163,7 +6170,7 @@
       list.innerHTML = entries.map(e => `
         <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
           <input type="checkbox" checked onchange="toggleEntrySelect('${e.id}', this)" style="width:18px;height:18px;">
-          <span style="font-size:13px;">${e.time} · ${e.name}</span>
+          <span style="font-size:13px;">${e.time} · ${escHtml(e.name)}</span>
         </label>
       `).join('');
 
@@ -9504,7 +9511,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     }
 
     function planEsc(str) {
-      return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      return escHtml(str);
     }
 
     // Lokales Datum → "yyyy-mm-dd" (kein toISOString, sonst UTC-Versatz)

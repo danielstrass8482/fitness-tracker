@@ -28,11 +28,19 @@ Richtung (Pull statt Push).
 | Rolle | Rechte | Verwendet von |
 |---|---|---|
 | `fuelofit_sync` | SELECT, INSERT, UPDATE auf Schema `raw` | `sync.py` (Cron, User `fuelofit-analytics`) |
-| `fuelofit_ro` | SELECT auf Schema `raw` und `views` | spaeter: MCP-Server (noch nicht angebunden) |
+| `fuelofit_ro` | SELECT auf Schema `raw` und `views` | MCP-Server (`fuelofit-mcp.service`, Systemnutzer `fuelofit-mcp`, angebunden seit 11.11.2026) |
 
 Passwoerter liegen in `~/.pgpass` des Systemnutzers `fuelofit-analytics` (600), nicht im Repo und
 nicht in `schema.sql`. `pg_hba.conf` auf dem VPS lässt ohnehin nur `localhost`/`127.0.0.1`/`::1`
 zu (gilt fuer alle Rollen inkl. der trading_bot-Rolle) -- keine zusaetzliche Zeile noetig.
+
+**Update 022c (19.11.2026):** Der MCP-Server verwendet fuer `fuelofit_ro` ein **eigenes** Secret
+unter dem Systemnutzer `fuelofit-mcp` (Datei `secrets/db_password`, 600, Pfad aus
+`FUELOFIT_MCP_SECRETS` in der systemd-Unit), nicht die `.pgpass`-Zeile unter
+`fuelofit-analytics`. Die `fuelofit_ro`-Zeile(n) in `~/.pgpass` des Systemnutzers
+`fuelofit-analytics` werden von keinem Dienst mehr gelesen (`fuelofit_sync`/`sync.py` bleibt
+unveraendert in derselben Datei). Rotation von `fuelofit_ro` betrifft deshalb nur das Secret
+unter `fuelofit-mcp`, nicht `fuelofit-analytics`.
 
 ## Sync-Zeiten (Crontab von `fuelofit-analytics`)
 

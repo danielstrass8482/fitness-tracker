@@ -318,7 +318,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 | `integrations/strava` | `accessToken`, `refreshToken`, `athleteName` (string), `athleteId`, `expiresAt`, `lastSyncAt`, `lastSyncCount` (number), `connectedAt` (timestamp) | **`accessToken`, `refreshToken`** |
 | `integrations/oura` | `connected` (bool), `lastSyncDays` (number), `connectedAt`, `lastSyncAt`, `lastStepSyncAt` (timestamp), `lastSyncError` (null) | – |
 | `integrations/garminHealth` | `ok` (bool), `checkedAt` (timestamp), `reason`, `staleSince` (null) | – |
-| `integrations/garminParity` | `days` (array), `computedAt` (timestamp) | – |
+| `integrations/garminParity` | **gelöscht (012c)**, `computeGarminParity` entfernt | – |
 | `integrations/garminStatus` | `lastDate`, `lastGarminSync` (string), `lastSteps` (number), `lastIngestAt` (timestamp) | – |
 | `oura_tokens/{uid}` (Top-Level) | `accessToken`, `refreshToken` (string), `expiresAt` (number), `connectedAt` (timestamp); `refreshLockUntil` (number, additiv seit 14) – Zeitstempel bis zu dem ein Token-Refresh läuft (Mutex gegen parallele Oura-Refreshes aus `syncOura`/`syncOuraMorning`/`syncOuraManual`), wird nach jedem Refresh (Erfolg oder Fehler) wieder gelöscht | **`accessToken`, `refreshToken`** |
 
@@ -334,7 +334,7 @@ sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.
 | Ernährung | `logEntries`, `foods` (beide), `recipes`, `settings/favorites` |
 | Bewegung | `entries`, `garminActivities`, `garminDaily`, `ciqSteps` (+`samples`), `oura_workouts`, `oura_step_log`, `trainingplans`, `garminLinks`, `garminHidden` |
 | Aggregat | `weeklyStats` |
-| Konfiguration | `settings/{main ohne Secret, backup, exercises}`, `integrations/{oura, garminHealth, garminParity, garminStatus}` und Nicht-Token-Felder der übrigen, `trainingTypes`, `intervalTemplates`, `dailyCheckCallLog`, `stravaAthletes` |
+| Konfiguration | `settings/{main ohne Secret, backup, exercises}`, `integrations/{oura, garminHealth, garminStatus}` (garminParity gelöscht, 012c) und Nicht-Token-Felder der übrigen, `trainingTypes`, `intervalTemplates`, `dailyCheckCallLog`, `stravaAthletes` |
 
 ---
 
@@ -593,7 +593,8 @@ wenn Echtzeit gebraucht wird. (iii) eignet sich nur für kleine Ad-hoc-Abfragen.
 - Alle Secret-Felder aus Abschnitt 2: `anthropicApiKey`, alle `accessToken`/`refreshToken`/`expiresAt`,
   `oura_tokens`, `oura_oauth_state`.
 - Reine Konfiguration und Betriebsdaten ohne Analysewert: `settings/backup`, `settings/favorites`,
-  `integrations/*` (auch die Statusdokumente), `dailyCheckCallLog`, `stravaAthletes`, `garminParity`.
+  `integrations/*` (auch die Statusdokumente), `dailyCheckCallLog`, `stravaAthletes`.
+  (`garminParity` seit 012c gelöscht, kein Dokument mehr vorhanden.)
 - Altbestände ohne Code-Bezug: `users/{uid}/foods`, `oura_step_log`. Höchstens einmalig archivieren.
 - Freitext mit möglichem Gesundheitsbezug nur nach ausdrücklicher Entscheidung:
   `settings/subjectiveStatus.history`, `dailyCheck.headline/reason/actions/planSuggestion.reason`,

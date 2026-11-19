@@ -85,7 +85,7 @@ function buildStore() {
   store[u('entries')] = training;
 
   store[u('settings')] = [
-    { id: 'main', data: { height: 180, age: 35, gender: 'male', weight: 80, tdee: 2700, detailDays: 31 } },
+    { id: 'main', data: { height: 180, age: 35, gender: 'male', weight: 80, tdee: 2700 } },
     { id: 'favorites', data: { ids: ['food1', 'food2'] } },
     { id: 'subjectiveStatus', data: { history: [] } },
     { id: 'exercises', data: {

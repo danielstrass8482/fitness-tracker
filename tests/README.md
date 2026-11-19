@@ -113,8 +113,13 @@ Reihenfolge wie in `run-all.js`/`package.json`:
   `saveSettings()` (`upsertTodayWeightLog`) geht NICHT auf `settings/main`, sondern (mit `merge`)
   auf `entries/log_YYYYMMDD` (Tageslog). (d) simulierter Firestore-Lesefehler beim Start
   (`window.__TEST_FAIL_PATHS__`, siehe `stubs/firebase-stub.mjs`) → `loadSettings()` befüllt das
-  Formular nie → `saveSettings()` schreibt trotzdem (ohne `merge`!) die Standardwerte/`null` und
-  überschreibt damit vollständig die echten Werte - Befund und Risikobewertung siehe Bericht 017.
+  Formular nie und das Flag `settingsLoaded` bleibt `false` (Schutz seit Aufgabe 020 Teil 1,
+  Reaktion auf den in Bericht 017 charakterisierten Datenverlust) → `saveSettings()` schreibt NICHT
+  auf `settings/main`, zeigt stattdessen den App-Dialog (`showConfirm`, NICHT `window.confirm`) mit
+  Warntext „nicht geladen werden“ und bietet „Erneut laden“ an; schlägt der Retry wieder fehl,
+  bleibt es weiterhin bei keinem Write. (e) kein Vorgänger-Dokument vorhanden (Neuinstallation):
+  `loadSettings()` läuft trotzdem erfolgreich durch (`docSnap.exists() === false` ist kein Fehler),
+  `settingsLoaded` wird `true`, kein Dialog, `saveSettings()` schreibt wie in (c) ganz normal.
 
 - `run-018-xss.js` (Aufgabe 018, zentrales HTML-Escaping `escHtml()`, dauerhaft - prüft bei jedem
   `npm test`, dass Namen aus Open Food Facts/BLS/Rezepten/Lebensmitteln NIE ungefiltert in

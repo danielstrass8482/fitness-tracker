@@ -2029,7 +2029,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-18 15:09';
+    const APP_BUILD = '2026-11-20 09:49';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -8106,8 +8106,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // Ruft anthropicProxy auf (Modell
     // claude-sonnet-5) – keine neue Schlüsselverwaltung. max_tokens 3000 statt vorher 1024: der echte
     // Call (Bugreport 2026-10-17, reproduziert) zeigt durchgängig 800-950 Output-Tokens, davon
-    // 500-665 für modellinternes "thinking" (nicht abschaltbar über diesen Endpunkt) – bei 1024 blieb
-    // kaum noch Spielraum, ein etwas längerer Thinking-Anteil hätte den sichtbaren JSON-Text
+    // 500-665 für modellinternes "thinking". Der Proxy kann thinking seit 023a per
+    // thinking:{type:"disabled"} abschalten (siehe callWorkoutBuilderModel) – hier bewusst NICHT
+    // geändert (Auftrag 023a betraf nur den Workout-Builder, Tagescheck riss bisher nicht ab). Bei
+    // 1024 blieb kaum noch Spielraum, ein etwas längerer Thinking-Anteil hätte den sichtbaren JSON-Text
     // mitten im Satz abschneiden können. Wirft bei Proxy-Fehler, leerer Textantwort
     // (z.B. durch max_tokens abgeschnitten, erkennbar an stop_reason) oder nicht parsbarem JSON – der
     // jeweilige rohe Modelltext hängt als err.rawText am Error (siehe generateDailyCheck/lastError).
@@ -10489,14 +10491,25 @@ Regeln:
 - Ordne Übungen, wo möglich, existierenden Schlüsseln aus bekannte_uebungen zu (Feld "typ"). Existiert eine Übung noch nicht, erfinde KEINEN Schlüssel – gib stattdessen {typ:"__new__", anzeigename, modus:"time"|"reps", perSide, intensitaet_vorschlag:"leicht"|"mittel"|"intensiv"} an.
 - Erwähne oder verwende NIEMALS eine der in pausierte_uebungen gelisteten Übungen in einer neuen/geänderten Einheit. Fragt der Nutzer explizit danach, nimm sie NICHT auf, sondern ergänze in "questions" einen Hinweis, dass sie bis zum angegebenen Datum pausiert ist.
 - Ist die Anweisung unklar (welcher Zirkel, welcher Tag, fehlende Wiederholungen/Zeit): entweder einen sinnvollen Standard wählen und das in summary sagen, oder den offenen Punkt in "questions" aufnehmen. Eine Vorschau wird trotzdem gezeigt, wenn ein gültiger Teil der Änderung vorliegt.
-- Dies kann die Fortsetzung eines laufenden Gesprächs sein – eine Nachbesserung bezieht sich auf den zuletzt vorgeschlagenen Stand, nicht auf den ursprünglichen Plan.
+- Dies kann die Fortsetzung eines laufenden Gesprächs sein – eine Nachbesserung bezieht sich auf den zuletzt vorgeschlagenen Stand (aktueller_plan), nicht auf den ursprünglichen Plan.
+- Der Plan kennt NUR Wochentage (Mo–So), keine Kalenderwochen und keine einzelnen Kalendertage/Daten. Enthält die Anweisung einen Bezug auf ein Datum, eine Kalenderwoche (z. B. "KW 48", "ab dem 23.11.") oder eine einmalige Ausnahme ("nur heute", "nur diese eine Woche", "diesmal anders"): nicht spekulieren und nicht stillschweigend ignorieren. Stattdessen in "questions" erklären, dass der Plan nur Wochentage unterstützt (keine Kalenderwochen/Einzeltage), und die Änderung – falls inhaltlich sinnvoll – als DAUERHAFTE Wochentag-Änderung in "changes" vorschlagen.
 - Sprache: Deutsch, informelles "du".`;
+    }
+
+    // "aktueller_plan" ist der zuletzt VORGESCHLAGENE Stand (siehe Systemprompt: eine Nachbesserung
+    // bezieht sich darauf, nicht auf den ursprünglichen Plan) – bei laufendem Gespräch also der echte
+    // Plan MIT den bisher in diesem Gespräch vorgeschlagenen (noch nicht übernommenen) Änderungen.
+    function workoutBuilderCurrentProposedSnapshot() {
+      if (workoutBuilderState.pendingChanges?.changes?.length) {
+        return applyWorkoutBuilderChangesToSnapshot(workoutBuilderState.pendingChanges.changes).plan;
+      }
+      return workoutBuilderPlanSnapshot();
     }
 
     function buildWorkoutBuilderPayload(instruction) {
       const todayStr = berlinTodayStr();
       return {
-        aktueller_plan: workoutBuilderPlanSnapshot(),
+        aktueller_plan: workoutBuilderCurrentProposedSnapshot(),
         bekannte_uebungen: workoutBuilderKnownExercises(),
         pausierte_uebungen: Object.entries(exerciseSettings)
           .filter(([, s]) => s?.pausedUntil && todayStr <= s.pausedUntil)
@@ -10505,19 +10518,25 @@ Regeln:
       };
     }
 
-    // Gleicher Anthropic-Call wie der Tagescheck (über anthropicProxy, Modell claude-sonnet-5,
-    // keine neue Schlüsselverwaltung). max_tokens 4000: mehrere changes + "thinking"-Anteil können
-    // größer ausfallen als die 3000 des Tagescheck-Calls (ein einzelner Vorschlag).
+    // Gleicher Anthropic-Call wie der Tagescheck (über anthropicProxy, Modell claude-sonnet-5, keine
+    // neue Schlüsselverwaltung). max_tokens 12000 (023a, vorher 4000: riss reproduzierbar mit
+    // "max_tokens erreicht" ohne Textantwort ab, siehe Bericht 023a) + thinking:{type:"disabled"} –
+    // claude-sonnet-5 denkt sonst immer (adaptive), auch ohne das Feld, und verbraucht davon dasselbe
+    // Budget wie der sichtbare Text; für diese reine JSON-Antwort wird kein Denkanteil benötigt.
+    // Verlauf bleibt NICHT voll: frühere Runden werden nur als {anweisung} + reiner Assistenz-JSON-Text
+    // gespeichert (konstante, kleine Größe je Runde statt wachsend mit jeder Nachbesserung), der volle
+    // Payload (aktueller_plan/bekannte_uebungen/pausierte_uebungen) steht nur in der jeweils neuesten
+    // Nachricht (023a, Bericht 023a: Payload-Größe je Runde vorher/nachher).
     async function callWorkoutBuilderModel(instruction) {
       const payload = buildWorkoutBuilderPayload(instruction);
       const messages = [...workoutBuilderState.conversation, { role: 'user', content: JSON.stringify(payload) }];
-      const data = await callAnthropicProxy({ model: 'claude-sonnet-5', max_tokens: 4000, system: buildWorkoutBuilderSystemPrompt(), messages });
+      const data = await callAnthropicProxy({ model: 'claude-sonnet-5', max_tokens: 12000, thinking: { type: 'disabled' }, system: buildWorkoutBuilderSystemPrompt(), messages });
       const textBlock = (data.content || []).find(b => b.type === 'text');
       const rawText = (textBlock?.text || '').trim();
       if (!rawText) throw new Error('Keine Textantwort vom Modell' + (data.stop_reason === 'max_tokens' ? ' (max_tokens erreicht)' : ' (stop_reason: ' + data.stop_reason + ')'));
       const cleaned = extractDailyCheckJsonCandidate(rawText); // gleiche Parse-Toleranz wie der Tagescheck
       const parsed = JSON.parse(cleaned);
-      workoutBuilderState.conversation.push({ role: 'user', content: JSON.stringify(payload) });
+      workoutBuilderState.conversation.push({ role: 'user', content: JSON.stringify({ anweisung: instruction }) });
       workoutBuilderState.conversation.push({ role: 'assistant', content: rawText });
       return parsed;
     }
@@ -10717,13 +10736,34 @@ Regeln:
         console.error('Workout-Builder fehlgeschlagen:', e);
         const errEl = document.getElementById('workout-builder-error');
         errEl.style.display = 'block';
-        errEl.innerHTML = `<div style="font-size:13px;color:var(--fo-bad);">Fehler: ${planEsc(e.message)}</div>
+        // 023a: "max_tokens erreicht" verständlich machen (statt der rohen Fehlermeldung) + "Neu
+        // starten", weil ein zu langer/komplexer Verlauf dieselbe Nachbesserung erneut treffen kann.
+        const isMaxTokens = /max_tokens erreicht/.test(e.message || '');
+        const shownMsg = isMaxTokens ? 'Antwort zu lang/zu komplex – bitte Anweisung kürzer fassen oder neu starten.' : e.message;
+        errEl.innerHTML = `<div style="font-size:13px;color:var(--fo-bad);">Fehler: ${planEsc(shownMsg)}</div>
+          ${isMaxTokens ? '<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" style="margin-top:6px;" onclick="restartWorkoutBuilderConversation()">Neu starten</button>' : ''}
           <details style="font-size:11px;color:var(--fo-text-3);margin-top:4px;"><summary style="cursor:pointer;">Details</summary><div style="margin-top:4px;word-break:break-word;">${planEsc(String(e.stack || e))}</div></details>`;
       } finally {
         workoutBuilderState.loading = false;
         document.getElementById('workout-builder-loading').style.display = 'none';
       }
     }
+    // 023a: "Neu starten" nach "max_tokens erreicht" – nur der KI-Gesprächsverlauf wird geleert
+    // (workoutBuilderState.conversation/pendingChanges), der Trainingsplan selbst ist unberührt
+    // (es wurde nie etwas übernommen, siehe applyWorkoutBuilderChanges). Eingabefeld zeigt sich wieder,
+    // damit eine neue/kürzere Anweisung eingegeben werden kann.
+    window.restartWorkoutBuilderConversation = function() {
+      workoutBuilderState.conversation = [];
+      workoutBuilderState.pendingChanges = null;
+      document.getElementById('workout-builder-error').style.display = 'none';
+      document.getElementById('workout-builder-preview').style.display = 'none';
+      document.getElementById('workout-builder-input-area').style.display = 'block';
+      const textEl = document.getElementById('workout-builder-text');
+      if (textEl) textEl.value = '';
+      const refineEl = document.getElementById('workout-builder-refine-text');
+      if (refineEl) refineEl.value = '';
+      document.getElementById('workout-builder-apply-btn').disabled = true;
+    };
     window.generateWorkoutBuilderSuggestion = async function() {
       const text = (document.getElementById('workout-builder-text').value || '').trim();
       if (!text) { showToast('Bitte eine Anweisung eingeben', 'bad'); return; }

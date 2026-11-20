@@ -133,6 +133,19 @@ Reihenfolge wie in `run-all.js`/`package.json`:
   löste nirgends etwas aus (kein onclick nutzt Namen als JS-String, nur IDs). Zusätzlich ein
   Umlaute-/Sonderzeichen-Test (`Müller's „Bio" & Co <3`).
 
+- `run-023a-workout-builder-max-tokens.js` (Auftrag 023a, Fehler "Keine Textantwort vom Modell
+  (max_tokens erreicht)" im Workout-Builder nach mehreren Nachbesserungen): 4 Runden
+  (generate + 3x refine) prüfen `max_tokens: 12000` und `thinking: {type:"disabled"}` in jedem
+  KI-Aufruf, dass der Verlauf ab Runde 2 kompakt bleibt (frühere Runden nur `{anweisung}` +
+  Assistenz-JSON, voller Payload NUR in der jeweils neuesten Nachricht - `aktueller_plan` kommt in
+  Runde 4 genau einmal vor) und dass `aktueller_plan` der zuletzt VORGESCHLAGENE Stand ist (nicht der
+  unveränderte echte Plan). Runde 5 stubbt die reale Fehlersituation (nur ein `thinking`-Block, kein
+  `text`-Block, `stop_reason: 'max_tokens'`) und prüft die neue verständliche Fehlermeldung
+  ("Antwort zu lang/zu komplex...") statt der rohen Meldung sowie den neuen "Neu starten"-Knopf;
+  nach Klick ist der Eingabebereich wieder sichtbar und die nächste Runde sendet wieder nur 1
+  Nachricht (Verlauf tatsächlich geleert, Plan selbst unberührt). Werte und Herleitung (Log-Zahlen,
+  Kostenrechnung) siehe Bericht 023a in fuelofit-ops.
+
 ## GitHub Actions - bewusst NICHT eingerichtet (Aufgabe 017 Punkt 8)
 
 Nur Abwägung, keine Einrichtung (siehe Bericht 017):

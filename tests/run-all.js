@@ -20,6 +20,7 @@ const TESTS = [
   { file: 'run-020-xss-training.js', args: [] },
   { file: 'run-020-inline-handlers.js', args: [] },
   { file: 'run-023a-workout-builder-max-tokens.js', args: [] },
+  { file: 'run-023a2-plan-aenderung-gezielt.js', args: [] },
 ];
 
 function statusFor(code) {

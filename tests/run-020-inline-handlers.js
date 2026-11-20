@@ -69,7 +69,24 @@ async function main() {
   check('window.confirmDialogResolve ist waehrend eines offenen Dialogs eine Funktion', confirmDialogResolveType === 'function', confirmDialogResolveType);
   await page.evaluate(() => window.confirmDialogResolve && window.confirmDialogResolve(false));
 
-  const results = await page.evaluate((names) => names.map(n => ({ name: n, type: typeof window[n] })), names.filter(n => n !== 'confirmDialogResolve'));
+  // planScopeResolve (023a2, Plan-Gueltigkeit waehlen): wie confirmDialogResolve nur WAEHREND der
+  // Dialog offen ist eine Funktion (planAskScope() weist sie je Aufruf frisch zu, index.html
+  // planAskScope). Ausgeloest ueber den echten Editor-Pfad (Aenderung + planEditorSave()), da
+  // planAskScope() selbst keine window-Funktion ist; planEditorSave() haengt vor dem Oeffnen des
+  // Dialogs an einem await (planNextVersionAfter) - kurz pollen statt fest zu warten.
+  const planScopeResolveType = await page.evaluate(async () => {
+    window.openPlanEditor();
+    window.planAddUnit('mo');
+    window.planEditorSave();
+    for (let i = 0; i < 50 && typeof window.planScopeResolve !== 'function'; i++) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+    return typeof window.planScopeResolve;
+  });
+  check('window.planScopeResolve ist waehrend eines offenen Dialogs eine Funktion', planScopeResolveType === 'function', planScopeResolveType);
+  await page.evaluate(() => window.planScopeResolve && window.planScopeResolve(null));
+
+  const results = await page.evaluate((names) => names.map(n => ({ name: n, type: typeof window[n] })), names.filter(n => n !== 'confirmDialogResolve' && n !== 'planScopeResolve'));
   await page.close();
   await browser.close();
 

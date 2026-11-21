@@ -2042,7 +2042,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-20 11:04';
+    const APP_BUILD = '2026-11-21 17:50';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2203,6 +2203,9 @@
       snap.forEach(d => { next[d.id] = d.data(); });
       ouraDaily = next;
       window.ouraDaily = ouraDaily;
+      // 024 Teil A: zentrale Stelle nach JEDEM Oura-Datenstand-Update (Start/Hintergrund-loadAllData,
+      // tryOuraAutoSync, manueller Sync, Backfill) - egal über welchen Weg die Daten kommen.
+      try { startPendingDailyCheckIfReady('oura_complete'); } catch (e) { console.warn('Pending-Tagescheck-Start fehlgeschlagen:', e); }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -7786,6 +7789,58 @@
         : { id: u.id, typ: u.typ, variant: u.variant || null, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, notiz: u.notiz || null };
     }
 
+    // ── 024 Teil C: erwartetes Tagesziel (PROGNOSE) ────────────────────────────────────────────────
+    // Das aktuelle Ziel (calcHistoricalKcalGoal) bildet morgens nur ab, was schon erfasst ist - eine
+    // geplante Einheit (z.B. 12,5-km-Lauf) und die Alltagsschritte fehlen noch. expectedDailyGoal
+    // rechnet NUR mit den bestehenden App-Formeln (keine neue/geänderte Formel, wird in 027
+    // wiederverwendet): erwartet = Grundumsatz-Basis + erfasste Aktivitäten des Tages (current.activity)
+    // + geplante, noch NICHT erfasste Plan-Einheiten (calcPlanActivityKcal + MIN_MANUAL_KCAL-Regel wie
+    // activityKcalForGoal) + Schritt-kcal = max(bisherige Tages-Schritt-kcal, Median der Schritt-kcal
+    // (Alltagsschritte × 0,04) der letzten 14 abgeschlossenen Tage mit Schrittdaten).
+    // Eine Plan-Einheit gilt als erfasst/ersetzt, wenn am Tag ein wirksamer Trainingseintrag dieselbe
+    // planUnitId hat ODER denselben typ (wie countsAsActivity: Garmin-Lauf ersetzt den geplanten Lauf).
+    function expectedDailyGoal(dateStr) {
+      const cur = window.calcHistoricalKcalGoal(dateStr) || { base: 0, activity: 0, daily: 0, total: 0 };
+      const entries = getEffectiveTrainingEntries().filter(e => e.datum === dateStr && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && !e.covered);
+      const geplant = [];
+      let plannedKcal = 0;
+      for (const u of dailyCheckPlanUnitsForDay(dateStr)) {
+        if (!u || u.typ === 'ruhetag') continue;
+        if (entries.some(e => (e.planUnitId && e.planUnitId === u.id) || e.typ === u.typ)) continue; // schon erfasst
+        const entry = {
+          datum: dateStr, typ: u.typ, variant: u.variant || '', source: 'plan', planUnitId: u.id,
+          distanz: u.distanzKm || 0, zeit: u.dauerMin > 0 ? planMinToZeit(u.dauerMin) : '', notiz: u.notiz || '',
+          ...(u.typ === 'zirkel' ? { runden: u.runden, pauseSec: u.pauseSec, prepSec: u.prepSec, sideSwitchSec: u.sideSwitchSec, uebungen: u.uebungen || [] } : {})
+        };
+        const kcal = activityKcalForGoal(entry, []);
+        if (kcal > 0) { plannedKcal += kcal; geplant.push({ typ: u.typ, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, kcal }); }
+      }
+      const stepKcals = [];
+      for (let i = 1; i <= 14; i++) {
+        const d = dailyCheckShiftDate(dateStr, -i);
+        const alltag = getAlltagsschritteForDate(d);
+        if (alltag <= 0) continue; // Tag ohne Schrittdaten zählt nicht
+        stepKcals.push(Math.round(alltag * 0.04));
+      }
+      stepKcals.sort((a, b) => a - b);
+      const n = stepKcals.length;
+      const median = n ? (n % 2 ? stepKcals[(n - 1) / 2] : Math.round((stepKcals[n / 2 - 1] + stepKcals[n / 2]) / 2)) : 0;
+      const schritteKcal = Math.max(cur.daily, median);
+      return {
+        total: cur.base + cur.activity + plannedKcal + schritteKcal,
+        base: cur.base,
+        aktivitaet_erfasst: cur.activity,
+        aktivitaet_geplant: geplant,
+        aktivitaet_geplant_kcal: plannedKcal,
+        schritte_kcal: schritteKcal,
+        schritte_kcal_bisher: cur.daily,
+        schritte_kcal_median_14t: median,
+        schritte_tage_n: n,
+        zwischenstand: cur.total
+      };
+    }
+    window.expectedDailyGoal = expectedDailyGoal;
+
     // ── Subjektiver Status ("Wie fühlst du dich?") ──────────────────────────────────────────────────
     // users/{uid}/settings/subjectiveStatus, Feld "history": [{status:'angeschlagen'|'krank',
     // von:'YYYY-MM-DD', bis:'YYYY-MM-DD'|null, notiz}]. "Fit" wird NIE als eigener Eintrag gespeichert
@@ -7840,6 +7895,22 @@
         const id = dateStr + '_' + Date.now();
         await setDoc(doc(collection(db, 'users', userId, 'dailyCheckCallLog'), id), { date: dateStr, atMs: Date.now(), trigger });
       } catch (e) { console.warn('Tagescheck-Call-Log schreiben fehlgeschlagen:', e); }
+    }
+
+    // 024 Teil A: Wartet heute ein gespeicherter Status (statusPending) und sind die Oura-Nachtdaten
+    // inzwischen vollständig, startet genau EIN Tagescheck-Call. Doppelstart ausgeschlossen durch
+    // (1) dailyCheckGenerating (wird in generateDailyCheck synchron vor dem ersten await gesetzt),
+    // (2) dailyCheckCommitting (commitSubjectiveStatus läuft noch - ruft diese Funktion selbst danach
+    // erneut auf) und (3) statusPending selbst: nach dem Call ersetzt die echte Karte bzw. der
+    // Fehlerzustand den Platzhalter, ein erneuter Treffer ist dann nicht mehr möglich (kein Retry-Loop).
+    function startPendingDailyCheckIfReady(trigger) {
+      const todayStr = berlinTodayStr();
+      const s = dailyCheckState;
+      if (!s || s.date !== todayStr || !s.statusPending) return false;
+      if (dailyCheckGenerating || dailyCheckCommitting) return false;
+      if (!ouraNightDataComplete(todayStr)) return false;
+      generateDailyCheck(true, trigger);
+      return true;
     }
 
     // Einzige Stelle, die subjectiveStatusHistory ändert UND über einen KI-Call entscheidet (Teil B:
@@ -7899,6 +7970,8 @@
       } finally {
         dailyCheckCommitting = false;
         renderDailyCheckCard();
+        // Oura-Daten können während des Persistierens eingetroffen sein (Hook sah dann noch kein Pending)
+        startPendingDailyCheckIfReady('oura_complete');
       }
     }
 
@@ -7937,7 +8010,11 @@
     // true nur bei einer bereits bestehenden Karte für heute (zeigt dann zusätzlich "Abbrechen").
     function subjectiveStatusBlockHtml(cur, showCarryOver, showCancel) {
       const activeStyle = 'background:var(--fo-primary);color:#fff;';
-      const highlight = dailyCheckPendingChoice || (cur ? cur.status : 'fit');
+      // 024 Teil B: ohne Auswahl KEIN Knopf markiert. Markiert bleibt nur: die laufende Auswahl, ein aktiver
+      // Status (auch Mehrtages-Status) oder "Fit", wenn für heute bereits ein Status gespeichert wurde
+      // (Fit hat keinen History-Eintrag, erkennbar an der heutigen Karte/dem Pending-Platzhalter).
+      const fitSavedToday = !!(dailyCheckState && dailyCheckState.date === berlinTodayStr());
+      const highlight = dailyCheckPendingChoice || (cur ? cur.status : (fitSavedToday ? 'fit' : null));
       const disabledAttr = dailyCheckCommitting ? ' disabled' : '';
       const btn = (status, label) => {
         const isActive = highlight === status;
@@ -7950,12 +8027,13 @@
           style="width:100%;margin-top:8px;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--fo-line);background:transparent;color:var(--fo-text-1);box-sizing:border-box;" />` : '';
       const cancelBtn = (showCancel && dailyCheckPendingChoice)
         ? `<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="cancelSubjectiveStatusPending()">Abbrechen</button>` : '';
-      const pendingHtml = dailyCheckPendingChoice ? `
+      const saveDisabledAttr = (dailyCheckCommitting || !dailyCheckPendingChoice) ? ' disabled' : '';
+      const pendingHtml = `
         ${notizInputHtml}
         <div style="display:flex;gap:6px;margin-top:6px;">
-          <button class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="saveSubjectiveStatusPending()"${disabledAttr}>Speichern</button>
+          <button id="subj-status-save" class="fo-btn fo-btn--primary fo-btn--sm" type="button" onclick="saveSubjectiveStatusPending()"${saveDisabledAttr}>Speichern</button>
           ${cancelBtn}
-        </div>` : '';
+        </div>`;
       const curNotizHtml = (!dailyCheckPendingChoice && cur && cur.notiz) ? `<div style="font-size:12px;color:var(--fo-text-3);margin-top:8px;">${planEsc(cur.notiz)}</div>` : '';
       return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--fo-line);">
         <div style="font-size:12px;color:var(--fo-text-3);margin-bottom:6px;">Wie fühlst du dich?</div>
@@ -8042,6 +8120,7 @@
         nutritionHistory.push({ datum: d, kcal_ist: kcal, kcal_ziel: goal || null });
       }
       const todayGoal = Math.round(window.calcHistoricalKcalGoal(todayStr)?.total || 0);
+      const expGoal = expectedDailyGoal(todayStr);
 
       const stepsHistory = [];
       for (let i = 1; i <= 7; i++) {
@@ -8072,7 +8151,14 @@
         plan_heute: planToday,
         plan_morgen: planTomorrow,
         ernaehrung_letzte_3_tage: nutritionHistory,
-        kalorienziel_heute: todayGoal || null,
+        kalorienziel_heute_zwischenstand_kcal: todayGoal || null,
+        kalorienziel_heute_zwischenstand_hinweis: 'ZWISCHENSTAND, Tag noch nicht abgebildet: enthält nur bisher erfasste Aktivität/Schritte, NICHT die geplanten Einheiten des Tages. Nicht als Tagesziel verwenden.',
+        erwartetes_tagesziel_kcal: expGoal.total || null,
+        erwartetes_tagesziel_hinweis: 'PROGNOSE (keine Messung): Grundumsatz-Basis + erfasste Aktivität + geplante, noch nicht erfasste Einheiten + typische Schritt-kcal.',
+        erwartetes_tagesziel_aufschluesselung: {
+          basis_kcal: expGoal.base, aktivitaet_erfasst_kcal: expGoal.aktivitaet_erfasst,
+          aktivitaet_geplant: expGoal.aktivitaet_geplant, schritte_kcal_erwartet: expGoal.schritte_kcal
+        },
         schritte_letzte_7_tage: stepsHistory,
         uebungen_pausiert: pausedExercises,
         subjektiverStatus
@@ -8095,6 +8181,7 @@ Regeln:
 - Schlage NIEMALS eine der in uebungen_pausiert gelisteten Übungen vor (auch nicht als einzelne Übung innerhalb eines Zirkel-Vorschlags) – der Nutzer kann sie aktuell nicht ausführen. Lasse sie bei einem Zirkel-Vorschlag einfach weg; wähle für einen Einzelübungs-Vorschlag eine andere, nicht pausierte Übung.
 - Erwähne eine pausierte Übung NIEMALS als Aktion oder in der Headline (sie wird ohnehin automatisch übersprungen, ein Hinweis darauf ist nutzlos) – höchstens EIN neutraler Halbsatz im reason-Feld, falls relevant.
 - subjektiverStatus.status "angeschlagen" oder "krank" hat Vorrang vor guten Messwerten: empfiehl reduzierte Intensität bzw. Pause, auch wenn illness_signale.flagged=false ist. Bei status="krank" niemals status="gruen" zurückgeben. Formuliere Messwert-Aussagen immer als Einschränkung ("keine Infektzeichen in den Messwerten"), NIE als absolute Aussage über den Gesundheitszustand ("du bist nicht krank"). confidence bezieht sich NUR auf die Messwert-Einschätzung; widersprechen sich Messwerte und subjektiverStatus, benenne das in einem kurzen Satz im reason-Feld.
+- Kalorienziel: kalorienziel_heute_zwischenstand_kcal ist nur ein ZWISCHENSTAND (Tag noch nicht abgebildet, geplante Einheiten fehlen). Richte Ernährungsempfehlungen IMMER am erwarteten Tagesziel (erwartetes_tagesziel_kcal, eine PROGNOSE mit Aufschlüsselung) aus, NIE am Zwischenstand; sprich nie von einem "reduzierten Tagesziel", nur weil der Zwischenstand niedriger ist. Bei geplanter Ausdauereinheit (plan_heute, z.B. Lauf) gehe auf Kohlenhydrate (vorher/nachher) ein.
 - Sprache: Deutsch, informelles "du".
 
 Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
@@ -8147,7 +8234,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     }
 
     // Ruft anthropicProxy auf (Modell
-    // claude-sonnet-5) – keine neue Schlüsselverwaltung. max_tokens 3000 statt vorher 1024: der echte
+    // claude-sonnet-5) – keine neue Schlüsselverwaltung. (Historie: max_tokens war 3000, seit 024 8000, siehe Teil D unten.) Früher 3000 statt 1024: der echte
     // Call (Bugreport 2026-10-17, reproduziert) zeigt durchgängig 800-950 Output-Tokens, davon
     // 500-665 für modellinternes "thinking". Der Proxy kann thinking seit 023a per
     // thinking:{type:"disabled"} abschalten (siehe callWorkoutBuilderModel) – hier bewusst NICHT
@@ -8157,16 +8244,27 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // (z.B. durch max_tokens abgeschnitten, erkennbar an stop_reason) oder nicht parsbarem JSON – der
     // jeweilige rohe Modelltext hängt als err.rawText am Error (siehe generateDailyCheck/lastError).
     async function callDailyCheckModel(payload) {
-      const data = await callAnthropicProxy({
+      // 024 Teil D: max_tokens 8000 (Denken bleibt an - der Tagescheck wägt Schlaf/Training/Plan ab,
+      // Denk-Tokens zählen ins Budget; Proxy erlaubt bis 16000). Reißt es trotzdem ohne Text ab
+      // (stop_reason max_tokens), EINMAL automatisch erneut mit thinking:{type:"disabled"} - dann
+      // steht das ganze Budget für das JSON zur Verfügung.
+      const baseBody = {
         model: 'claude-sonnet-5',
-        max_tokens: 3000,
+        max_tokens: 8000,
         system: buildDailyCheckSystemPrompt(),
         messages: [{ role: 'user', content: JSON.stringify(payload) }]
-      });
-      const textBlock = (data.content || []).find(b => b.type === 'text');
-      const rawText = (textBlock?.text || '').trim();
+      };
+      const textOf = d => ((d.content || []).find(b => b.type === 'text')?.text || '').trim();
+      let data = await callAnthropicProxy(baseBody);
+      if (!textOf(data) && data.stop_reason === 'max_tokens') {
+        console.warn('Tagescheck: max_tokens ohne Text - einmaliger Retry mit thinking disabled');
+        data = await callAnthropicProxy({ ...baseBody, thinking: { type: 'disabled' } });
+      }
+      const rawText = textOf(data);
       if (!rawText) {
-        const err = new Error('Keine Textantwort vom Modell' + (data.stop_reason === 'max_tokens' ? ' (max_tokens erreicht)' : ' (stop_reason: ' + data.stop_reason + ')'));
+        const err = new Error(data.stop_reason === 'max_tokens'
+          ? 'Die KI-Antwort wurde zu lang abgeschnitten (max_tokens erreicht, auch nach erneutem Versuch ohne Denkphase). Bitte später erneut versuchen.'
+          : 'Keine Textantwort vom Modell (stop_reason: ' + data.stop_reason + ')');
         err.rawText = '';
         throw err;
       }
@@ -8457,14 +8555,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         renderOuraDailyCard(currentDate);
         ouraAutoSyncState.attempts++;
         if (ouraNightDataComplete(todayStr)) {
-          // Teil B, Punkt 3b/5: NUR auslösen, wenn heute bereits eine Statusentscheidung committet wurde,
-          // der Call aber noch auf vollständige Oura-Daten gewartet hat (statusPending). Ohne
-          // Statusentscheidung passiert hier bewusst NICHTS (kein automatischer Call ohne getippten
-          // Status). Selbstbegrenzend: der neue Stand hat statusPending nicht mehr, ein erneuter Treffer
-          // hier kann also nicht mehr vorkommen.
-          if (dailyCheckState && dailyCheckState.date === todayStr && dailyCheckState.statusPending) {
-            await generateDailyCheck(true, 'oura_complete');
-          }
+          // Auslösen des wartenden Tagescheck (statusPending) passiert zentral in refreshOuraDaily ->
+          // startPendingDailyCheckIfReady (024 Teil A), hier nur noch als Absicherung (No-op, falls
+          // der Hook den Call schon gestartet hat: dailyCheckGenerating).
+          startPendingDailyCheckIfReady('oura_complete');
         } else {
           scheduleOuraAutoSyncRetry();
         }
@@ -8597,7 +8691,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         dotColor = 'var(--fo-text-3)';
         headlineHtml = ouraAutoSyncInProgress
           ? `<span style="color:var(--fo-text-3);">Status gespeichert – Oura-Daten werden abgerufen …</span>`
-          : `<span style="color:var(--fo-text-3);">Status gespeichert – Analyse folgt, sobald die Schlafdaten vollständig sind</span>`;
+          : `<span style="color:var(--fo-text-3);">Status gespeichert – Tagescheck startet automatisch, sobald Oura-Daten da sind</span>`;
         expandedBodyHtml = `<div class="fo-daily-expanded">
           <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="createDailyCheckNow()">Trotzdem erstellen</button>
         </div>`;

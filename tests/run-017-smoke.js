@@ -10,7 +10,7 @@ const SETTINGS = { height: 180, age: 35, gender: 'male', weight: 80, tdee: 2700 
 
 function buildStore() {
   return {
-    'foods': [{ id: 'food0', data: { id: 'food0', name: 'Testfood Smoke', kcal: 150, protein: 10, carbs: 15, fat: 4 } }],
+    'foods': [{ id: 'food0', data: { id: 'food0', name: 'Testfood Smoke', kcal: 150, protein: 10, carbs: 15, fat: 4, kategorie: 'sonstiges' } }],
     [`users/${TEST_UID}/settings`]: [{ id: 'main', data: SETTINGS }],
   };
 }

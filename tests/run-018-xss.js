@@ -32,7 +32,7 @@ function check(name, cond, detail) {
 
 function buildStore(foodName, foodId) {
   return {
-    'foods': [{ id: foodId, data: { id: foodId, name: foodName, kcal: 150, protein: 10, carbs: 15, fat: 4 } }],
+    'foods': [{ id: foodId, data: { id: foodId, name: foodName, kcal: 150, protein: 10, carbs: 15, fat: 4, kategorie: 'sonstiges' } }],
     [`users/${TEST_UID}/settings`]: [{ id: 'main', data: SETTINGS }],
   };
 }

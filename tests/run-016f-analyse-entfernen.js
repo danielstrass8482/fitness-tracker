@@ -38,7 +38,7 @@ function buildStore() {
   const u = (p) => `users/${TEST_UID}/${p}`;
   return {
     'foods': [
-      { id: 'food0', data: { id: 'food0', name: 'Testfood 0', kcal: 150, protein: 10, carbs: 15, fat: 4 } },
+      { id: 'food0', data: { id: 'food0', name: 'Testfood 0', kcal: 150, protein: 10, carbs: 15, fat: 4, kategorie: 'sonstiges' } },
     ],
     [u('settings')]: [{ id: 'main', data: SETTINGS }],
     [u('trainingplans')]: [{

@@ -44,7 +44,9 @@ async function testNormalSavePayload(browser) {
   await page.selectOption('#settings-recipe-display', 'expanded');
   await page.fill('#settings-tdee', '2600');
   await page.fill('#settings-protein', '160');
-  await page.fill('#settings-carbs', '300');
+  // 027: KH-Feld ist nur Anzeige "automatisch (Rest)" (readonly) - kein Eintippen mehr moeglich
+  const carbsField = await page.$eval('#settings-carbs', e => ({ tag: e.tagName, v: e.textContent.trim() }));
+  check('027: KH-Feld ist reine Anzeige "automatisch (Rest)" (kein Eingabefeld)', carbsField.tag === 'DIV' && carbsField.v === 'automatisch (Rest)', carbsField);
   await page.fill('#settings-fat', '90');
   await page.evaluate(() => window.saveSettings());
   await page.waitForTimeout(100);
@@ -67,7 +69,7 @@ async function testNormalSavePayload(browser) {
   check('Payload hat GENAU die 10 erwarteten Felder, keine weiteren, keine fehlenden', fullWrite && JSON.stringify(Object.keys(fullWrite.data).sort()) === JSON.stringify([...EXPECTED_10_FIELDS].sort()), fullWrite && Object.keys(fullWrite.data));
   check('tdee = 2600 (neuer Formularwert)', fullWrite?.data.tdee === 2600, fullWrite?.data);
   check('proteinGoal = 160', fullWrite?.data.proteinGoal === 160, fullWrite?.data);
-  check('carbsGoal = 300', fullWrite?.data.carbsGoal === 300, fullWrite?.data);
+  check('027: carbsGoal = gespeicherter Altwert 325 (unveraendert, kein Loeschen)', fullWrite?.data.carbsGoal === 325, fullWrite?.data);
   check('fatGoal = 90', fullWrite?.data.fatGoal === 90, fullWrite?.data);
   check('gender = female', fullWrite?.data.gender === 'female', fullWrite?.data);
   check('age = 36', fullWrite?.data.age === 36, fullWrite?.data);

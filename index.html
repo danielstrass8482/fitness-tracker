@@ -1403,12 +1403,13 @@
               <input class="fo-input" type="number" id="settings-protein" placeholder="150">
             </div>
             <div class="fo-field">
-              <label class="fo-label" for="settings-carbs">Kohlenhydrate (g)</label>
-              <input class="fo-input" type="number" id="settings-carbs" placeholder="325">
+              <span class="fo-label">Kohlenhydrate (g)</span>
+              <!-- 027: nur Anzeige, KH-Ziel = Rest des Tagesziels (calcMacroGoals) -->
+              <div class="fo-input" id="settings-carbs" aria-readonly="true" title="Tagesziel − Protein − Fett" style="color:var(--fo-text-3);display:flex;align-items:center;height:auto;min-height:44px;font-size:13px;line-height:1.2;white-space:normal;">automatisch (Rest)</div>
             </div>
             <div class="fo-field">
               <label class="fo-label" for="settings-fat">Fett (g)</label>
-              <input class="fo-input" type="number" id="settings-fat" placeholder="95">
+              <input class="fo-input" type="number" id="settings-fat" placeholder="100">
             </div>
           </div>
 
@@ -2073,7 +2074,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 18:54';
+    const APP_BUILD = '2026-11-21 19:21';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4453,9 +4454,9 @@
 
       // Update progress bars
       const kcalPct = todayGoal > 0 ? Math.round(totalKcal / todayGoal * 100) : 0;
-      const proteinGoal = settings.proteinGoal || 150;
-      const carbsGoal = settings.carbsGoal || 300;
-      const fatGoal = settings.fatGoal || 80;
+      // 027: Protein/Fett fix aus den Einstellungen, KH = Rest des Tagesziels (heute ggf. Prognose)
+      const macroGoals = calcMacroGoals(currentDate);
+      const proteinGoal = macroGoals.protein, carbsGoal = macroGoals.carbs, fatGoal = macroGoals.fat;
       const proteinPct = proteinGoal > 0 ? Math.round(totalProtein / proteinGoal * 100) : 0;
       const carbsPct = carbsGoal > 0 ? Math.round(totalCarbs / carbsGoal * 100) : 0;
       const fatPct = fatGoal > 0 ? Math.round(totalFat / fatGoal * 100) : 0;
@@ -4499,7 +4500,9 @@
       
       // Makro goals in tiles (Zeile 3)
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `Ziel ${fmt(proteinGoal)} g Protein` : 'Protein';
-      document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0 ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate` : 'Kohlenhydrate';
+      document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0
+        ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate${macroGoals.isForecast ? ' (Prognose)' : ''}${macroGoals.floorApplied ? ` · Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : ''}`
+        : 'Kohlenhydrate';
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `Ziel ${fmt(fatGoal)} g Fett` : 'Fett';
 
       // Kompakte Kalorienzeile im Tagebuch: "2.231 / 2.541 kcal · −310", darunter Makros Ist / Ziel (gleiche Farben wie die Kacheln)
@@ -7578,11 +7581,17 @@
     }
     window.fmt = fmt;
 
+    // 027: Makroziel-Konstanten (calcMacroGoals)
+    const MACRO_FAT_DEFAULT_G = 100;         // Daniel 21.11.2026: Fett fix 100 g
+    const MACRO_PROTEIN_DEFAULT_G = 150;
+    const MACRO_CARBS_MIN_G_PER_KG = 3;
+    const MACRO_KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 };
+
     let settings = {
       tdee: 2700,
-      proteinGoal: 150,
-      carbsGoal: 325,
-      fatGoal: 95,
+      proteinGoal: MACRO_PROTEIN_DEFAULT_G,
+      carbsGoal: 325, // 027: nicht mehr verwendet (KH = Rest, calcMacroGoals); bleibt im Dokument
+      fatGoal: MACRO_FAT_DEFAULT_G,
       gender: 'male',
       age: null,
       height: null,
@@ -7617,7 +7626,6 @@
         if (document.getElementById('settings-tdee')) {
           document.getElementById('settings-tdee').value = settings.tdee || '';
           document.getElementById('settings-protein').value = settings.proteinGoal || '';
-          document.getElementById('settings-carbs').value = settings.carbsGoal || '';
           document.getElementById('settings-fat').value = settings.fatGoal || '';
           const rdSel = document.getElementById('settings-recipe-display');
           if (rdSel) rdSel.value = settings.recipeDisplay || 'block';
@@ -7714,8 +7722,10 @@
       }
       const tdee = parseInt(document.getElementById('settings-tdee').value) || 2700;
       const protein = parseInt(document.getElementById('settings-protein').value) || 150;
-      const carbs = parseInt(document.getElementById('settings-carbs').value) || 325;
-      const fat = parseInt(document.getElementById('settings-fat').value) || 95;
+      // 027: KH-Ziel ist automatisch (Rest) - gespeicherten Altwert unverändert zurückschreiben (setDoc
+      // ohne merge, kein Löschen), er wird aber nicht mehr verwendet.
+      const carbs = settings.carbsGoal ?? null;
+      const fat = parseInt(document.getElementById('settings-fat').value) || MACRO_FAT_DEFAULT_G;
       const gender = document.getElementById('settings-gender').value;
       const age = parseInt(document.getElementById('settings-age').value) || null;
       const height = parseFloat(document.getElementById('settings-height').value) || null;
@@ -7973,6 +7983,35 @@
       };
     }
     window.expectedDailyGoal = expectedDailyGoal;
+
+    // ── 027: Makroziele dynamisch ("fuel for the work required", Daniel 19.11./21.11.2026) ─────────
+    // Protein und Fett fix (Einstellungen), Kohlenhydrate = (Tagesziel − 4×Protein − 9×Fett) / 4.
+    // Tagesziel: HEUTE, solange geplante Einheiten noch nicht erfasst sind, die Prognose aus dem Plan
+    // (expectedDailyGoal, 024) - sonst das tatsächliche Ziel (calcHistoricalKcalGoal, unverändert).
+    // Untergrenze KH: MACRO_CARBS_MIN_G_PER_KG × Gewicht des Tages (weightForDate); greift sie, wird
+    // floorApplied gesetzt und in der Anzeige ein Hinweis gezeigt. settings.carbsGoal wird nicht mehr verwendet.
+    // Konstanten MACRO_* zentral oberhalb von `let settings` (dort als Default gebraucht)
+    function calcMacroGoals(dateStr) {
+      const protein = Number(settings.proteinGoal) || MACRO_PROTEIN_DEFAULT_G;
+      const fat = Number(settings.fatGoal) || MACRO_FAT_DEFAULT_G;
+      const actual = calcHistoricalKcalGoal(dateStr)?.total || 0;
+      let kcalGoal = actual, isForecast = false;
+      if (dateStr === berlinTodayStr()) {
+        const exp = expectedDailyGoal(dateStr);
+        if (exp && exp.aktivitaet_geplant.length > 0 && exp.total > actual) { kcalGoal = exp.total; isForecast = true; }
+      }
+      const weight = weightForDate(dateStr);
+      const minCarbs = weight > 0 ? Math.round(MACRO_CARBS_MIN_G_PER_KG * weight) : 0;
+      const restCarbs = kcalGoal > 0
+        ? Math.round((kcalGoal - MACRO_KCAL_PER_G.protein * protein - MACRO_KCAL_PER_G.fat * fat) / MACRO_KCAL_PER_G.carbs)
+        : 0;
+      const floorApplied = kcalGoal > 0 && restCarbs < minCarbs;
+      return {
+        protein, fat, carbs: kcalGoal > 0 ? (floorApplied ? minCarbs : restCarbs) : 0,
+        kcalGoal: Math.round(kcalGoal), isForecast, floorApplied, minCarbs, restCarbs
+      };
+    }
+    window.calcMacroGoals = calcMacroGoals;
 
     // ── Subjektiver Status ("Wie fühlst du dich?") ──────────────────────────────────────────────────
     // users/{uid}/settings/subjectiveStatus, Feld "history": [{status:'angeschlagen'|'krank',
@@ -8292,6 +8331,14 @@
           basis_kcal: expGoal.base, aktivitaet_erfasst_kcal: expGoal.aktivitaet_erfasst,
           aktivitaet_geplant: expGoal.aktivitaet_geplant, schritte_kcal_erwartet: expGoal.schritte_kcal
         },
+        makroziele_heute: (() => {
+          const m = calcMacroGoals(todayStr);
+          return {
+            protein_g: m.protein, fett_g: m.fat, kohlenhydrate_g: m.carbs,
+            basis_tagesziel_kcal: m.kcalGoal || null, prognose: m.isForecast, kh_untergrenze_aktiv: m.floorApplied,
+            hinweis: 'Protein und Fett fix; Kohlenhydrate = Rest des Tagesziels (' + (m.isForecast ? 'PROGNOSE aus dem Plan' : 'tatsächliches Ziel') + '), mind. ' + MACRO_CARBS_MIN_G_PER_KG + ' g/kg.'
+          };
+        })(),
         schritte_letzte_7_tage: stepsHistory,
         uebungen_pausiert: pausedExercises,
         subjektiverStatus
@@ -8989,7 +9036,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
     window.applyMacroSuggestion = function(protein, carbs, fat) {
       document.getElementById('settings-protein').value = protein;
-      document.getElementById('settings-carbs').value = carbs;
+      // 027: KH-Feld ist nur noch Anzeige (automatisch Rest des Tagesziels)
       document.getElementById('settings-fat').value = fat;
       document.getElementById('macro-suggestion').style.display = 'none';
       showToast('Makros übernommen – bitte Einstellungen speichern', 'ok');
@@ -13112,7 +13159,12 @@ Regeln:
         kcalGoal,
         steps,
         activities,
-        intake: getDayIntakeTotals(date)
+        intake: getDayIntakeTotals(date),
+        // 027: Makroziele des Tages (Auswertung über den Connector; View-Erweiterung eigener Auftrag)
+        ...(() => {
+          const m = calcMacroGoals(date);
+          return { goal_protein_g: m.protein, goal_fat_g: m.fat, goal_carbs_g: m.carbs, goal_is_forecast: m.isForecast };
+        })()
       };
     }
 

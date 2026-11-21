@@ -22,6 +22,7 @@ const TESTS = [
   { file: 'run-023a-workout-builder-max-tokens.js', args: [] },
   { file: 'run-023a2-plan-aenderung-gezielt.js', args: [] },
   { file: 'run-024-tagescheck.js', args: [] },
+  { file: 'run-025-zirkel-einfuegen.js', args: [] },
 ];
 
 function statusFor(code) {

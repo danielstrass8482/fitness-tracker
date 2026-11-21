@@ -1772,6 +1772,23 @@
     </div>
   </div>
 
+  <!-- Plan-Editor: gespeicherten Zirkel einfügen/tauschen (025) -->
+  <div id="plan-zirkel-pick-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closePlanZirkelPick()">
+    <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
+      <div class="fo-sheet__grab"></div>
+      <div class="fo-sheet__head" style="border-bottom:0;">
+        <h1 id="plan-zirkel-pick-title" class="fo-sheet__title" style="display:flex;align-items:center;gap:8px;"><svg class="fo-i" aria-hidden="true" style="color:var(--fo-activity);"><use href="#i-circuit"/></svg>Zirkel einfügen</h1>
+      </div>
+      <div class="fo-sheet__body" style="padding-top:4px;">
+        <div class="fo-select"><select id="plan-zirkel-pick-select" aria-label="Zirkel"></select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
+      </div>
+      <div class="fo-sheet__foot" style="padding-bottom:max(var(--fo-s3), env(safe-area-inset-bottom, var(--fo-s3)));">
+        <button class="fo-btn fo-btn--secondary" type="button" onclick="closePlanZirkelPick()">Abbrechen</button>
+        <button id="plan-zirkel-pick-ok" class="fo-btn fo-btn--primary" type="button" onclick="planZirkelPickConfirm()">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Zirkel-Vorlage anlegen/bearbeiten (Runden, Rundenpause, Vorbereitung, Übungen mit Halten/Wdh.) -->
   <div id="zirkel-template-modal" class="fo-scrim" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;max-height:92vh;">
@@ -2042,7 +2059,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 17:50';
+    const APP_BUILD = '2026-11-21 18:08';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6210,6 +6227,7 @@
       'plan-scope-modal',
       'zirkel-adhoc-modal',
       'zirkel-template-modal',
+      'plan-zirkel-pick-modal',
       'zirkel-timer-modal',
       'workout-builder-modal'
     ];
@@ -10448,6 +10466,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       let html = `<div style="border-top:1px solid var(--border);padding:10px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-weight:600;">${foIcon('circuit', 'fo-i--sm')} Zirkel</span>
+          <button onclick="planOpenZirkelPick('${key}',${idx})" style="margin-left:auto;margin-right:8px;padding:8px 10px;background:none;border:1px solid var(--border);color:var(--primary);border-radius:8px;cursor:pointer;font-size:13px;">Zirkel tauschen</button>
           <button onclick="planRemoveUnit('${key}',${idx})" title="Entfernen" aria-label="Entfernen" style="padding:8px 10px;background:none;border:1px solid var(--danger);color:var(--danger);border-radius:8px;cursor:pointer;">${foIcon('trash', 'fo-i--sm')}</button>
         </div>
         <div class="plan-row" style="gap:8px;margin-bottom:8px;">
@@ -10550,6 +10569,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         html += `<div style="display:flex;gap:8px;margin-top:6px;">
             <button onclick="planAddUnit('${key}')" style="flex:1;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Einheit</button>
             <button onclick="planAddZirkel('${key}')" style="flex:1;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">+ Zirkel</button>
+            <button onclick="planOpenZirkelPick('${key}',-1)" style="flex:1;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;color:var(--primary);cursor:pointer;font-size:13px;">Zirkel einfügen</button>
           </div>
         </details>`;
       });
@@ -10592,6 +10612,65 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         uebungen: [{ typ: 'custom_gerade_planks', variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 0, perSide: zirkelDefaultPerSide('custom_gerade_planks', ''), metClass: zirkelDefaultMetClass('custom_gerade_planks', '') }],
         notiz: ''
       });
+      renderTrainingPlan(true);
+    };
+
+    // ── Gespeicherten Zirkel in den Plan einfügen/tauschen (025, kein KI-Call) ──────────────
+    // Quellen: Plan-Zirkel (Entwurf, aktueller Plan, bereits geladene Wochen; neueste zuerst) und
+    // Vorlagen (intervalTemplates, zuletzt geändert zuerst). Gleiche Übungsfolge = ein Eintrag.
+    function planZirkelSeqKey(z) {
+      return JSON.stringify((z.uebungen || []).map(x => [x.typ, String(x.variant || '').trim(), x.mode, x.holdSec || 0, x.wdh || 0, !!x.perSide]));
+    }
+    function planZirkelPickSources() {
+      const out = [], seen = new Set();
+      const add = (z, label, source) => {
+        if (!z || !Array.isArray(z.uebungen) || !z.uebungen.length) return;
+        const k = planZirkelSeqKey(z);
+        if (seen.has(k)) return;
+        seen.add(k);
+        out.push({ z, label, source });
+      };
+      const addPlan = (plan, tag) => PLAN_DAYS.forEach(({ key, label }) =>
+        ((plan || {})[key] || []).forEach(u => { if (u.typ === 'zirkel') add(u, `${tag} ${label}: ${planZirkelAdhocLabel(u)}`, 'plan'); }));
+      addPlan(planDraft, 'Plan');
+      addPlan(trainingPlan, 'Plan');
+      Object.keys(planWeekPlans).sort().reverse().forEach(m => addPlan(planWeekPlans[m]?.plan, 'Plan'));
+      [...intervalTemplates].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+        .forEach(t => add(t, `Vorlage: ${t.name || planZirkelAdhocLabel(t)}`, 'tpl'));
+      return out;
+    }
+    // Plan-Einheit im aktuellen Format aus Zirkel/Vorlage (normalizePlanUnit, mode je Übung)
+    function planZirkelUnitFrom(src) {
+      const z = src.z;
+      return normalizePlanUnit({
+        id: newPlanUnitId(), typ: 'zirkel', runden: z.runden, pauseSec: z.pauseSec, prepSec: z.prepSec, sideSwitchSec: z.sideSwitchSec,
+        uebungen: JSON.parse(JSON.stringify(z.uebungen)),
+        notiz: src.source === 'tpl' ? (z.name || '') : (z.notiz || '')
+      });
+    }
+    let planZirkelPickCtx = null;
+    window.planOpenZirkelPick = function(key, idx) {
+      const sources = planZirkelPickSources();
+      if (!sources.length) { showToast('Keine gespeicherten Zirkel vorhanden', 'bad'); return; }
+      planZirkelPickCtx = { key, idx, sources };
+      document.getElementById('plan-zirkel-pick-select').innerHTML = sources.map((s, i) => `<option value="${i}">${planEsc(s.label)} · ${planEsc(planZirkelSummaryText(s.z).replace(/<[^>]*>/g, '').trim())}</option>`).join('');
+      document.getElementById('plan-zirkel-pick-title').lastChild.textContent = idx >= 0 ? 'Zirkel tauschen' : 'Zirkel einfügen';
+      pushModalState();
+      document.getElementById('plan-zirkel-pick-modal').style.display = 'flex';
+    };
+    window.closePlanZirkelPick = function() {
+      document.getElementById('plan-zirkel-pick-modal').style.display = 'none';
+      planZirkelPickCtx = null;
+    };
+    window.planZirkelPickConfirm = function() {
+      const ctx = planZirkelPickCtx;
+      if (!ctx || !planDraft) { closePlanZirkelPick(); return; }
+      const src = ctx.sources[parseInt(document.getElementById('plan-zirkel-pick-select').value)];
+      if (!src) return;
+      const unit = planZirkelUnitFrom(src);
+      if (ctx.idx >= 0 && planDraft[ctx.key][ctx.idx]) planDraft[ctx.key][ctx.idx] = unit; else planDraft[ctx.key].push(unit);
+      planOpenDays.add(ctx.key);
+      closePlanZirkelPick();
       renderTrainingPlan(true);
     };
 

@@ -160,3 +160,7 @@ des kostenlosen Minutenkontingents öffentlicher Repos; Pflegeaufwand für den W
 (Node-/Playwright-Versionen, Caching) kommt zum bestehenden Umfang hinzu; die Tests laufen schon
 heute zuverlässig lokal in < 1 Minute vor jedem Commit (siehe CLAUDE.md-Regel unten) - der
 zusätzliche Nutzen einer zweiten, entfernten Ausführung ist bei einer Ein-Personen-App gering.
+
+- `run-025-zirkel-einfuegen.js` (Aufgabe 025, Plan-Editor: gespeicherten Zirkel einfügen/tauschen):
+  Knöpfe je Tag/Zirkel-Einheit, Auswahlliste ohne Duplikate (Plan-Zirkel, dann Vorlagen), Übernahme
+  aller Felder, Speichern, "Neuladen" = unveränderter Entwurf, kein KI-Call.

@@ -2073,7 +2073,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 18:35';
+    const APP_BUILD = '2026-11-21 18:40';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -5918,11 +5918,13 @@
       ['getraenke', ['beverages', 'waters', 'sodas', 'juices', 'teas', 'coffees', 'energy-drinks', 'beers', 'wines', 'alcoholic-beverages']],
       ['milchprodukte', ['dairies', 'milks', 'cheeses', 'yogurts', 'yoghurts', 'quark', 'fresh-cheeses', 'butters', 'creams', 'fermented-milk']],
       ['fleisch_fisch', ['meats', 'fishes', 'seafood', 'sausages', 'poultry', 'hams', 'fish-and-meat', 'eggs']],
-      ['obst_gemuese', ['fruits', 'vegetables', 'legumes', 'nuts', 'plant-based-foods-and-beverages-vegetables', 'berries', 'salads']],
+      ['obst_gemuese', ['fruits', 'vegetables', 'legumes', 'berries', 'salads']],
       ['getreide_brot', ['breads', 'cereals', 'pastas', 'rice', 'flours', 'noodles', 'breakfast-cereals', 'potatoes', 'oat', 'mueslis', 'crackers']]
     ];
     function suggestKategorieFromOFF(tags) {
-      const list = (tags || []).map(t => String(t).replace(/^[a-z]{2}:/, '').toLowerCase());
+      // Sammel-Tags wie "plant-based-foods-and-beverages" enthalten Stämme (beverages) ohne Aussage → ignorieren.
+      const list = (tags || []).map(t => String(t).replace(/^[a-z]{2}:/, '').toLowerCase())
+        .filter(t => !/foods-and-beverages|based-foods$|^plant-based-foods/.test(t));
       if (!list.length) return null;
       for (const [kat, stems] of OFF_CATEGORY_RULES) {
         if (list.some(t => stems.some(st => t === st || t.includes(st)))) return kat;

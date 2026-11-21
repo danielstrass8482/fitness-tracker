@@ -83,8 +83,8 @@ async function logFood(page, id) {
   check('Log-Eintrag mit foodId des OFF-Lebensmittels', logs.some(w => w.data && String(w.data.foodId).startsWith('off_')), logs.length);
 
   // 4) Zuordnungstabelle
-  const m = await page.evaluate(() => [window.suggestKategorieFromOFF(['en:dairies', 'en:yogurts']), window.suggestKategorieFromOFF(['en:beverages', 'en:waters']), window.suggestKategorieFromOFF(['en:foo']), window.suggestKategorieFromOFF([])]);
-  check('Mapping Joghurt/Wasser/unbekannt/leer', JSON.stringify(m) === JSON.stringify(['milchprodukte', 'getraenke', null, null]), m);
+  const m = await page.evaluate(() => [window.suggestKategorieFromOFF(['en:dairies', 'en:yogurts']), window.suggestKategorieFromOFF(['en:beverages', 'en:waters']), window.suggestKategorieFromOFF(['en:foo']), window.suggestKategorieFromOFF([]), window.suggestKategorieFromOFF(['en:plant-based-foods-and-beverages', 'en:breads'])]);
+  check('Mapping Joghurt/Wasser/unbekannt/leer', JSON.stringify(m) === JSON.stringify(['milchprodukte', 'getraenke', null, null, 'getreide_brot']), m);
 
   const ce = h.consoleErrors.filter(e => !e.includes('bls-makros.json')); // file://-Ladefehler der BLS-Datei, kein App-Fehler
   check('keine Konsolenfehler', ce.length === 0, ce.slice(0, 3));

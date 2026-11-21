@@ -164,3 +164,12 @@ zusätzliche Nutzen einer zweiten, entfernten Ausführung ist bei einer Ein-Pers
 - `run-025-zirkel-einfuegen.js` (Aufgabe 025, Plan-Editor: gespeicherten Zirkel einfügen/tauschen):
   Knöpfe je Tag/Zirkel-Einheit, Auswahlliste ohne Duplikate (Plan-Zirkel, dann Vorlagen), Übernahme
   aller Felder, Speichern, "Neuladen" = unveränderter Entwurf, kein KI-Call.
+
+- `run-028b-ausruestung.js` (Aufgabe 028b, Ausrüstung/Laufschuhe im Training-Tab "Loggen"): Start mit
+  Standardschuh (`standard_seit` 15.11.) -> nur der neue Lauf danach wird automatisch zugeordnet
+  (`gearAssignments/{activityId}`, quelle `auto`), nicht Altbestand, nicht ein bewusst "Kein Schuh"
+  gesetzter Lauf, nicht ein ausgeblendeter; Auswahlfeld nur bei Läufen; km = start_km + Läufe; Hinweis
+  ab 85 % und 100 % (+ roter Balken); neuen Schuh (XSS-Name) als Standard anlegen -> alter Standard wird
+  zurückgesetzt; Rückwirkend-zuordnen mit Vorschau (Anzahl/km), App-Dialog (Abbrechen schreibt nichts);
+  Lauf umhängen; Wechsel-km bearbeiten (merge, nur 3 Felder); Ausmustern (merge, kein deleteDoc,
+  bleibt mit km sichtbar); kein window.alert/confirm/prompt, keine Konsolenfehler.

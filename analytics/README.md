@@ -54,6 +54,7 @@ wirkungslose `CRON_TZ=Europe/Berlin`-Zeile selbst wurde am 16.11.2026 aus der Cr
 |---|---|---|
 | taeglich 04:15 UTC (05:15 Berlin Winter / 06:15 Sommer) | `window` | Collections mit Datumsfeld, letzte 14 Tage (Upsert + Soft-Delete im Fenster) |
 | sonntags 04:45 UTC | `full` | alle Whitelist-Collections komplett (inkl. Collections ohne Datumsfeld: `foods`, `recipes`, `weeklyStats`, `trainingTypes`, `intervalTemplates`, `garminLinks`, `garminHidden`) |
+| (028b) in JEDEM `window`-Lauf | `full` nur fuer `gear` | Laufschuhe (wenige Dokumente, `ALWAYS_FULL` in `sync.py`), damit `views.ausruestung` zeitnah ist; `gearAssignments` laeuft normal im Fenster ueber `at` |
 | alle 15 Min (:05/:20/:35/:50), 05:05-22:50 Europe/Berlin (008c) | `window --days 1` | nur gestern + heute (Datumsfilter in exportAnalytics), ca. 57 Reads je Lauf |
 
 Der 15-Min-Job steht als `3-21` UTC in der Crontab; ein Guard

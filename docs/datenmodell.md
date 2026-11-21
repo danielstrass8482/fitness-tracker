@@ -58,6 +58,8 @@ leere Collections)
 | `integrations` | 7 feste Docs (s. 2) | 7 | – | – | Konfiguration, **Secrets** |
 | `garminLinks` | `{activityId}` | 0 | – | – | Bewegung (Zuordnung) |
 | `garminHidden` | `{activityId}` | 0 | – | – | Bewegung |
+| `gear` (028b, 21.11.2026, neu/additiv) | `gear_{ms}` | 0 | – | – | Bewegung (Ausrüstung) |
+| `gearAssignments` (028b, 21.11.2026, neu/additiv) | `{activityId}` | 0 | – | – | Bewegung (Zuordnung Lauf → Schuh) |
 | `data` | – | 0 | – | – | toter Code (`userCol()`, kein Aufruf) |
 
 Rekursive Suche nach Subcollections: `listCollectionIds` auf allen Dokumenten der kleinen Collections
@@ -356,6 +358,18 @@ sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.
 - `garminLinks/{activityId}` = `{unlinked, at}`: speichert nur die **gelöste** Zirkel-Zuordnung
   (`index.html:8124`).
 - `garminHidden/{activityId}` = `{hiddenAt}`: ausgeblendete Garmin-Aktivität (`index.html:8090`).
+- `gear/{gear_ms}` (028b) = `{name, typ:'laufschuh', start_km, wechsel_km (Default 600), aktiv, standard,
+  standard_seit ('YYYY-MM-DDTHH:MM:SS' lokal Europe/Berlin oder null), angelegt_am, ausgemustert_am (YYYY-MM-DD
+  oder null)}`. Höchstens EIN aktiver Schuh mit `standard:true` (App setzt die anderen zurück). Ausmustern statt
+  Löschen (`aktiv:false`).
+- `gearAssignments/{activityId}` (028b) = `{gearId (→ gear/{id}) oder null, quelle ('auto'|'manuell'|'rueckwirkend'),
+  at (ISO)}` – Zuordnung eines Garmin-Laufs (`garminActivities` mit `mappedTyp='laufen'`) zu einem Schuh.
+  Bewusst NICHT als Feld `gearId` an `garminActivities`: `ingestGarmin` schreibt diese Dokumente per `set()` ohne
+  `merge` neu, ein App-Feld ginge beim nächsten Ingest derselben Aktivität verloren. `gearId:null` = bewusst
+  "kein Schuh" (wird nicht automatisch überschrieben). Auto-Zuordnung (App, beim Laden der Garmin-Daten): nur
+  Läufe ohne Dokument mit `startLocal >= standard_seit` des aktiven Standardschuhs. km je Schuh =
+  `start_km + Σ distanceM/1000` der zugeordneten, nicht ausgeblendeten Läufe (App: `gearStats`, Connector:
+  `views.ausruestung`).
 - `stravaAthletes/{id}.userId` → `{uid}`. `oura_tokens/{uid}` ↔ `users/{uid}`.
 - Tagesschlüssel `YYYY-MM-DD` verbinden `garminDaily`, `ciqSteps`, `oura_daily`, `dailyCheck` mit
   `entries.datum`/`logEntries.date`. `garminActivities.startLocal` ordnet über das Datum zu.
@@ -639,6 +653,8 @@ Wiederaufbau: `analytics/README.md`.
 | `intervalTemplates` | `users/{uid}/` | – | nur full |
 | `garminLinks` | `users/{uid}/` | – | nur full |
 | `garminHidden` | `users/{uid}/` | – | nur full |
+| `gear` (028b) | `users/{uid}/` | – | nur full |
+| `gearAssignments` (028b) | `users/{uid}/` | – | nur full |
 | `foods` | Top-Level | – | nur full |
 | `recipes` | `users/{uid}/` | – | nur full |
 | `weeklyStats` | `users/{uid}/` | – | nur full |

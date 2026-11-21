@@ -73,7 +73,13 @@ COLLECTIONS = [
     ("intervalTemplates", "interval_templates", False),
     ("garminLinks", "garmin_links", False),
     ("garminHidden", "garmin_hidden", False),
+    ("gear", "gear", False),                       # 028b, s. ALWAYS_FULL
+    ("gearAssignments", "gear_assignments", True), # 028b, Fenster ueber 'at'
 ]
+
+# Sehr kleine Collections ohne Datumsfeld, die trotzdem zeitnah im Connector stehen sollen: werden
+# auch in jedem window-Lauf komplett (mode=full) geholt (028b: Laufschuhe, wenige Dokumente).
+ALWAYS_FULL = {"gear"}
 
 log = logging.getLogger("analytics_sync")
 
@@ -253,10 +259,13 @@ def run(mode: str, days: int) -> int:
     try:
         with psycopg.connect(DB_CONNINFO) as conn:
             for collection, table, supports_window in COLLECTIONS:
+                coll_mode = mode
                 if mode == "window" and not supports_window:
-                    continue  # Collections ohne Datumsfeld nur im woechentlichen full-Lauf
+                    if collection not in ALWAYS_FULL:
+                        continue  # Collections ohne Datumsfeld nur im woechentlichen full-Lauf
+                    coll_mode = "full"
                 try:
-                    r = sync_collection(conn, collection, table, mode, secret, days)
+                    r = sync_collection(conn, collection, table, coll_mode, secret, days)
                     results.append(r)
                     log.info(
                         "OK %-20s mode=%-6s docs=%-6d reads=%-6d deleted=%-4d dauer=%.1fs",

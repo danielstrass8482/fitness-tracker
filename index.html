@@ -1156,6 +1156,46 @@
           </div>
         </div>
 
+        <!-- Ausrüstung (028b): Laufschuhe, km je Schuh aus zugeordneten Garmin-Läufen + start_km. Daten: users/{uid}/gear, Zuordnung users/{uid}/gearAssignments/{activityId} (siehe renderGearSection) -->
+        <div class="fo-card" id="gear-card" style="margin-top:20px;">
+          <div class="fo-card__head"><h3 class="fo-card__title">Ausrüstung</h3></div>
+          <div class="fo-card__body" style="display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--fo-line);">
+            <div id="gear-list"></div>
+            <p class="fo-help" style="margin:0;">Die km sind nur ein Anhaltspunkt – entscheidend sind Dämpfung, Sohle und Beschwerden.</p>
+            <div id="gear-form" style="display:none;">
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div class="fo-field">
+                  <label class="fo-label" for="gear-name">Name</label>
+                  <input class="fo-input" type="text" id="gear-name" maxlength="60" placeholder="z. B. Laufschuh 1">
+                </div>
+                <div style="display:flex;gap:10px;">
+                  <div class="fo-field" style="flex:1;min-width:0;">
+                    <label class="fo-label" for="gear-start-km">Bereits gelaufen (km)</label>
+                    <input class="fo-input" type="number" id="gear-start-km" min="0" step="0.1" value="0">
+                  </div>
+                  <div class="fo-field" style="flex:1;min-width:0;">
+                    <label class="fo-label" for="gear-wechsel-km">Wechsel bei (km)</label>
+                    <input class="fo-input" type="number" id="gear-wechsel-km" min="1" step="1" value="600">
+                  </div>
+                </div>
+                <div id="gear-form-new-only" style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="fo-checklabel"><input type="checkbox" id="gear-standard"> Standardschuh (neue Läufe automatisch zuordnen)</label>
+                  <label class="fo-checklabel"><input type="checkbox" id="gear-retro" onchange="updateGearRetroPreview()"> Läufe ab Datum diesem Schuh zuordnen</label>
+                  <div id="gear-retro-box" style="display:none;">
+                    <input class="fo-input" type="date" id="gear-retro-date" onchange="updateGearRetroPreview()">
+                    <div class="fo-help" id="gear-retro-preview" style="margin-top:6px;"></div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="fo-btn fo-btn--secondary" type="button" style="flex:1;" onclick="cancelGearForm()">Abbrechen</button>
+                  <button class="fo-btn fo-btn--primary" type="button" style="flex:1;" id="gear-save-btn" onclick="saveGearForm()">Speichern</button>
+                </div>
+              </div>
+            </div>
+            <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" id="gear-add-btn" onclick="openGearForm()">Schuh hinzufügen</button>
+          </div>
+        </div>
+
         <!-- Day Log -->
         <div class="fo-card">
           <div class="fo-card__head"><h3 class="fo-card__title">Tageslog</h3></div>
@@ -2074,7 +2114,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 19:30';
+    const APP_BUILD = '2026-11-21 20:04';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2112,6 +2152,12 @@
     let garminActivityCutoff = null; // erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität, siehe computeGarminActivityCutoff
     let showHiddenGarmin = false;  // UI-Toggle "Ausgeblendete anzeigen" im Training-Tab
     let coveredStrengthExpanded = false; // UI-Toggle "abgedeckte" Garmin-Kraft-Sammelzeile (Teil B, 004b, 07.11.2026)
+    // Ausrüstung (028b): Laufschuhe aus users/{uid}/gear, Zuordnung Lauf -> Schuh in users/{uid}/gearAssignments/
+    // {activityId} ({gearId|null, quelle: 'auto'|'manuell'|'rueckwirkend', at}). NICHT als Feld an garminActivities:
+    // ingestGarmin schreibt diese Dokumente per set() OHNE merge neu (functions/index.js) - ein gearId-Feld dort
+    // ginge beim nächsten Ingest derselben Aktivität verloren. Gleiches Muster wie garminHidden/garminLinks.
+    let gearAll = [];                     // [{ id, name, typ, start_km, wechsel_km, aktiv, standard, standard_seit, angelegt_am, ausgemustert_am }]
+    let gearAssignByActivity = new Map(); // activityId (String) -> { gearId, quelle, at }
 
     // ciqSteps/{heute} (Phase 1c, Connect-IQ-Proof-of-Concept, 01.11.2026): Tagesschritte, die eine
     // eigene Connect-IQ-App direkt von der Uhr sendet (ingestCiqSteps, alle 5 Min), an Garmin Connects
@@ -2134,6 +2180,8 @@
     window.garminActivitiesAll = garminActivitiesAll;
     window.garminHiddenIds = garminHiddenIds;
     window.garminUnlinkedIds = garminUnlinkedIds;
+    window.gearAll = gearAll;
+    window.gearAssignByActivity = gearAssignByActivity;
 
     // ── Zentrales HTML-Escaping (018) ────────────────────────────────────────
     // Einzige Stelle, die & < > " ' escaped - fuer Text- UND Attributkontext in innerHTML-Templates.
@@ -2183,6 +2231,8 @@
     const userGarminActivitiesCol = () => collection(db, 'users', userId, 'garminActivities'); // von ingestGarmin (Cloud Function) befüllt, nur gelesen
     const userGarminHiddenCol = () => collection(db, 'users', userId, 'garminHidden'); // einzige neue Schreibquelle der App für Garmin-Daten (Korrektur 3, 01.11.2026): {activityId}: {hiddenAt}
     const userGarminLinksCol = () => collection(db, 'users', userId, 'garminLinks'); // zweite Schreibquelle (Zirkel-Zusammenführung, 01.11.2026): {activityId}: {unlinked:true, at} für "Zuordnung lösen"
+    const userGearCol = () => collection(db, 'users', userId, 'gear'); // Ausrüstung (028b), nur von der App geschrieben
+    const userGearAssignCol = () => collection(db, 'users', userId, 'gearAssignments'); // Lauf -> Schuh (028b), Doc-ID = Garmin-activityId
     const userCiqStepsDoc = date => doc(db, 'users', userId, 'ciqSteps', date); // von ingestCiqSteps (Cloud Function) befüllt, nur gelesen - nur das Tagesdokument, nie die samples-Subcollection (R6)
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
@@ -2263,6 +2313,12 @@
         getDocs(userGarminLinksCol()),
         getDoc(userCiqStepsDoc(ciqDateStr)).catch(e => { console.warn('ciqSteps load error:', e); return null; }), // bei Fehler: ignorieren, fällt auf garminDaily/Google Fit zurück
       ]);
+      // Ausrüstung (028b): eigene Fehlerbehandlung - ein Lesefehler hier darf den Garmin-Load nicht stoppen.
+      // Bei Fehler bleibt der bisherige Stand stehen und es wird NICHT automatisch zugeordnet.
+      const [gearSnap, gearAssignSnap] = await Promise.all([
+        getDocs(userGearCol()).catch(e => { console.warn('gear load error:', e); return null; }),
+        getDocs(userGearAssignCol()).catch(e => { console.warn('gearAssignments load error:', e); return null; }),
+      ]);
 
       const nextDaily = {};
       dailySnap.forEach(d => { nextDaily[d.id] = d.data(); });
@@ -2287,6 +2343,18 @@
 
       ciqStepsToday = (ciqSnap && ciqSnap.exists()) ? { date: ciqDateStr, steps: ciqSnap.data().steps || 0, receivedAt: ciqSnap.data().receivedAt } : null;
       window.ciqStepsToday = ciqStepsToday;
+
+      if (gearSnap && gearAssignSnap) {
+        const nextGear = [];
+        gearSnap.forEach(d => nextGear.push({ id: d.id, ...d.data() }));
+        gearAll = nextGear;
+        window.gearAll = gearAll;
+        const nextAssign = new Map();
+        gearAssignSnap.forEach(d => nextAssign.set(String(d.id), d.data() || {}));
+        gearAssignByActivity = nextAssign;
+        window.gearAssignByActivity = gearAssignByActivity;
+        try { await autoAssignStandardGear(); } catch (e) { console.warn('Standardschuh-Zuordnung fehlgeschlagen:', e); }
+      }
     }
 
     // Erstes Datum (YYYY-MM-DD) mit einer echten Garmin-Aktivität. Vor diesem Datum bleibt ein Tag
@@ -7355,6 +7423,7 @@
       
       if (sorted.length === 0) {
         container.innerHTML = '<div class="fo-empty">Noch keine Einträge</div>';
+        renderGearSection();
         renderTrainingPlan();
         return;
       }
@@ -7437,6 +7506,7 @@
             ${linkedGarminNote ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${linkedGarminNote}</div>` : ''}
             ${strengthNettoLabel ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${strengthNettoLabel}</div>` : ''}
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + escHtml(e.notiz) : ''}</div>
+            ${isGarminLive && !e.garminHiddenEntry && typ === 'laufen' ? gearSelectHtml(e.garminActivityId) : ''}
             ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
           <div class="fo-row__actions" onclick="event.stopPropagation()">
@@ -7447,6 +7517,7 @@
           </div>
         </div>
       `}).join('');
+      renderGearSection();
       renderTrainingPlan();
     }
 
@@ -7514,6 +7585,256 @@
       } catch (err) {
         console.error('relinkGarminActivity error:', err);
         showToast('Wieder verknüpfen fehlgeschlagen', 'bad');
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AUSRÜSTUNG (028b) – Laufschuhe, km je Schuh = start_km + Distanz der zugeordneten Läufe
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Läufe = Garmin-Aktivitäten mit mappedTyp 'laufen' (garminActivitiesAll), ausgeblendete (garminHidden)
+    // zählen wie überall sonst nicht mit. Keine Formeländerung, kein Zurückschreiben zu Garmin.
+    const GEAR_DEFAULT_WECHSEL_KM = 600;
+    const GEAR_WARN_PCT = 85;   // ab hier "Wechsel bald prüfen"
+    const GEAR_LIMIT_PCT = 100; // ab hier "Wechselgrenze erreicht"
+    let gearEditingId = null;   // null = neuer Schuh, sonst id des bearbeiteten Schuhs
+
+    // Lokale Wanduhrzeit Europe/Berlin "YYYY-MM-DDTHH:MM:SS" - gleiches Format wie garminActivities.startLocal
+    // (lokal, ohne Zone), damit standard_seit direkt per String-Vergleich mit startLocal verglichen werden kann.
+    const berlinNowLocalStr = () => new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Berlin', hour12: false }).replace(' ', 'T').slice(0, 19);
+    const gearFmtKm = km => (Math.round(km * 10) / 10).toFixed(1).replace('.', ',');
+    const gearFmtDate = d => { const [y, m, t] = String(d || '').split('-'); return t ? `${t}.${m}.${y}` : ''; };
+
+    function gearRunActivities() {
+      return garminActivitiesAll.filter(a => a.mappedTyp === 'laufen' && !garminHiddenIds.has(String(a.id)) && garminActivityDateKey(a));
+    }
+    function gearIdForActivity(activityId) {
+      return gearAssignByActivity.get(String(activityId))?.gearId || null;
+    }
+    function gearStats(g) {
+      const runs = gearRunActivities().filter(a => gearIdForActivity(a.id) === g.id);
+      const runKm = runs.reduce((sum, a) => sum + (a.distanceM > 0 ? a.distanceM : 0), 0) / 1000;
+      const kmTotal = (Number(g.start_km) || 0) + runKm;
+      const wechsel = Number(g.wechsel_km) > 0 ? Number(g.wechsel_km) : GEAR_DEFAULT_WECHSEL_KM;
+      const dates = runs.map(garminActivityDateKey).sort();
+      return { kmTotal, runKm, runs: runs.length, lastRun: dates[dates.length - 1] || null, firstRun: dates[0] || null, wechsel, pct: kmTotal / wechsel * 100 };
+    }
+    window.gearStats = gearStats;
+
+    // Neue Läufe bekommen automatisch den aktiven Standardschuh: nur Läufe OHNE Zuordnungsdokument, die NACH
+    // dem Setzen des Standards gestartet sind (startLocal >= standard_seit) - nie Altbestand (028b Punkt 3).
+    // "Kein Schuh" bei einem Lauf wird als Dokument mit gearId:null gespeichert und deshalb nie überschrieben.
+    async function autoAssignStandardGear() {
+      const std = gearAll.find(g => g.aktiv && g.standard && g.typ === 'laufschuh');
+      if (!std || !std.standard_seit) return 0;
+      const at = new Date().toISOString();
+      let n = 0;
+      for (const a of gearRunActivities()) {
+        const id = String(a.id);
+        if (gearAssignByActivity.has(id)) continue;
+        if (String(a.startLocal || '').slice(0, 19) < std.standard_seit) continue;
+        const data = { gearId: std.id, quelle: 'auto', at };
+        await setDoc(doc(userGearAssignCol(), id), data);
+        gearAssignByActivity.set(id, data);
+        n++;
+      }
+      return n;
+    }
+
+    function renderGearSection() {
+      const list = document.getElementById('gear-list');
+      if (!list) return;
+      const shoes = gearAll.filter(g => g.typ === 'laufschuh')
+        .sort((a, b) => (b.aktiv ? 1 : 0) - (a.aktiv ? 1 : 0) || (b.standard ? 1 : 0) - (a.standard ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || ''), 'de'));
+      if (!shoes.length) {
+        list.innerHTML = '<div class="fo-empty">Noch keine Laufschuhe angelegt</div>';
+        return;
+      }
+      list.innerHTML = shoes.map((g, idx) => {
+        const st = gearStats(g);
+        const pct = Math.max(0, st.pct);
+        const barCls = pct >= GEAR_LIMIT_PCT ? ' is-bad' : '';
+        const warn = !g.aktiv ? ''
+          : pct >= GEAR_LIMIT_PCT ? `<div class="fo-row__sub fo-row__sub--wrap gear-warn" data-level="100" style="color:var(--fo-bad);font-weight:600;">Wechselgrenze erreicht (${Math.round(pct)} %)</div>`
+          : pct >= GEAR_WARN_PCT ? `<div class="fo-row__sub fo-row__sub--wrap gear-warn" data-level="85" style="color:var(--fo-warn, #b45309);font-weight:600;">Wechsel bald prüfen (${Math.round(pct)} %)</div>`
+          : '';
+        const tags = (g.standard && g.aktiv ? '<span class="fo-tag" style="margin-left:6px;">Standard</span>' : '')
+          + (!g.aktiv ? '<span class="fo-tag fo-tag--neutral" style="margin-left:6px;">Ausgemustert</span>' : '');
+        const gid = escHtml(g.id);
+        const actions = g.aktiv ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+              ${g.standard ? '' : `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="setStandardGear('${gid}')">Als Standard</button>`}
+              <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="openGearForm('${gid}')">Bearbeiten</button>
+              <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="retireGear('${gid}')">Ausmustern</button>
+            </div>` : '';
+        return `
+        <div class="gear-item" data-gear-id="${gid}" style="padding:10px 0;${idx > 0 ? 'border-top:1px solid var(--fo-line);' : ''}${g.aktiv ? '' : 'opacity:0.6;'}">
+          <div class="fo-row__title">${typIcon('laufen')} <span class="gear-name">${escHtml(g.name)}</span>${tags}</div>
+          <div class="fo-row__sub fo-row__sub--wrap"><span class="gear-km">${gearFmtKm(st.kmTotal)} km</span> von ${gearFmtKm(st.wechsel)} km · <span class="gear-runs">${st.runs}</span> ${st.runs === 1 ? 'Lauf' : 'Läufe'}${st.lastRun ? ' · letzter Lauf ' + gearFmtDate(st.lastRun) : ''}${!g.aktiv && g.ausgemustert_am ? ' · ausgemustert ' + gearFmtDate(g.ausgemustert_am) : ''}</div>
+          <div class="fo-bar fo-bar--thick${barCls}" style="margin-top:6px;"><span style="width:${Math.min(100, pct).toFixed(1)}%"></span></div>
+          ${warn}
+          ${actions}
+        </div>`;
+      }).join('');
+    }
+    window.renderGearSection = renderGearSection;
+
+    // Auswahlfeld je Garmin-Lauf in "Letzte Einträge" (nur wenn mindestens ein Schuh existiert).
+    function gearSelectHtml(activityId) {
+      const shoes = gearAll.filter(g => g.typ === 'laufschuh');
+      if (!shoes.length) return '';
+      const cur = gearIdForActivity(activityId);
+      const opts = [`<option value=""${cur ? '' : ' selected'}>Kein Schuh</option>`]
+        .concat(shoes.filter(g => g.aktiv || g.id === cur).map(g =>
+          `<option value="${escHtml(g.id)}"${g.id === cur ? ' selected' : ''}>${escHtml(g.name)}${g.aktiv ? '' : ' (ausgemustert)'}</option>`));
+      const aid = escHtml(String(activityId));
+      return `<div class="fo-row__sub" style="margin-top:6px;" onclick="event.stopPropagation()"><div class="fo-select" style="max-width:240px;"><select class="gear-run-select" data-activity-id="${aid}" aria-label="Schuh für diesen Lauf" onchange="setRunGear('${aid}', this.value)">${opts.join('')}</select></div></div>`;
+    }
+
+    window.setRunGear = async function(activityId, gearId) {
+      const id = String(activityId);
+      const data = { gearId: gearId || null, quelle: 'manuell', at: new Date().toISOString() };
+      try {
+        await setDoc(doc(userGearAssignCol(), id), data);
+        gearAssignByActivity.set(id, data);
+        renderGearSection();
+        showToast(gearId ? 'Schuh zugeordnet' : 'Zuordnung entfernt', 'ok');
+      } catch (err) {
+        console.error('setRunGear error:', err);
+        showToast('Zuordnung fehlgeschlagen', 'bad');
+        renderTrainingHistory();
+      }
+    };
+
+    // Rückwirkend zuordnen (nur beim Anlegen): Läufe ab Datum X ganz OHNE Zuordnungsdokument. Läufe mit anderem
+    // Schuh oder bewusst "Kein Schuh" (gearId:null) bleiben unverändert (einzeln über das Auswahlfeld änderbar).
+    function gearRetroCandidates(fromDate) {
+      const runs = gearRunActivities().filter(a => garminActivityDateKey(a) >= fromDate);
+      const free = runs.filter(a => !gearAssignByActivity.has(String(a.id)));
+      return { free, otherCount: runs.length - free.length, km: free.reduce((s, a) => s + (a.distanceM > 0 ? a.distanceM : 0), 0) / 1000 };
+    }
+    window.updateGearRetroPreview = function() {
+      const on = document.getElementById('gear-retro').checked;
+      document.getElementById('gear-retro-box').style.display = on ? 'block' : 'none';
+      const out = document.getElementById('gear-retro-preview');
+      const from = document.getElementById('gear-retro-date').value;
+      if (!on || !from) { out.textContent = on ? 'Datum wählen.' : ''; return; }
+      const c = gearRetroCandidates(from);
+      out.textContent = `Vorschau: ${c.free.length} ${c.free.length === 1 ? 'Lauf' : 'Läufe'} ab ${gearFmtDate(from)}, ${gearFmtKm(c.km)} km`
+        + (c.otherCount ? ` · ${c.otherCount} bereits zugeordnet oder bewusst ohne Schuh (bleiben unverändert)` : '')
+        + '. Diese km nicht zusätzlich in "Bereits gelaufen" eintragen.';
+    };
+
+    window.openGearForm = function(id) {
+      const g = id ? gearAll.find(x => x.id === id) : null;
+      gearEditingId = g ? g.id : null;
+      document.getElementById('gear-name').value = g ? (g.name || '') : '';
+      document.getElementById('gear-start-km').value = g ? (Number(g.start_km) || 0) : 0;
+      document.getElementById('gear-wechsel-km').value = g ? (Number(g.wechsel_km) || GEAR_DEFAULT_WECHSEL_KM) : GEAR_DEFAULT_WECHSEL_KM;
+      document.getElementById('gear-standard').checked = !g && !gearAll.some(x => x.aktiv && x.standard);
+      document.getElementById('gear-retro').checked = false;
+      document.getElementById('gear-retro-date').value = '';
+      document.getElementById('gear-form-new-only').style.display = g ? 'none' : 'flex';
+      updateGearRetroPreview();
+      document.getElementById('gear-form').style.display = 'block';
+      document.getElementById('gear-add-btn').style.display = 'none';
+      document.getElementById('gear-name').focus();
+    };
+    window.cancelGearForm = function() {
+      gearEditingId = null;
+      document.getElementById('gear-form').style.display = 'none';
+      document.getElementById('gear-add-btn').style.display = '';
+    };
+
+    // Höchstens EIN aktiver Standard-Laufschuh: alle anderen mit standard:true werden zurückgesetzt.
+    async function gearClearOtherStandards(keepId) {
+      for (const o of gearAll.filter(x => x.id !== keepId && x.standard)) {
+        await setDoc(doc(userGearCol(), o.id), { standard: false, standard_seit: null }, { merge: true });
+        o.standard = false; o.standard_seit = null;
+      }
+    }
+
+    window.saveGearForm = async function() {
+      const name = document.getElementById('gear-name').value.trim().slice(0, 60);
+      const startKm = parseFloat(String(document.getElementById('gear-start-km').value).replace(',', '.'));
+      const wechselKm = parseFloat(String(document.getElementById('gear-wechsel-km').value).replace(',', '.'));
+      if (!name) { showToast('Bitte einen Namen eingeben', 'bad'); return; }
+      if (!Number.isFinite(startKm) || startKm < 0) { showToast('Bereits gelaufen: Zahl ≥ 0', 'bad'); return; }
+      if (!Number.isFinite(wechselKm) || wechselKm <= 0) { showToast('Wechsel bei: Zahl > 0', 'bad'); return; }
+      const start_km = Math.round(startKm * 10) / 10, wechsel_km = Math.round(wechselKm);
+      try {
+        if (gearEditingId) {
+          const g = gearAll.find(x => x.id === gearEditingId);
+          if (!g) return;
+          await setDoc(doc(userGearCol(), g.id), { name, start_km, wechsel_km }, { merge: true });
+          Object.assign(g, { name, start_km, wechsel_km });
+          showToast('Gespeichert', 'ok');
+        } else {
+          const standard = document.getElementById('gear-standard').checked;
+          const retroOn = document.getElementById('gear-retro').checked;
+          const retroFrom = document.getElementById('gear-retro-date').value;
+          if (retroOn && !retroFrom) { showToast('Bitte ein Datum für die Zuordnung wählen', 'bad'); return; }
+          const retro = retroOn ? gearRetroCandidates(retroFrom) : null;
+          if (retro && retro.free.length) {
+            const ok = await showConfirm(`Schuh anlegen und ${retro.free.length} ${retro.free.length === 1 ? 'Lauf' : 'Läufe'} (${gearFmtKm(retro.km)} km) zuordnen?`,
+              `Läufe ab ${gearFmtDate(retroFrom)} ohne Schuh.` + (retro.otherCount ? ` ${retro.otherCount} bereits zugeordnete/bewusst ohne Schuh bleiben unverändert.` : ''),
+              'check', 'Zuordnen', false);
+            if (!ok) return;
+          }
+          const id = 'gear_' + Date.now();
+          const g = { name, typ: 'laufschuh', start_km, wechsel_km, aktiv: true, standard,
+            standard_seit: standard ? berlinNowLocalStr() : null, angelegt_am: berlinTodayStr(), ausgemustert_am: null };
+          await setDoc(doc(userGearCol(), id), g);
+          if (standard) await gearClearOtherStandards(id);
+          gearAll.push({ id, ...g });
+          if (retro && retro.free.length) {
+            const at = new Date().toISOString();
+            for (const a of retro.free) {
+              const data = { gearId: id, quelle: 'rueckwirkend', at };
+              await setDoc(doc(userGearAssignCol(), String(a.id)), data);
+              gearAssignByActivity.set(String(a.id), data);
+            }
+          }
+          showToast(retro && retro.free.length ? `Schuh angelegt, ${retro.free.length} ${retro.free.length === 1 ? 'Lauf' : 'Läufe'} zugeordnet` : 'Schuh angelegt', 'ok');
+        }
+        window.gearAll = gearAll;
+        cancelGearForm();
+        renderTrainingHistory();
+      } catch (err) {
+        console.error('saveGearForm error:', err);
+        showToast('Speichern fehlgeschlagen', 'bad');
+      }
+    };
+
+    window.setStandardGear = async function(id) {
+      const g = gearAll.find(x => x.id === id && x.aktiv);
+      if (!g) return;
+      try {
+        const standard_seit = berlinNowLocalStr();
+        await setDoc(doc(userGearCol(), g.id), { standard: true, standard_seit }, { merge: true });
+        g.standard = true; g.standard_seit = standard_seit;
+        await gearClearOtherStandards(g.id);
+        renderTrainingHistory();
+        showToast('Standardschuh gesetzt', 'ok');
+      } catch (err) {
+        console.error('setStandardGear error:', err);
+        showToast('Speichern fehlgeschlagen', 'bad');
+      }
+    };
+
+    // Ausmustern statt Löschen: Schuh + Zuordnungen bleiben (Historie), er wird nur nicht mehr angeboten.
+    window.retireGear = async function(id) {
+      const g = gearAll.find(x => x.id === id && x.aktiv);
+      if (!g) return;
+      if (!await showConfirm('Schuh ausmustern?', 'Er bleibt mit seinen Läufen und km in der Historie, wird aber neuen Läufen nicht mehr zugeordnet.', 'check', 'Ausmustern')) return;
+      try {
+        const upd = { aktiv: false, standard: false, standard_seit: null, ausgemustert_am: berlinTodayStr() };
+        await setDoc(doc(userGearCol(), g.id), upd, { merge: true });
+        Object.assign(g, upd);
+        renderTrainingHistory();
+        showToast('Ausgemustert', 'ok');
+      } catch (err) {
+        console.error('retireGear error:', err);
+        showToast('Ausmustern fehlgeschlagen', 'bad');
       }
     };
 

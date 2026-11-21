@@ -25,6 +25,7 @@ const TESTS = [
   { file: 'run-025-zirkel-einfuegen.js', args: [] },
   { file: 'run-026-kategorie-bestaetigen.js', args: [] },
   { file: 'run-027-makroziele.js', args: [] },
+  { file: 'run-028b-ausruestung.js', args: [] },
 ];
 
 function statusFor(code) {

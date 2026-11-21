@@ -2073,7 +2073,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 18:40';
+    const APP_BUILD = '2026-11-21 18:54';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -5912,7 +5912,8 @@
     // Feste Zuordnung OFF-Kategorie → App-Kategorie. Reihenfolge = Priorität (erste Regel mit Treffer gewinnt).
     // Treffer, wenn ein Tag mit einem der Stämme beginnt/enthält ("en:" wird abgeschnitten).
     const OFF_CATEGORY_RULES = [
-      ['suesswaren', ['chocolate', 'candies', 'candy', 'confectioner', 'sweet-snacks', 'biscuits', 'cookies', 'cakes', 'pastries', 'ice-cream', 'protein-bars', 'cereal-bars', 'snack-bars', 'sweet-spreads', 'gummi', 'caramel', 'dessert', 'wafers']],
+      ['supplements', ['protein-bars']], // Proteinriegel → Supplements (Daniel 21.11.), vor suesswaren
+      ['suesswaren', ['chocolate', 'candies', 'candy', 'confectioner', 'sweet-snacks', 'biscuits', 'cookies', 'cakes', 'pastries', 'ice-cream', 'cereal-bars', 'snack-bars', 'sweet-spreads', 'gummi', 'caramel', 'dessert', 'wafers']],
       ['supplements', ['protein-powder', 'dietary-supplement', 'food-supplement', 'sport-nutrition', 'sports-nutrition', 'whey', 'amino-acid', 'creatine']],
       ['gerichte', ['meals', 'prepared-meal', 'pizzas', 'sandwiches', 'soups', 'ready-meal', 'burgers', 'dishes', 'salads-prepared', 'frozen-ready']],
       ['getraenke', ['beverages', 'waters', 'sodas', 'juices', 'teas', 'coffees', 'energy-drinks', 'beers', 'wines', 'alcoholic-beverages']],
@@ -6349,7 +6350,8 @@
 
     // Back-Button: schließt das oberste offene Modal
     window.addEventListener('popstate', function(e) {
-      const openModal = MODAL_IDS.find(id => {
+      const katEl = document.getElementById('kategorie-confirm-modal');
+      const openModal = (katEl && katEl.style.display !== 'none') ? 'kategorie-confirm-modal' : MODAL_IDS.find(id => {
         const el = document.getElementById(id);
         return el && el.style.display !== 'none';
       });

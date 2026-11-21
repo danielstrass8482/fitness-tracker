@@ -82,9 +82,19 @@ async function logFood(page, id) {
   const logs = (await writes(page)).filter(w => w.type === 'set' && String(w.path).includes('logEntries'));
   check('Log-Eintrag mit foodId des OFF-Lebensmittels', logs.some(w => w.data && String(w.data.foodId).startsWith('off_')), logs.length);
 
+  // 3b) Zurück-Taste: Kategorie-Dialog über add-food-modal -> 1x Zurück schließt NUR den Dialog
+  await page.evaluate(() => window.openAddFood());
+  const fwBack = (await foodWrites(page)).length;
+  await page.evaluate(() => { document.getElementById('kategorie-confirm-modal').style.display = 'flex'; history.pushState({ modal: true }, ''); });
+  await page.evaluate(() => history.back());
+  await page.waitForTimeout(300);
+  const st = await page.evaluate(() => ({ kat: document.getElementById('kategorie-confirm-modal').style.display, add: document.getElementById('add-food-modal').style.display }));
+  check('Zurück: Dialog zu, add-food bleibt offen', st.kat === 'none' && st.add !== 'none', st);
+  check('Zurück: kein foods-Write', (await foodWrites(page)).length === fwBack);
+
   // 4) Zuordnungstabelle
-  const m = await page.evaluate(() => [window.suggestKategorieFromOFF(['en:dairies', 'en:yogurts']), window.suggestKategorieFromOFF(['en:beverages', 'en:waters']), window.suggestKategorieFromOFF(['en:foo']), window.suggestKategorieFromOFF([]), window.suggestKategorieFromOFF(['en:plant-based-foods-and-beverages', 'en:breads'])]);
-  check('Mapping Joghurt/Wasser/unbekannt/leer', JSON.stringify(m) === JSON.stringify(['milchprodukte', 'getraenke', null, null, 'getreide_brot']), m);
+  const m = await page.evaluate(() => [window.suggestKategorieFromOFF(['en:dairies', 'en:yogurts']), window.suggestKategorieFromOFF(['en:beverages', 'en:waters']), window.suggestKategorieFromOFF(['en:foo']), window.suggestKategorieFromOFF([]), window.suggestKategorieFromOFF(['en:plant-based-foods-and-beverages', 'en:breads']), window.suggestKategorieFromOFF(['en:snacks', 'en:sweet-snacks', 'en:bars', 'en:protein-bars']), window.suggestKategorieFromOFF(['en:snacks', 'en:sweet-snacks', 'en:chocolates'])]);
+  check('Mapping Joghurt/Wasser/unbekannt/leer', JSON.stringify(m) === JSON.stringify(['milchprodukte', 'getraenke', null, null, 'getreide_brot', 'supplements', 'suesswaren']), m);
 
   const ce = h.consoleErrors.filter(e => !e.includes('bls-makros.json')); // file://-Ladefehler der BLS-Datei, kein App-Fehler
   check('keine Konsolenfehler', ce.length === 0, ce.slice(0, 3));

@@ -27,6 +27,7 @@ const TESTS = [
   { file: 'run-027-makroziele.js', args: [] },
   { file: 'run-028b-ausruestung.js', args: [] },
   { file: 'run-032-oura-karte.js', args: [] },
+  { file: 'run-033-bls-rezeptsuche.js', args: [] },
 ];
 
 function statusFor(code) {

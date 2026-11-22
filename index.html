@@ -2115,7 +2115,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-22 21:38';
+    const APP_BUILD = '2026-11-22 21:50';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4031,10 +4031,7 @@
       const results = document.getElementById('recipe-ingred-results');
       if (query.length < 2) { results.innerHTML = ''; return; }
       const matches = foodDB.filter(f => f.name.toLowerCase().includes(query)).slice(0, 15);
-      if (matches.length === 0) {
-        results.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>';
-        return;
-      }
+      // 033: eigene Treffer zuerst, darunter BLS (gleiche Funktionen wie die Lebensmittelsuche)
       results.innerHTML = matches.map(f => `
         <div onclick="addIngredientToRecipe('${f.id}')"
           style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
@@ -4044,8 +4041,42 @@
           </div>
           <span style="color:var(--primary);font-size:20px;">+</span>
         </div>
-      `).join('');
+      `).join('') + '<div id="recipe-bls-slot"></div>';
+      renderRecipeBLSResults(query, matches.length);
     };
+
+    async function renderRecipeBLSResults(rawQuery, ownCount) {
+      let items;
+      try { items = await loadBLS(); } catch (e) { console.warn('BLS load failed:', e?.message || e); items = null; }
+      const current = (document.getElementById('recipe-ingred-search')?.value || '').toLowerCase().trim();
+      const slot = document.getElementById('recipe-bls-slot');
+      if (!slot || current !== rawQuery) return;
+      const hits = items ? searchBLS(items, rawQuery) : [];
+      blsShownRecipe = hits;
+      if (!hits.length) {
+        slot.innerHTML = ownCount === 0 ? '<div style="padding:10px;color:var(--muted);font-size:13px;">Keine Ergebnisse</div>' : '';
+        return;
+      }
+      slot.innerHTML = '<div style="padding:8px 10px 2px;font-size:11px;color:var(--muted);">BLS (Grundnahrungsmittel)</div>' +
+        hits.map((it, i) => `
+        <div class="bls-recipe-item" data-bls-idx="${i}"
+          style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="pointer-events:none;">
+            <div style="font-weight:500;font-size:14px;">${escHtml(it.name)}</div>
+            <div style="font-size:11px;color:var(--muted);">${fmt(it.kcal)} kcal / 100g</div>
+          </div>
+          <span class="fo-tag fo-tag--neutral" style="flex-shrink:0;">BLS</span>
+        </div>`).join('');
+    }
+    let blsShownRecipe = [];
+    document.addEventListener('click', async function(e) {
+      const item = e.target.closest('.bls-recipe-item');
+      if (!item) return;
+      const it = blsShownRecipe[Number(item.dataset.blsIdx)];
+      if (!it) return;
+      const saved = await saveOFFFood(blsFoodFromItem(it)); // wie selectBLSFood: id bls_<code>, vorhandenes Doc wird wiederverwendet
+      addIngredientToRecipe(saved.id);
+    });
 
     window.addIngredientToRecipe = function(foodId) {
       const food = foodDB.find(f => String(f.id) === String(foodId));
@@ -5845,13 +5876,15 @@
     }
     // Übernahme legt wie bei Open Food Facts ein eigenes Lebensmittel an (foods, source 'bls').
     // kcal ganzzahlig wie bei OFF (Bestand: kcal int), Makros 1 Nachkommastelle.
-    async function selectBLSFood(it) {
-      const food = {
+    function blsFoodFromItem(it) {
+      return {
         id: 'bls_' + it.blsCode, name: it.name,
         kcal: Math.round(it.kcal), protein: it.protein, carbs: it.carbs, fat: it.fat,
         source: 'bls'
       };
-      const saved = await saveOFFFood(food);
+    }
+    async function selectBLSFood(it) {
+      const saved = await saveOFFFood(blsFoodFromItem(it));
       selectFood(saved.id);
       document.getElementById('selected-food-source').textContent = 'BLS';
     }

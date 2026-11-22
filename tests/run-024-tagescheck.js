@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 024 - Tagescheck-Paket: (A) Start nach nachgeladenen Oura-Daten ueber den normalen Ladeweg,
-// (B) keine Vorauswahl "Fit", (C) expectedDailyGoal/Prognose im Prompt, (D) max_tokens 8000 +
+// (B) keine Vorauswahl "Fit", (C) 027b: Makro-Prognose statt Kalorien-Prognose im Prompt, (D) max_tokens 8000 +
 // einmaliger Retry mit thinking disabled. KI/Functions komplett gestubbt, kein echter Call.
 const { chromium } = require('playwright');
 const { installHarness, TEST_UID } = require('./stubs/harness.js');
@@ -90,14 +90,14 @@ async function main() {
     await page.close();
   }
 
-  // ── C: expectedDailyGoal + Prompt ───────────────────────────────────────
+  // ── C (027b angepasst): keine Kalorien-Prognose, Makro-Prognose aus dem Plan + Prompt ──────
   {
     const { page } = await start(browser, storeWith({ plan: [LAUF], oura: [OURA_COMPLETE] }));
-    const g = await page.evaluate(() => window.expectedDailyGoal('2026-11-19'));
+    const o = await page.evaluate(() => window.plannedOpenUnitsKcal('2026-11-19'));
     const w = 80, lauf = Math.round(1.04 * 12.51 * w);
-    check('C: geplanter Lauf = 1,04 x 12,51 km x 80 kg', g.aktivitaet_geplant.length === 1 && g.aktivitaet_geplant[0].kcal === lauf, [g.aktivitaet_geplant, lauf]);
-    check('C: total = Basis + erfasst + geplant + Schritte', g.total === g.base + g.aktivitaet_erfasst + g.aktivitaet_geplant_kcal + g.schritte_kcal, g);
-    check('C: erwartet > Zwischenstand um genau den Lauf (keine Schritte vorhanden)', g.total - g.zwischenstand === lauf + (g.schritte_kcal - g.schritte_kcal_bisher), [g.total, g.zwischenstand]);
+    check('C: geplanter Lauf = 1,04 x 12,51 km x 80 kg', o.geplant.length === 1 && o.geplant[0].kcal === lauf && o.kcal === lauf, [o, lauf]);
+    check('C: expectedDailyGoal entfernt (027b)', await page.evaluate(() => typeof window.expectedDailyGoal) === 'undefined');
+    const ist = await page.evaluate(() => window.calcHistoricalKcalGoal('2026-11-19'));
     await page.evaluate((r) => { window.__TEST_AI_RESPONSE__ = r; }, AI_OK);
     await page.evaluate(() => { window.setSubjectiveStatus('fit'); window.saveSubjectiveStatusPending(); });
     await page.waitForTimeout(400);
@@ -105,9 +105,9 @@ async function main() {
     check('C: 1 Call bei vollstaendigen Oura-Daten', calls.length === 1, calls.length);
     const body = calls[0]?.data || {};
     const payload = JSON.parse(body.messages?.[0]?.content || '{}');
-    check('C: Payload enthaelt erwartetes_tagesziel_kcal (PROGNOSE) + Aufschluesselung', payload.erwartetes_tagesziel_kcal === g.total && /PROGNOSE/.test(payload.erwartetes_tagesziel_hinweis) && payload.erwartetes_tagesziel_aufschluesselung?.aktivitaet_geplant?.[0]?.kcal === lauf, payload.erwartetes_tagesziel_aufschluesselung);
-    check('C: bisheriges Ziel heisst Zwischenstand, altes Feld weg', payload.kalorienziel_heute_zwischenstand_kcal === g.zwischenstand && !('kalorienziel_heute' in payload));
-    check('C: System-Prompt: am erwarteten Tagesziel ausrichten + Kohlenhydrate', /erwarteten Tagesziel/.test(body.system) && /Kohlenhydrate/.test(body.system));
+    check('C: Payload kalorienziel_ist = Ist-Zwischenstand, kein erwartetes Tagesziel', payload.kalorienziel_ist?.kcal === ist.total && !('erwartetes_tagesziel_kcal' in payload) && !('kalorienziel_heute_zwischenstand_kcal' in payload) && !('kalorienziel_heute' in payload), payload.kalorienziel_ist);
+    check('C: Payload makro_prognose mit geplantem Lauf', payload.makro_prognose?.aktiv === true && payload.makro_prognose.geplante_einheiten?.[0]?.kcal === lauf && payload.makro_prognose.zusatz_kcal_geplant === lauf, payload.makro_prognose);
+    check('C: System-Prompt: an Makro-Prognose ausrichten + Kohlenhydrate, kein erwartetes Tagesziel', /makro_prognose/.test(body.system) && /Kohlenhydrate/.test(body.system) && !/erwartetes_tagesziel/.test(body.system));
     check('D: max_tokens 8000, thinking nicht abgeschaltet beim ersten Call', body.max_tokens === 8000 && body.thinking === undefined, [body.max_tokens, body.thinking]);
     await page.close();
   }
@@ -117,8 +117,9 @@ async function main() {
     const store = storeWith({ plan: [LAUF], oura: [OURA_COMPLETE] });
     store[U('entries')] = [{ id: 'e1', data: { datum: TODAY, typ: 'laufen', source: 'plan', planUnitId: 'u_lauf', distanz: 12.51, zeit: '01:10:00', notiz: 'Long Run' } }];
     const { page } = await start(browser, store);
-    const g = await page.evaluate(() => window.expectedDailyGoal('2026-11-19'));
-    check('C2: erfasster Lauf ersetzt Planeinheit (geplant leer, erfasst = Lauf)', g.aktivitaet_geplant.length === 0 && g.aktivitaet_erfasst === Math.round(1.04 * 12.51 * 80) && g.total === g.zwischenstand, g);
+    const o = await page.evaluate(() => window.plannedOpenUnitsKcal('2026-11-19'));
+    const ist = await page.evaluate(() => window.calcHistoricalKcalGoal('2026-11-19'));
+    check('C2: erfasster Lauf ersetzt Planeinheit (offen leer, Ist enthaelt Lauf)', o.geplant.length === 0 && o.kcal === 0 && ist.activity === Math.round(1.04 * 12.51 * 80), [o, ist]);
     await page.close();
   }
 

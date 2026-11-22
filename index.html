@@ -2114,7 +2114,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-21 20:04';
+    const APP_BUILD = '2026-11-22 06:46';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4515,15 +4515,15 @@
       document.getElementById('daily-fat').textContent = Math.round(totalFat) + 'g';
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
-      // 027: Protein/Fett fix aus den Einstellungen, KH = Rest des Tagesziels (heute ggf. Prognose)
+      // 027: Protein/Fett fix aus den Einstellungen, KH = Rest des Ist-Kalorienziels
       const macroGoals = calcMacroGoals(currentDate);
-      // 027 (Prüfer 21.11.): Bei Plan-Prognose zeigen Kachel, Balken, Differenz und Tagebuchzeile die Prognose
-      // als Tagesziel (gekennzeichnet). Nur Anzeige – calcHistoricalKcalGoal und Snapshot-kcalGoal unverändert.
+      // 027b (Daniel 22.11.): Kalorienziel IMMER Ist, keine Prognose/Kennzeichnung. Prognose nur als Zusatz
+      // beim KH-(bzw. Fett-)Ziel, Balken/Differenz der Makros weiter gegen das Ist-Ziel.
       const todayGoalObj = calcHistoricalKcalGoal(currentDate);
-      const kcalForecast = macroGoals.isForecast && macroGoals.kcalGoal > 0;
-      const todayGoal = kcalForecast ? macroGoals.kcalGoal : (todayGoalObj?.total || 0);
-      const forecastSuffix = kcalForecast ? ' (Prognose)' : '';
-      const goalText = todayGoal > 0 ? `Ziel ${fmt(todayGoal)} kcal${forecastSuffix}` : 'kcal';
+      const todayGoal = todayGoalObj?.total || 0;
+      const macroFc = macroGoals.forecast;
+      const macroFcLabel = macroForecastLabel(macroFc);
+      const goalText = todayGoal > 0 ? `Ziel ${fmt(todayGoal)} kcal` : 'kcal';
       document.getElementById('daily-kcal-goal').textContent = goalText;
 
       // Update progress bars
@@ -4573,16 +4573,18 @@
       // Makro goals in tiles (Zeile 3)
       document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `Ziel ${fmt(proteinGoal)} g Protein` : 'Protein';
       document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0
-        ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate${macroGoals.isForecast ? ' (Prognose)' : ''}${macroGoals.floorApplied ? ` · Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : ''}`
+        ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate${macroGoals.floorApplied ? ` · Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : ''}${macroFc && macroFc.carbs > carbsGoal ? ` · ${macroFcLabel} ~${fmt(macroFc.carbs)} g (Prognose)` : ''}`
         : 'Kohlenhydrate';
-      document.getElementById('daily-fat-goal').textContent = fatGoal > 0 ? `Ziel ${fmt(fatGoal)} g Fett` : 'Fett';
+      document.getElementById('daily-fat-goal').textContent = fatGoal > 0
+        ? `Ziel ${fmt(fatGoal)} g Fett${macroFc && macroFc.fat > fatGoal ? ` · ${macroFcLabel} ~${fmt(macroFc.fat)} g (Prognose)` : ''}`
+        : 'Fett';
 
       // Kompakte Kalorienzeile im Tagebuch: "2.231 / 2.541 kcal · −310", darunter Makros Ist / Ziel (gleiche Farben wie die Kacheln)
       const kcalLine = document.getElementById('diary-kcal-line');
       if (kcalLine) {
         const k = kpiDisplay('kcal', totalKcal, todayGoal);
         kcalLine.innerHTML = k.cls
-          ? `<span class="fo-sum__kcal">${fmt(k.istR)}</span> <span class="fo-sum__goal">/ ${fmt(k.zielR)} kcal${forecastSuffix}</span> <span class="fo-delta fo-kpistat ${k.cls}">${foIcon(k.cls === 'is-ok' ? 'okCircle' : 'alertCircle', 'fo-i--sm')}${k.diffText}</span>`
+          ? `<span class="fo-sum__kcal">${fmt(k.istR)}</span> <span class="fo-sum__goal">/ ${fmt(k.zielR)} kcal</span> <span class="fo-delta fo-kpistat ${k.cls}">${foIcon(k.cls === 'is-ok' ? 'okCircle' : 'alertCircle', 'fo-i--sm')}${k.diffText}</span>`
           : `<span class="fo-sum__kcal">${fmt(k.istR)}</span> <span class="fo-sum__goal">kcal</span> <span class="fo-delta" style="color:var(--fo-text-3);">kein Ziel</span>`;
       }
       const macroLine = document.getElementById('diary-macro-line');
@@ -4590,9 +4592,11 @@
         macroLine.innerHTML = [['protein', 'Protein', totalProtein, proteinGoal], ['kh', 'Kohlenhydrate', totalCarbs, carbsGoal], ['fett', 'Fett', totalFat, fatGoal]]
           .map(([kennzahl, label, ist, ziel]) => {
             const m = kpiDisplay(kennzahl, ist, ziel);
-            // 027: KH-Ziel wie in der Übersichtskachel kennzeichnen (Prognose / Untergrenze)
-            const khHint = kennzahl === 'kh' && m.cls
-              ? [macroGoals.isForecast ? 'Prognose' : '', macroGoals.floorApplied ? `Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : ''].filter(Boolean).join(' · ')
+            // 027/027b: KH-/Fett-Ziel wie in der Übersichtskachel kennzeichnen (Untergrenze / Makro-Prognose)
+            const fcVal = !macroFc ? 0 : kennzahl === 'kh' ? macroFc.carbs : kennzahl === 'fett' ? macroFc.fat : 0;
+            const khHint = m.cls
+              ? [kennzahl === 'kh' && macroGoals.floorApplied ? `Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : '',
+                 fcVal > ziel ? `${macroFcLabel} ~${fmt(fcVal)} g (Prognose)` : ''].filter(Boolean).join(' · ')
               : '';
             return `<div><div class="fo-macro__label">${label}</div> <div class="fo-macro__value ${m.cls || ''}"><b>${fmt(m.istR)}</b>${m.cls ? ' / ' + fmt(m.zielR) : ''} g</div>${khHint ? `<div class="fo-macro__label" data-kh-hint>${khHint}</div>` : ''}</div>`;
           }).join(' ');
@@ -7915,6 +7919,10 @@
     const MACRO_PROTEIN_DEFAULT_G = 150;
     const MACRO_CARBS_MIN_G_PER_KG = 3;
     const MACRO_KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 };
+    // 027b prognoseAnteilFett: Anteil der Zusatz-kcal geplanter, noch offener Einheiten, der in der
+    // Makro-Prognose ins Fett geht (Rest -> Kohlenhydrate). Daniel 22.11.2026: derzeit 0 (100 % KH);
+    // ein späterer Fett-Anteil ist nur diese Konstante – NICHT ohne Auftrag ändern.
+    const MACRO_FORECAST_FAT_SHARE = 0;
 
     let settings = {
       tdee: 2700,
@@ -8261,21 +8269,19 @@
         : { id: u.id, typ: u.typ, variant: u.variant || null, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, notiz: u.notiz || null };
     }
 
-    // ── 024 Teil C: erwartetes Tagesziel (PROGNOSE) ────────────────────────────────────────────────
-    // Das aktuelle Ziel (calcHistoricalKcalGoal) bildet morgens nur ab, was schon erfasst ist - eine
-    // geplante Einheit (z.B. 12,5-km-Lauf) und die Alltagsschritte fehlen noch. expectedDailyGoal
-    // rechnet NUR mit den bestehenden App-Formeln (keine neue/geänderte Formel, wird in 027
-    // wiederverwendet): erwartet = Grundumsatz-Basis + erfasste Aktivitäten des Tages (current.activity)
-    // + geplante, noch NICHT erfasste Plan-Einheiten (calcPlanActivityKcal + MIN_MANUAL_KCAL-Regel wie
-    // activityKcalForGoal) + Schritt-kcal = max(bisherige Tages-Schritt-kcal, Median der Schritt-kcal
-    // (Alltagsschritte × 0,04) der letzten 14 abgeschlossenen Tage mit Schrittdaten).
+    // ── 027b: offene Plan-Einheiten des Tages (nur für die MAKRO-Prognose) ─────────────────────────
+    // Daniel 22.11.2026: KEINE Kalorienziel-Prognose und KEINE Schritt-Annahme (kein Median, keine
+    // typischen Schritte). Das Kalorienziel bleibt das Ist (calcHistoricalKcalGoal: Grundumsatz-Basis +
+    // erfasste Aktivitäten + gemessene Schritte). Für geplante, noch NICHT erfasste Einheiten des Tages
+    // werden hier nur deren Zusatz-kcal mit den bestehenden App-Formeln bestimmt (calcPlanActivityKcal +
+    // MIN_MANUAL_KCAL-Regel über activityKcalForGoal); sie fließen ausschließlich in die Makro-Prognose.
     // Eine Plan-Einheit gilt als erfasst/ersetzt, wenn am Tag ein wirksamer Trainingseintrag dieselbe
-    // planUnitId hat ODER denselben typ (wie countsAsActivity: Garmin-Lauf ersetzt den geplanten Lauf).
-    function expectedDailyGoal(dateStr) {
-      const cur = window.calcHistoricalKcalGoal(dateStr) || { base: 0, activity: 0, daily: 0, total: 0 };
+    // planUnitId hat ODER denselben typ (wie countsAsActivity: Garmin-Lauf ersetzt den geplanten Lauf) –
+    // dann steckt sie im Ist-Ziel, keine Doppelzählung.
+    function plannedOpenUnitsKcal(dateStr) {
       const entries = getEffectiveTrainingEntries().filter(e => e.datum === dateStr && e.typ !== 'tageslog' && e.typ !== 'phonesteps' && !e.covered);
       const geplant = [];
-      let plannedKcal = 0;
+      let kcal = 0;
       for (const u of dailyCheckPlanUnitsForDay(dateStr)) {
         if (!u || u.typ === 'ruhetag') continue;
         if (entries.some(e => (e.planUnitId && e.planUnitId === u.id) || e.typ === u.typ)) continue; // schon erfasst
@@ -8284,63 +8290,59 @@
           distanz: u.distanzKm || 0, zeit: u.dauerMin > 0 ? planMinToZeit(u.dauerMin) : '', notiz: u.notiz || '',
           ...(u.typ === 'zirkel' ? { runden: u.runden, pauseSec: u.pauseSec, prepSec: u.prepSec, sideSwitchSec: u.sideSwitchSec, uebungen: u.uebungen || [] } : {})
         };
-        const kcal = activityKcalForGoal(entry, []);
-        if (kcal > 0) { plannedKcal += kcal; geplant.push({ typ: u.typ, distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, kcal }); }
+        const k = Math.round(activityKcalForGoal(entry, []));
+        if (k > 0) { kcal += k; geplant.push({ typ: u.typ, label: planTypLabel(u.typ, u.typLabel), distanz_km: u.distanzKm || null, dauer_min: u.dauerMin || null, kcal: k }); }
       }
-      const stepKcals = [];
-      for (let i = 1; i <= 14; i++) {
-        const d = dailyCheckShiftDate(dateStr, -i);
-        const alltag = getAlltagsschritteForDate(d);
-        if (alltag <= 0) continue; // Tag ohne Schrittdaten zählt nicht
-        stepKcals.push(Math.round(alltag * 0.04));
-      }
-      stepKcals.sort((a, b) => a - b);
-      const n = stepKcals.length;
-      const median = n ? (n % 2 ? stepKcals[(n - 1) / 2] : Math.round((stepKcals[n / 2 - 1] + stepKcals[n / 2]) / 2)) : 0;
-      const schritteKcal = Math.max(cur.daily, median);
-      return {
-        total: cur.base + cur.activity + plannedKcal + schritteKcal,
-        base: cur.base,
-        aktivitaet_erfasst: cur.activity,
-        aktivitaet_geplant: geplant,
-        aktivitaet_geplant_kcal: plannedKcal,
-        schritte_kcal: schritteKcal,
-        schritte_kcal_bisher: cur.daily,
-        schritte_kcal_median_14t: median,
-        schritte_tage_n: n,
-        zwischenstand: cur.total
-      };
+      return { kcal, geplant };
     }
-    window.expectedDailyGoal = expectedDailyGoal;
+    window.plannedOpenUnitsKcal = plannedOpenUnitsKcal;
 
     // ── 027: Makroziele dynamisch ("fuel for the work required", Daniel 19.11./21.11.2026) ─────────
-    // Protein und Fett fix (Einstellungen), Kohlenhydrate = (Tagesziel − 4×Protein − 9×Fett) / 4.
-    // Tagesziel: HEUTE, solange geplante Einheiten noch nicht erfasst sind, die Prognose aus dem Plan
-    // (expectedDailyGoal, 024) - sonst das tatsächliche Ziel (calcHistoricalKcalGoal, unverändert).
+    // Protein und Fett fix (Einstellungen), Kohlenhydrate = (Kalorienziel − 4×Protein − 9×Fett) / 4.
+    // Kalorienziel = IMMER das Ist (calcHistoricalKcalGoal, unverändert) – 027b: keine Prognose darin.
     // Untergrenze KH: MACRO_CARBS_MIN_G_PER_KG × Gewicht des Tages (weightForDate); greift sie, wird
     // floorApplied gesetzt und in der Anzeige ein Hinweis gezeigt. settings.carbsGoal wird nicht mehr verwendet.
+    // 027b Makro-Prognose (nur HEUTE, nur aus dem Plan): Zusatz-kcal offener Plan-Einheiten
+    // (plannedOpenUnitsKcal) gehen nach dem Rest-Modell in die Makros – Anteil MACRO_FORECAST_FAT_SHARE
+    // (prognoseAnteilFett) ins Fett, der Rest in die Kohlenhydrate; Protein unverändert.
+    // forecast = null, wenn keine offene Plan-Einheit oder die Prognose die Ist-Makros nicht erhöht.
     // Konstanten MACRO_* zentral oberhalb von `let settings` (dort als Default gebraucht)
     function calcMacroGoals(dateStr) {
       const protein = Number(settings.proteinGoal) || MACRO_PROTEIN_DEFAULT_G;
       const fat = Number(settings.fatGoal) || MACRO_FAT_DEFAULT_G;
-      const actual = calcHistoricalKcalGoal(dateStr)?.total || 0;
-      let kcalGoal = actual, isForecast = false;
-      if (dateStr === berlinTodayStr()) {
-        const exp = expectedDailyGoal(dateStr);
-        if (exp && exp.aktivitaet_geplant.length > 0 && exp.total > actual) { kcalGoal = exp.total; isForecast = true; }
-      }
+      const kcalGoal = calcHistoricalKcalGoal(dateStr)?.total || 0;
       const weight = weightForDate(dateStr);
       const minCarbs = weight > 0 ? Math.round(MACRO_CARBS_MIN_G_PER_KG * weight) : 0;
-      const restCarbs = kcalGoal > 0
-        ? Math.round((kcalGoal - MACRO_KCAL_PER_G.protein * protein - MACRO_KCAL_PER_G.fat * fat) / MACRO_KCAL_PER_G.carbs)
+      const restCarbsExact = kcalGoal > 0
+        ? (kcalGoal - MACRO_KCAL_PER_G.protein * protein - MACRO_KCAL_PER_G.fat * fat) / MACRO_KCAL_PER_G.carbs
         : 0;
+      const restCarbs = Math.round(restCarbsExact);
       const floorApplied = kcalGoal > 0 && restCarbs < minCarbs;
-      return {
-        protein, fat, carbs: kcalGoal > 0 ? (floorApplied ? minCarbs : restCarbs) : 0,
-        kcalGoal: Math.round(kcalGoal), isForecast, floorApplied, minCarbs, restCarbs
-      };
+      const carbs = kcalGoal > 0 ? (floorApplied ? minCarbs : restCarbs) : 0;
+      let forecast = null;
+      if (kcalGoal > 0 && dateStr === berlinTodayStr()) {
+        const open = plannedOpenUnitsKcal(dateStr);
+        if (open.kcal > 0) {
+          const fatShare = MACRO_FORECAST_FAT_SHARE;
+          const fcFat = Math.round(fat + open.kcal * fatShare / MACRO_KCAL_PER_G.fat);
+          const fcRestCarbs = Math.round(restCarbsExact + open.kcal * (1 - fatShare) / MACRO_KCAL_PER_G.carbs);
+          const fcCarbs = Math.max(fcRestCarbs, minCarbs);
+          if (fcCarbs > carbs || fcFat > fat) {
+            forecast = { carbs: fcCarbs, fat: fcFat, zusatzKcal: open.kcal, geplant: open.geplant, floorApplied: fcRestCarbs < minCarbs };
+          }
+        }
+      }
+      return { protein, fat, carbs, kcalGoal: Math.round(kcalGoal), floorApplied, minCarbs, restCarbs, forecast };
     }
     window.calcMacroGoals = calcMacroGoals;
+
+    // 027b: Anzeigetext der Makro-Prognose, z.B. "mit geplantem Lauf ~538 g (Prognose)"
+    function macroForecastLabel(fc) {
+      if (!fc || !fc.geplant.length) return '';
+      if (fc.geplant.length > 1) return 'mit geplanten Einheiten';
+      const g = fc.geplant[0];
+      return g.typ === 'laufen' ? 'mit geplantem Lauf' : `mit geplanter Einheit (${g.label})`;
+    }
 
     // ── Subjektiver Status ("Wie fühlst du dich?") ──────────────────────────────────────────────────
     // users/{uid}/settings/subjectiveStatus, Feld "history": [{status:'angeschlagen'|'krank',
@@ -8620,8 +8622,7 @@
         const goal = Math.round(window.calcHistoricalKcalGoal(d)?.total || 0);
         nutritionHistory.push({ datum: d, kcal_ist: kcal, kcal_ziel: goal || null });
       }
-      const todayGoal = Math.round(window.calcHistoricalKcalGoal(todayStr)?.total || 0);
-      const expGoal = expectedDailyGoal(todayStr);
+      const todayGoalObj = window.calcHistoricalKcalGoal(todayStr) || { base: 0, activity: 0, daily: 0, total: 0 };
 
       const stepsHistory = [];
       for (let i = 1; i <= 7; i++) {
@@ -8652,20 +8653,29 @@
         plan_heute: planToday,
         plan_morgen: planTomorrow,
         ernaehrung_letzte_3_tage: nutritionHistory,
-        kalorienziel_heute_zwischenstand_kcal: todayGoal || null,
-        kalorienziel_heute_zwischenstand_hinweis: 'ZWISCHENSTAND, Tag noch nicht abgebildet: enthält nur bisher erfasste Aktivität/Schritte, NICHT die geplanten Einheiten des Tages. Nicht als Tagesziel verwenden.',
-        erwartetes_tagesziel_kcal: expGoal.total || null,
-        erwartetes_tagesziel_hinweis: 'PROGNOSE (keine Messung): Grundumsatz-Basis + erfasste Aktivität + geplante, noch nicht erfasste Einheiten + typische Schritt-kcal.',
-        erwartetes_tagesziel_aufschluesselung: {
-          basis_kcal: expGoal.base, aktivitaet_erfasst_kcal: expGoal.aktivitaet_erfasst,
-          aktivitaet_geplant: expGoal.aktivitaet_geplant, schritte_kcal_erwartet: expGoal.schritte_kcal
+        // 027b (Daniel 22.11.): kein erwartetes Kalorien-Tagesziel, keine Schritt-Annahme – Kalorienziel nur
+        // als Ist-Zwischenstand; Prognose ausschließlich für die Makros (aus offenen Plan-Einheiten).
+        kalorienziel_ist: {
+          kcal: Math.round(todayGoalObj.total) || null,
+          basis_kcal: todayGoalObj.base, aktivitaet_erfasst_kcal: todayGoalObj.activity, schritte_kcal_gemessen: todayGoalObj.daily,
+          hinweis: 'ZWISCHENSTAND (Ist): Grundumsatz-Basis + bisher erfasste Aktivitäten + bisher gemessene Schritte. Geplante, noch nicht erfasste Einheiten und noch kommende Schritte sind NICHT enthalten; es gibt bewusst keine Kalorien-Prognose.'
         },
         makroziele_heute: (() => {
           const m = calcMacroGoals(todayStr);
           return {
-            protein_g: m.protein, fett_g: m.fat, kohlenhydrate_g: m.carbs,
-            basis_tagesziel_kcal: m.kcalGoal || null, prognose: m.isForecast, kh_untergrenze_aktiv: m.floorApplied,
-            hinweis: 'Protein und Fett fix; Kohlenhydrate = Rest des Tagesziels (' + (m.isForecast ? 'PROGNOSE aus dem Plan' : 'tatsächliches Ziel') + '), mind. ' + MACRO_CARBS_MIN_G_PER_KG + ' g/kg.'
+            protein_g: m.protein, fett_g: m.fat, kohlenhydrate_g: m.carbs, kh_untergrenze_aktiv: m.floorApplied,
+            hinweis: 'Ist-Makroziele: Protein und Fett fix; Kohlenhydrate = Rest des Ist-Kalorienziels (kalorienziel_ist), mind. ' + MACRO_CARBS_MIN_G_PER_KG + ' g/kg.'
+          };
+        })(),
+        makro_prognose: (() => {
+          const m = calcMacroGoals(todayStr);
+          const fc = m.forecast;
+          if (!fc) return { aktiv: false, hinweis: 'Keine offene geplante Einheit heute – Makro-Prognose = Ist-Makroziele.' };
+          return {
+            aktiv: true, kohlenhydrate_g: fc.carbs, fett_g: fc.fat, protein_g: m.protein,
+            zusatz_kcal_geplant: fc.zusatzKcal,
+            geplante_einheiten: fc.geplant.map(g => ({ typ: g.typ, distanz_km: g.distanz_km, dauer_min: g.dauer_min, kcal: g.kcal })),
+            hinweis: 'PROGNOSE nur für die Makros: Ist-Makroziele + Zusatz-kcal der geplanten, noch nicht erfassten Einheiten (' + Math.round((1 - MACRO_FORECAST_FAT_SHARE) * 100) + ' % Kohlenhydrate, ' + Math.round(MACRO_FORECAST_FAT_SHARE * 100) + ' % Fett). Keine Schritt-Annahme.'
           };
         })(),
         schritte_letzte_7_tage: stepsHistory,
@@ -8690,7 +8700,7 @@ Regeln:
 - Schlage NIEMALS eine der in uebungen_pausiert gelisteten Übungen vor (auch nicht als einzelne Übung innerhalb eines Zirkel-Vorschlags) – der Nutzer kann sie aktuell nicht ausführen. Lasse sie bei einem Zirkel-Vorschlag einfach weg; wähle für einen Einzelübungs-Vorschlag eine andere, nicht pausierte Übung.
 - Erwähne eine pausierte Übung NIEMALS als Aktion oder in der Headline (sie wird ohnehin automatisch übersprungen, ein Hinweis darauf ist nutzlos) – höchstens EIN neutraler Halbsatz im reason-Feld, falls relevant.
 - subjektiverStatus.status "angeschlagen" oder "krank" hat Vorrang vor guten Messwerten: empfiehl reduzierte Intensität bzw. Pause, auch wenn illness_signale.flagged=false ist. Bei status="krank" niemals status="gruen" zurückgeben. Formuliere Messwert-Aussagen immer als Einschränkung ("keine Infektzeichen in den Messwerten"), NIE als absolute Aussage über den Gesundheitszustand ("du bist nicht krank"). confidence bezieht sich NUR auf die Messwert-Einschätzung; widersprechen sich Messwerte und subjektiverStatus, benenne das in einem kurzen Satz im reason-Feld.
-- Kalorienziel: kalorienziel_heute_zwischenstand_kcal ist nur ein ZWISCHENSTAND (Tag noch nicht abgebildet, geplante Einheiten fehlen). Richte Ernährungsempfehlungen IMMER am erwarteten Tagesziel (erwartetes_tagesziel_kcal, eine PROGNOSE mit Aufschlüsselung) aus, NIE am Zwischenstand; sprich nie von einem "reduzierten Tagesziel", nur weil der Zwischenstand niedriger ist. Bei geplanter Ausdauereinheit (plan_heute, z.B. Lauf) gehe auf Kohlenhydrate (vorher/nachher) ein.
+- Ernährung: kalorienziel_ist ist nur der ZWISCHENSTAND des Kalorienziels (bisher Erfasstes und Gemessenes; geplante Einheiten und kommende Schritte fehlen noch) – benenne es als Zwischenstand, nenne KEIN erwartetes oder prognostiziertes Kalorien-Tagesziel und rechne keine Schritte hoch; sprich nie von einem "reduzierten Tagesziel", nur weil der Zwischenstand niedrig ist. Richte Ernährungsempfehlungen an der Makro-Prognose (makro_prognose; wenn aktiv=false an makroziele_heute) aus. Bei offener Ausdauereinheit (makro_prognose.aktiv, z.B. Lauf in plan_heute) gehe auf die Kohlenhydrate (Menge laut Prognose, vorher/nachher) ein.
 - Sprache: Deutsch, informelles "du".
 
 Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
@@ -13492,7 +13502,11 @@ Regeln:
         // 027: Makroziele des Tages (Auswertung über den Connector; View-Erweiterung eigener Auftrag)
         ...(() => {
           const m = calcMacroGoals(date);
-          return { goal_protein_g: m.protein, goal_fat_g: m.fat, goal_carbs_g: m.carbs, goal_is_forecast: m.isForecast };
+          // 027b: goal_* = Ist-Makroziele; Prognose nur separat und nur wenn aktiv (goal_is_forecast entfällt)
+          return {
+            goal_protein_g: m.protein, goal_fat_g: m.fat, goal_carbs_g: m.carbs,
+            ...(m.forecast ? { goal_carbs_forecast_g: m.forecast.carbs, goal_fat_forecast_g: m.forecast.fat } : {})
+          };
         })()
       };
     }

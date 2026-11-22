@@ -2115,7 +2115,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-22 21:50';
+    const APP_BUILD = '2026-11-22 22:01';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -6581,14 +6581,15 @@
     // vom Aufrufer vorab per planNextVersionAfter() ermittelt (ein kleiner Lesezugriff) und hier nur
     // angezeigt. Rückgabe: 'nur_heute' | 'nur_diese_woche' | 'ab_dieser_woche' | null (Abbrechen).
     window.planScopeResolve = null;
-    function planAskScope({ allowToday, weekLabel, laterVersionNote }) {
+    // defaultScope (optional, 034): diese Option wird als Standard hervorgehoben (Rahmen in Primärfarbe).
+    function planAskScope({ allowToday, weekLabel, laterVersionNote, defaultScope }) {
       return new Promise(resolve => {
         const opts = [];
         if (allowToday) opts.push(['nur_heute', 'Nur heute']);
         opts.push(['nur_diese_woche', `Nur diese Woche (${weekLabel})`]);
         opts.push(['ab_dieser_woche', 'Ab dieser Woche dauerhaft']);
         document.getElementById('plan-scope-options').innerHTML = opts.map(([val, label]) =>
-          `<button onclick="planScopeResolve('${val}')" style="width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;text-align:left;cursor:pointer;">${planEsc(label)}</button>`
+          `<button onclick="planScopeResolve('${val}')" ${val === defaultScope ? 'data-default="1" ' : ''}style="width:100%;padding:12px;background:var(--bg);border:${val === defaultScope ? '2px solid var(--fo-primary)' : '1px solid var(--border)'};border-radius:10px;color:var(--text);font-size:14px;text-align:left;cursor:pointer;">${planEsc(label)}</button>`
         ).join('');
         document.getElementById('plan-scope-note').textContent = laterVersionNote || '';
         pushModalState();
@@ -10540,9 +10541,11 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
 
       // Aktionen: akzeptierter Ruhetag → nur "Rückgängig" (nur am selben Tag, siehe Task 1); sonst
       // ggf. "Pause gemacht" (nur Ruhetag) + immer "Vorschlag verwerfen".
+      // 034: "In Plan übernehmen" (nur am selben Tag) schreibt den Vorschlag als neue Planversion.
+      const adoptBtn = sameDay ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="adoptDailyCheckSuggestion()" style="margin-top:4px;margin-right:6px;">In Plan übernehmen</button>` : '';
       const actions = accepted
-        ? (sameDay ? `<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="undoDailyCheckRestSuggestion()" style="margin-top:4px;">Rückgängig</button>` : '')
-        : `${isRuhetag ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="acceptDailyCheckRestSuggestion()" style="margin-top:4px;margin-right:6px;">Pause gemacht</button>` : ''}<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="dismissDailyCheckSuggestion()" style="margin-top:4px;">Vorschlag verwerfen</button>`;
+        ? adoptBtn + (sameDay ? `<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="undoDailyCheckRestSuggestion()" style="margin-top:4px;">Rückgängig</button>` : '')
+        : `${isRuhetag ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="acceptDailyCheckRestSuggestion()" style="margin-top:4px;margin-right:6px;">Pause gemacht</button>` : ''}${adoptBtn}<button class="fo-btn fo-btn--ghost fo-btn--sm" type="button" onclick="dismissDailyCheckSuggestion()" style="margin-top:4px;">Vorschlag verwerfen</button>`;
 
       return `<div class="fo-row" style="align-items:flex-start;padding-top:8px;padding-bottom:8px;border-top:1px dashed var(--fo-line);">
         ${left}
@@ -10605,6 +10608,59 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       await persistDailyCheckStateAndRerender('Rückgängig (Pause)');
     };
 
+    // ── 034: Vorschlag als neue Planversion übernehmen ──────────────────────────────────────────────
+    // Ersetzt die Original-Einheit (gleicher Slot, gleiche id – bereits zugeordnete Einträge mit
+    // planUnitId bleiben zugeordnet) durch die Vorschlags-Einheit; Ruhetag-Vorschlag = Einheit entfernt.
+    // Gibt den neuen Tages-Array zurück, oder null, wenn die Original-Einheit nicht (mehr) existiert.
+    function planDayWithSuggestion(units, sugg) {
+      const idx = (units || []).findIndex(u => u.id === sugg.originalUnitId);
+      if (idx < 0) return null;
+      const day = units.map(u => normalizePlanUnit(u));
+      if (sugg.unit.typ === 'ruhetag') day.splice(idx, 1);
+      else day[idx] = normalizePlanUnit({ ...sugg.unit, id: sugg.originalUnitId });
+      return day;
+    }
+    // Schon übernommen? (abgeleitet aus dem Plan, kein eigener Status – nach Rückgängig erscheint der
+    // Vorschlag dadurch automatisch wieder). Ruhetag: Original-Einheit nicht mehr im Tag.
+    function isPlanSuggestionAdopted(units, sugg) {
+      if (!sugg) return false;
+      const cur = (units || []).find(u => u.id === sugg.originalUnitId);
+      if (sugg.unit.typ === 'ruhetag') return !cur;
+      return !!cur && JSON.stringify(normalizePlanUnit(cur)) === JSON.stringify(normalizePlanUnit({ ...sugg.unit, id: sugg.originalUnitId }));
+    }
+    // Gleicher Speicherpfad wie planEditorSave (planNextVersionAfter → planAskScope → planCommitSave →
+    // planScheduleSaveUndo); nur "Nur diese Woche" (Standard) und "Ab dieser Woche dauerhaft".
+    window.adoptDailyCheckSuggestion = async function() {
+      const sugg = dailyCheckState?.planSuggestion;
+      const todayStr = berlinTodayStr();
+      if (!sugg || dailyCheckState.date !== todayStr || dailyCheckState.suggestionStatus === 'verworfen') return;
+      const X = planCurrentMonday();
+      const key = planDayKeyForDate(todayStr);
+      const original = normalizeTrainingPlan(trainingPlan);
+      const newDay = planDayWithSuggestion(original[key], sugg);
+      if (!newDay) { showToast('Original-Einheit nicht mehr im Plan', 'bad'); return; }
+      const draft = normalizeTrainingPlan({ ...original, [key]: newDay });
+      let laterVersion;
+      try { laterVersion = await planNextVersionAfter(X); }
+      catch (err) { console.error('Plan-Version prüfen fehlgeschlagen:', err); showToast('Speichern fehlgeschlagen', 'bad'); return; }
+      const weekLabel = 'KW ' + planIsoWeek(planParseYmd(X));
+      const laterVersionNote = laterVersion
+        ? `Hinweis: Ab KW ${planIsoWeek(planParseYmd(laterVersion))} gilt bereits eine andere Version – die bleibt bei „Ab dieser Woche dauerhaft“ bestehen.`
+        : '';
+      const scope = await planAskScope({ allowToday: false, weekLabel, laterVersionNote, defaultScope: 'nur_diese_woche' });
+      if (!scope) return;
+      try {
+        const { writes } = await planCommitSave(X, scope, draft, original);
+        renderTrainingPlan(true);
+        planScheduleSaveUndo(writes);
+        showToast('Vorschlag in Plan übernommen', 'ok');
+      } catch (err) {
+        console.error('Vorschlag übernehmen fehlgeschlagen:', err);
+        showToast('Speichern fehlgeschlagen', 'bad');
+        renderTrainingPlan(true);
+      }
+    };
+
     function renderTrainingPlan(force) {
       const container = document.getElementById('training-plan-container');
       if (!container) return;
@@ -10665,7 +10721,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         // Tagescheck-Planvorschlag (Teil B) gilt NUR für heute und nur solange nicht verworfen.
         // status mitgegeben, damit planMatchDay einen akzeptierten Ruhetag-Vorschlag erkennt (Task 1).
         const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion
-          && dailyCheckState.suggestionStatus !== 'verworfen')
+          && dailyCheckState.suggestionStatus !== 'verworfen'
+          && !isPlanSuggestionAdopted(units, dailyCheckState.planSuggestion))
           ? { ...dailyCheckState.planSuggestion, status: dailyCheckState.suggestionStatus } : null;
         const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion, ds);
         totalPlanned += result.length;

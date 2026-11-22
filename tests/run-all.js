@@ -28,6 +28,7 @@ const TESTS = [
   { file: 'run-028b-ausruestung.js', args: [] },
   { file: 'run-032-oura-karte.js', args: [] },
   { file: 'run-033-bls-rezeptsuche.js', args: [] },
+  { file: 'run-034-vorschlag-uebernehmen.js', args: [] },
 ];
 
 function statusFor(code) {

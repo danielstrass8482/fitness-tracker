@@ -173,3 +173,10 @@ zusätzliche Nutzen einer zweiten, entfernten Ausführung ist bei einer Ein-Pers
   zurückgesetzt; Rückwirkend-zuordnen mit Vorschau (Anzahl/km), App-Dialog (Abbrechen schreibt nichts);
   Lauf umhängen; Wechsel-km bearbeiten (merge, nur 3 Felder); Ausmustern (merge, kein deleteDoc,
   bleibt mit km sichtbar); kein window.alert/confirm/prompt, keine Konsolenfehler.
+
+- `run-034-vorschlag-uebernehmen.js` (Aufgabe 034, Tagescheck-Planvorschlag "In Plan übernehmen"):
+  Lauf-/Zirkel-/Ruhetag-Vorschlag x "Nur diese Woche"/"Ab dieser Woche dauerhaft" -> Plan-Payload
+  identisch mit derselben Änderung im Plan-Editor (ohne updatedAt); Dialog nur 2 Optionen (Standard
+  "Nur diese Woche"), Hinweis auf spätere Version, Abbrechen schreibt nichts, Rückgängig löscht genau
+  die neuen Versionen, andere Wochentage unverändert, Vorschlagszeile danach weg, bereits geloggter
+  Eintrag bleibt der Einheit zugeordnet (gleiche id). `--payloads` druckt die Payloads.

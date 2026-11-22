@@ -26,6 +26,7 @@ const TESTS = [
   { file: 'run-026-kategorie-bestaetigen.js', args: [] },
   { file: 'run-027-makroziele.js', args: [] },
   { file: 'run-028b-ausruestung.js', args: [] },
+  { file: 'run-032-oura-karte.js', args: [] },
 ];
 
 function statusFor(code) {

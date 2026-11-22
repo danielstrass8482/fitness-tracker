@@ -970,6 +970,7 @@
     <symbol id="i-hrv" viewBox="0 0 24 24"><path d="M2.5 12h4l2-5.5 4 11 3-8.5 2 3h4"/></symbol>
     <symbol id="i-sleep" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.5 6.5 0 0 0 10 10Z"/></symbol>
     <symbol id="i-deepsleep" viewBox="0 0 24 24"><path d="M3 19V6M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-8v6M5 11.5a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0"/></symbol>
+    <symbol id="i-thermo" viewBox="0 0 24 24"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0ZM12 9v8"/></symbol>
     <symbol id="i-readiness" viewBox="0 0 24 24"><path d="M4.6 17.5a8.5 8.5 0 1 1 14.8 0M12 13.5l3.5-4.5"/></symbol>
     <symbol id="i-trendDown" viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 8 8M21 11v6h-6"/></symbol>
     <symbol id="i-trendUp" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 13V7h-6"/></symbol>
@@ -2114,7 +2115,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-22 06:46';
+    const APP_BUILD = '2026-11-22 21:38';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2274,6 +2275,27 @@
       const count = vals.length;
       return { avg: count > 0 ? vals.reduce((a, b) => a + b, 0) / count : null, count };
     }
+
+    // 032: Hauttemperatur nur als Mehrnächte-Trend gegen die eigene Basis, nie als Einzelnacht-Wert
+    // (Fingersensor, einzelne Nächte unzuverlässig). Δ = Ø tempDeviation der letzten 3 Nächte (bis UND
+    // MIT dem angezeigten Tag) minus Ø der 28 Nächte davor; nur vollständige Nächte (ouraWindowAvg).
+    // 3 + 28 = 31 Tage passen in das 35-Tage-Fenster von refreshOuraDaily.
+    const OURA_TEMP_TREND_RECENT_NIGHTS = 3;
+    const OURA_TEMP_TREND_RECENT_MIN = 2;
+    const OURA_TEMP_TREND_BASE_NIGHTS = 28;
+    const OURA_TEMP_TREND_BASE_MIN = 14;
+    const OURA_TEMP_TREND_FLAT_C = 0.1;   // |Δ| < 0,1 °C → "→"
+    function calcOuraTempTrend(dateStr) {
+      const recent = ouraWindowAvg('tempDeviation', OURA_TEMP_TREND_RECENT_NIGHTS, dateStr);
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const baseEnd = localDateStr(new Date(y, m - 1, d - OURA_TEMP_TREND_RECENT_NIGHTS));
+      const base = ouraWindowAvg('tempDeviation', OURA_TEMP_TREND_BASE_NIGHTS, baseEnd);
+      const ok = recent.count >= OURA_TEMP_TREND_RECENT_MIN && base.count >= OURA_TEMP_TREND_BASE_MIN;
+      const delta = ok ? recent.avg - base.avg : null;
+      const dir = delta == null ? null : Math.abs(delta) < OURA_TEMP_TREND_FLAT_C ? 'flat' : delta > 0 ? 'up' : 'down';
+      return { delta, dir, recentCount: recent.count, baseCount: base.count, recentAvg: recent.avg, baseAvg: base.avg };
+    }
+    window.calcOuraTempTrend = calcOuraTempTrend;
 
     // Lädt die letzten 35 Tage aus oura_daily frisch aus Firestore und ersetzt damit den Stand
     // aus dem IndexedDB-Cache. Wird bei jedem Start und nach dem manuellen Sync aufgerufen, damit
@@ -9547,6 +9569,15 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const sleepText = hhmm(d?.sleepDurationSec) ?? '–';
       const deepText = hhmm(d?.deepSleepSec) ?? '–';
       const restingText = d?.restingHr != null ? `${Math.round(d.restingHr)} bpm` : '–';
+      const effText = d?.sleepEfficiency != null ? `${Math.round(d.sleepEfficiency)} %` : '–';
+      const tt = calcOuraTempTrend(date);
+      let tempText = '–';
+      if (tt.delta != null) {
+        const r = Math.round(tt.delta * 10) / 10;
+        const arrow = tt.dir === 'up' ? '↑' : tt.dir === 'down' ? '↓' : '→';
+        tempText = `${arrow} ${r > 0 ? '+' : r < 0 ? '−' : '±'}${Math.abs(r).toFixed(1).replace('.', ',')} °C`;
+      }
+      const tempTrendHtml = `<div class="fo-rec__trend">${OURA_TEMP_TREND_RECENT_NIGHTS} Nächte vs. ${OURA_TEMP_TREND_BASE_NIGHTS}</div>`;
 
       // HRV-Trend: Vergleich mit dem Schnitt der 7 Vortage. Mindestens 3 Vortageswerte nötig,
       // sonst nur der Einzelwert. Trend-Icon steigend/fallend ab ±5 % Abweichung vom Schnitt, sonst →.
@@ -9571,12 +9602,12 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         }
       }
 
-      // Zelle im 2×2-Raster (.fo-rec); Einheit klein hinter dem Wert
+      // Zelle im 2×3-Raster (.fo-rec, 2 Spalten × 3 Zeilen); Einheit klein hinter dem Wert
       const cell = (icon, label, value, extra = '') => `<div class="fo-rec__cell">
         ${foIcon(icon, 'fo-rec__icon')}
         <div style="min-width:0;">
           <div class="fo-rec__label">${label}</div>
-          <div class="fo-rec__value">${value.replace(/ (bpm|ms|h)$/, ' <small>$1</small>')}</div>
+          <div class="fo-rec__value">${value.replace(/ (bpm|ms|h|%|°C)$/, ' <small>$1</small>')}</div>
           ${extra}
         </div>
       </div>`;
@@ -9586,6 +9617,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         cell('hrv', 'HRV (letzte Nacht)', hrvText, hrvTrend),
         cell('deepsleep', 'Tiefschlaf', deepText),
         cell('sleep', 'Gesamtschlaf', sleepText),
+        cell('readiness', 'Schlafeffizienz', effText),
+        cell('thermo', 'Hauttemp.-Trend', tempText, tempTrendHtml),
       ];
 
       // Schlaf- und Readiness-Score nur als dezente Zeile, nicht als Hauptwerte

@@ -196,6 +196,9 @@ neuer API-Request): `remSleepSec`, `lightSleepSec`, `awakeSec` (int, Sekunden), 
 (int, Prozent 0-100), `respiratoryRate` (double, Atemzüge/Minute), `sleepLatencySec` (int),
 `bedtimeStart`, `bedtimeEnd` (string, ISO-Datetime mit Offset) - wie die uebrigen Nachtwerte nur
 bei `type === 'long_sleep'` gesetzt.
+Seit 032 (22.11.2026) zeigt die Oura-Karte `sleepEfficiency` (Kachel "Schlafeffizienz") und einen
+Hauttemperatur-Trend aus `tempDeviation` (Ø 3 Nächte minus Ø der 28 Nächte davor, nur vollständige
+Nächte, `calcOuraTempTrend`); kein neues Feld, Connector: `views.sleep_recovery.sleep_efficiency`.
 
 #### `oura_workouts` (16, vollständig)
 

@@ -779,6 +779,21 @@ Eintraege unabhaengig in Python nachgerechnet (`workSecFor` aus `calcZirkelEntry
 Abweichungen), Anti-Join gegen alle `typ='zirkel'`-Eintraege (0 fehlend). SELECT fuer
 `fuelofit_ro`.
 
+**`views.kraft_saetze` (037, 23.11.2026)**: Migration `analytics/migrations/017_kraft_saetze.sql`.
+Quelle nicht Firestore, sondern die Garmin-FIT-Dateien der Krafttrainings (`strength_training`, ab
+01.09.2026) ueber `fit_sync.py` → `raw.garmin_fit_sets` (Befund der Felder: Bericht 036). Eine Zeile
+je Satz der Uhr (aktiv/Pause): Dauer, `wdh_uhr` (Auto-Zaehlung der Uhr, kein Ist-Wert),
+`uebung_uhr` (1. Kategorie-Schaetzung, deutsch; `unknown` → NULL), `kategorien_uhr` (3
+Rohschaetzungen), `avg_hr`/`max_hr` je Satz (Records im Satzfenster). Zirkel-Zuordnung
+(`zirkel_id`, `runde`, `slot`, `uebung_plan`, `soll_wdh`, `dauer_app_s`, `zuordnung`) aus
+`views.zirkel_uebungen` desselben Tages: nur bei genau einer Kraft-Aktivitaet und genau einem
+Zirkel mit `datenbasis='details'`; aktive Saetze der Reihe nach gegen (runde, slot), Anzahl gleich /
+ein Slot geteilt / ein Slot ohne Satz; Slot bestaetigt bei |Satzdauer − App-Dauer| ≤ 10 s; bester
+Kandidat muss eindeutig sein und ≥ 90 % der Slots bestaetigen; Saetze unbestaetigter Slots → NULL.
+Kein Gewicht (Uhr liefert keins), keine Kalorien (stehen in `training_sessions`). Belege: 11-23 21/21
+aktive Saetze zugeordnet (Runde 4 Slot 3 von der Uhr geteilt), 11-16 und 11-18 je 19/20 (je ein
+Slot > 10 s abweichend → NULL). Keine Aenderung an Firestore oder der App.
+
 **Firestore-Backup-Schedule**: taeglich, 14 Wochen Aufbewahrung, angelegt 2026-11-05
 (`gcloud firestore backups schedules create --database='(default)' --recurrence=daily
 --retention=14w`). Sicherheitsnetz fuer Firestore selbst, unabhaengig von der Analyse-DB (die

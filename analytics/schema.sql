@@ -907,3 +907,9 @@ LEFT JOIN runs r ON r.gear_id = g.gear_id
 ORDER BY g.aktiv DESC, g.standard DESC, g.name;
 
 GRANT SELECT ON views.ausruestung TO fuelofit_ro;
+
+-- ===== Kraft-Saetze aus Garmin-FIT (037, Migration 017_kraft_saetze.sql) =====
+-- NICHT hier dupliziert: Tabelle raw.garmin_fit_sets haengt per FK an raw.garmin_fit_session
+-- (Migration 014, ebenfalls nicht in dieser Datei -- FIT-Tabellen werden vom Garmin-Sync
+-- geschrieben, nicht von sync.py). Tabelle, Zuordnungsregel und views.kraft_saetze stehen
+-- vollstaendig in analytics/migrations/017_kraft_saetze.sql (nach 014 ausfuehren).

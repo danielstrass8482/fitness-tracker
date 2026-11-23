@@ -101,6 +101,25 @@ bleibt die vollstaendige Referenz fuer einen Neuaufbau von Null.
 Claude-Code-Session ausgegeben und sollte nach demselben Verfahren (fuer das Garmin-Ingest statt
 Analytics-Secret, inkl. Update auf dem Garmin-Sync-Job unter User `fuelofit`) rotiert werden.
 
+## Garmin-FIT-Detaildaten (Migration 014, 017)
+
+Zweiter Schreibpfad neben `sync.py`: der Garmin-Sync (`fit_sync.py`, User `fuelofit`, Repo
+fuelofit-functions `vps/garmin/`, Rolle `fuelofit_fit_write`) laedt FIT-Dateien und schreibt direkt
+nach `raw.garmin_fit_*`. Nicht in `schema.sql` (dort nur Firestore-Rohdaten), sondern in den
+Migrationen 014 und 017.
+
+- **014**: `raw.garmin_fit_session/_laps/_records/_strecken` fuer laufen/rad/rad_ebike/gehen/wandern
+  → Views `lauf_kilometer`, `aktivitaet_runden`, `aktivitaet_verlauf`.
+- **017 (Aufgabe 037, 23.11.2026)**: Garmin-Krafttraining (`strength_training`, ab 01.09.2026):
+  `raw.garmin_fit_sets` (ein Satz je FIT-`set`-Nachricht, aktiv/Pause, Dauer, Uhr-Wdh., 3
+  Kategorie-Schaetzungen, Puls je Satz aus den Records im Satzfenster) → View `kraft_saetze` mit
+  Zirkel-Zuordnung (Regel im Kopf von `migrations/017_kraft_saetze.sql`: Reihenfolge aktive Saetze
+  vs. Slots, Anzahl ±1, Dauer ≤ 10 s je Slot, ≥ 90 % bestaetigt und eindeutig, sonst NULL).
+  Kraft-FITs haben keine Laps; Session/Records landen wie bei 014. Rechte: `fuelofit_fit_write`
+  INSERT/UPDATE auf `raw.garmin_fit_sets`, `fuelofit_ro` nur SELECT auf `views.kraft_saetze`.
+  Kraft-Aktivitaeten vor dem 01.09.2026 holt der einmalige Kraft-Backfill (State-Feld
+  `kraft_backfill_fertig` in `fit_backfill_state.json`) bewusst nicht.
+
 ## Collections, die bewusst NICHT in der Analyse-DB liegen
 
 Siehe `docs/datenmodell.md` Abschnitt 7c: alle Secret-Felder, `settings/*`, `integrations/*`,

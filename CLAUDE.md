@@ -23,7 +23,7 @@
 - Tests gegen echte Firestore-Daten sparsam: große Collections (logEntries, foods, entries) stubben oder per Count messen; volle App-Starts gegen echte Daten nur, wenn der Auftrag es verlangt (ein Start ≈ 14.800 Reads, gemessen 04.11.2026).
 - Cloud Functions: ~/functions (Repo fuelofit-functions), Region us-central1; Oura-Functions in europe-west1. Deploy nur mit --only functions:<name>. Jede Löschfrage mit "No" beantworten.
 - KI-Aufrufe nur über anthropicProxy; Anthropic-Zugang per Workload Identity Federation (Dienstkonto anthropic-proxy) bzw. – falls Rückfall – Secret ANTHROPIC_API_KEY_PROXY. Dart-App läuft im eigenen Projekt darttrainer-app-fed88, nicht hier.
-- VPS (Adresse in der SSH-Konfiguration) (Trading-Bot LIVE): Lesen jederzeit; Eingriffe nie Mo–Fr 15:30–22:00 (Europe/Berlin). Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
+- VPS (Adresse in der SSH-Konfiguration) (Trading-Bot LIVE): Lesen und Eingriffe jederzeit – kein Zeitfenster mehr (Daniel 23.11.2026: „Ich gehe das bewusst ein.“). Trading-Bot und Postgres nie neu starten. Nie crontab -r. Garmin-Sync unter User fuelofit in /home/fuelofit/fuelofit-garmin.
 - Cloud-Shell-Home-Disk ist knapp: vor größeren Downloads/Builds df -h ~ prüfen; nichts außerhalb des Auftrags löschen.
 
 ## Bekannte Fallstricke

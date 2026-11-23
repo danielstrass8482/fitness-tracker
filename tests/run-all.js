@@ -29,6 +29,8 @@ const TESTS = [
   { file: 'run-032-oura-karte.js', args: [] },
   { file: 'run-033-bls-rezeptsuche.js', args: [] },
   { file: 'run-034-vorschlag-uebernehmen.js', args: [] },
+  { file: '../labor/test/run-kern.js', args: [] },
+  { file: 'run-038-zaehl-labor.js', args: [] },
 ];
 
 function statusFor(code) {

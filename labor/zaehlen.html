@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Zähl-Labor (Aufgabe 038): nur eigene Herkunft, keine Fremd-Requests. Kamera bleibt im Browser. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="robots" content="noindex">
+  <title>Zähl-Labor</title>
+  <link rel="icon" href="../favicon-32-v2.png">
+  <style>
+    :root{
+      --fo-bg:#EEF2F7; --fo-surface:#FFFFFF; --fo-surface-2:#F5F7FA; --fo-line:#E2E6EC; --fo-line-strong:#C9D0DA;
+      --fo-text:#141A23; --fo-text-2:#4A5361; --fo-primary:#1E5BD8; --fo-primary-pressed:#1847AA; --fo-on-primary:#FFFFFF;
+      --fo-primary-tint:#EAF1FE; --fo-ok:#0F7A4B; --fo-bad:#C41E3A; --fo-activity:#F25F1C;
+      --fo-font:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --fo-bg:#0F1318; --fo-surface:#171B22; --fo-surface-2:#1E232B; --fo-line:#2A303A; --fo-line-strong:#3A424E;
+        --fo-text:#E8ECF2; --fo-text-2:#A3ABB7; --fo-primary:#5B8DEF; --fo-primary-pressed:#7AA3F2; --fo-on-primary:#0B1220;
+        --fo-primary-tint:#1B2A45; --fo-ok:#3FBF85; --fo-bad:#FF6B7F; --fo-activity:#FF7A3D;
+      }
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--fo-bg);color:var(--fo-text);font-family:var(--fo-font);-webkit-text-size-adjust:100%}
+    main{max-width:560px;margin:0 auto;padding:12px 12px 40px}
+    h1{font-size:20px;margin:4px 0 2px}
+    .sub{font-size:12px;color:var(--fo-text-2);margin:0 0 10px}
+    .card{background:var(--fo-surface);border:1px solid var(--fo-line);border-radius:14px;padding:12px;margin-bottom:10px}
+    label.f{display:block;font-size:13px;color:var(--fo-text-2);margin-bottom:4px}
+    select,button{font:inherit;font-size:16px}
+    select{width:100%;padding:10px;border-radius:10px;border:1px solid var(--fo-line-strong);background:var(--fo-surface-2);color:var(--fo-text)}
+    .hint{font-size:13px;color:var(--fo-text-2);margin:8px 0 0;line-height:1.35}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .btn{flex:1;min-height:48px;border-radius:12px;border:1px solid var(--fo-line-strong);background:var(--fo-surface-2);color:var(--fo-text);padding:0 12px;cursor:pointer}
+    .btn.primary{background:var(--fo-primary);border-color:var(--fo-primary);color:var(--fo-on-primary);font-weight:600}
+    .btn.primary:active{background:var(--fo-primary-pressed)}
+    .btn.stop{background:var(--fo-bad);border-color:var(--fo-bad);color:#fff;font-weight:600}
+    .btn:disabled{opacity:.5}
+    .toggles{display:flex;gap:14px;flex-wrap:wrap;font-size:14px;margin-top:10px}
+    .toggles label{display:flex;align-items:center;gap:6px}
+    .toggles input{width:20px;height:20px}
+    #stage{position:relative;width:100%;aspect-ratio:3/4;background:#000;border-radius:14px;overflow:hidden;margin-bottom:10px}
+    #stage video,#stage canvas#overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    #stage.mirror video,#stage.mirror canvas#overlay{transform:scaleX(-1)}
+    #count{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:140px;font-weight:800;line-height:1;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none;font-variant-numeric:tabular-nums}
+    #count.pulse{color:var(--fo-ok)}
+    #countdown{position:absolute;left:0;right:0;top:12px;text-align:center;font-size:20px;font-weight:700;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.8);pointer-events:none}
+    #stage-msg{position:absolute;left:10px;right:10px;bottom:10px;font-size:13px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none}
+    #curve{width:100%;height:110px;display:block;background:var(--fo-surface-2);border-radius:10px}
+    #status{font-size:12px;color:var(--fo-text-2);font-variant-numeric:tabular-nums;line-height:1.5}
+    details summary{cursor:pointer;font-size:14px;font-weight:600}
+    .small{font-size:12px;color:var(--fo-text-2)}
+    #replay-list button{flex:1 1 45%;min-height:40px;font-size:13px}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Zähl-Labor</h1>
+  <p class="sub">Experiment: Wiederholungen live per Kamera zählen. Bild bleibt auf dem Handy – nichts wird gespeichert oder gesendet.</p>
+
+  <div class="card">
+    <label class="f" for="exercise">Übung</label>
+    <select id="exercise">
+      <option value="splitsquats">Split Squats</option>
+      <option value="liegestuetze">Liegestütze</option>
+      <option value="curls">Bizeps-Curls</option>
+      <option value="band_gerade">Terraband gerade</option>
+    </select>
+    <p class="hint" id="hint"></p>
+    <div class="toggles">
+      <label><input type="checkbox" id="opt-skeleton" checked> Skelett</label>
+      <label><input type="checkbox" id="opt-curve"> Signalkurve</label>
+      <label><input type="checkbox" id="opt-sound" checked> Ton</label>
+      <label>Rechnen: <select id="opt-delegate" style="width:auto;padding:4px 6px;font-size:14px"><option value="">Auto</option><option value="GPU">GPU</option><option value="CPU">CPU</option></select></label>
+    </div>
+  </div>
+
+  <div id="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="countdown"></div>
+    <div id="count">0</div>
+    <div id="stage-msg">Kamera aus</div>
+  </div>
+
+  <div class="row" style="margin-bottom:10px">
+    <button class="btn primary" id="btn-start">Start</button>
+    <button class="btn stop" id="btn-stop" disabled>Stop</button>
+    <button class="btn" id="btn-flip" title="Kamera wechseln">Kamera: vorne</button>
+  </div>
+
+  <div class="card" id="curve-card" style="display:none">
+    <canvas id="curve" width="720" height="220"></canvas>
+    <div class="small">Signal (blau), Schwelle „in Bewegung“ (orange), Schwelle „zurück“ (grün)</div>
+  </div>
+
+  <div class="card"><div id="status">Bereit.</div></div>
+
+  <details class="card">
+    <summary>Test: Aufnahme abspielen (ohne Kamera)</summary>
+    <p class="small">Spielt eine Keypoint-Aufnahme (JSON, Format in labor/README.md) durch denselben Zählcode.</p>
+    <div class="row" id="replay-list"></div>
+    <div class="row" style="margin-top:8px"><input type="file" id="replay-file" accept="application/json,.json"></div>
+    <div id="replay-result" class="small" style="margin-top:6px"></div>
+  </details>
+</main>
+<script src="zaehl-kern.js"></script>
+<script type="module" src="zaehlen.js"></script>
+</body>
+</html>

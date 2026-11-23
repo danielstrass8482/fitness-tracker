@@ -2115,7 +2115,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-22 22:01';
+    const APP_BUILD = '2026-11-23 05:07';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -10612,21 +10612,38 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // Ersetzt die Original-Einheit (gleicher Slot, gleiche id – bereits zugeordnete Einträge mit
     // planUnitId bleiben zugeordnet) durch die Vorschlags-Einheit; Ruhetag-Vorschlag = Einheit entfernt.
     // Gibt den neuen Tages-Array zurück, oder null, wenn die Original-Einheit nicht (mehr) existiert.
-    function planDayWithSuggestion(units, sugg) {
+    // 034a: Vorschlag → zu speichernde Einheit. Zirkel: Übungen des Originals, die HEUTE pausiert sind und
+    // im Vorschlag fehlen (Muster b: pausierte Slots entfernt, Anzahl ≠ Original), werden an ihrer
+    // Originalposition wieder eingefügt – sonst würde "dauerhaft" sie aus dem Plan löschen. Ersetzt der
+    // Vorschlag einen pausierten Slot durch etwas anderes (Muster a: gleiche Anzahl), bleibt der Vorschlag
+    // unverändert (Ersatz ist gewollt, nichts wieder einfügen). Andere Typen unverändert.
+    function planUnitFromSuggestion(orig, sugg, todayStr) {
+      const unit = normalizePlanUnit({ ...sugg.unit, id: sugg.originalUnitId });
+      if (!orig || orig.typ !== 'zirkel' || unit.typ !== 'zirkel') return unit;
+      const origEx = orig.uebungen || [];
+      if ((unit.uebungen || []).length === origEx.length) return unit;
+      const res = (unit.uebungen || []).slice();
+      origEx.forEach((ex, i) => {
+        if (!isExercisePaused(ex.typ, todayStr) || res.some(x => x.typ === ex.typ)) return;
+        res.splice(Math.min(i, res.length), 0, { ...ex });
+      });
+      return normalizePlanUnit({ ...unit, uebungen: res });
+    }
+    function planDayWithSuggestion(units, sugg, todayStr) {
       const idx = (units || []).findIndex(u => u.id === sugg.originalUnitId);
       if (idx < 0) return null;
       const day = units.map(u => normalizePlanUnit(u));
       if (sugg.unit.typ === 'ruhetag') day.splice(idx, 1);
-      else day[idx] = normalizePlanUnit({ ...sugg.unit, id: sugg.originalUnitId });
+      else day[idx] = planUnitFromSuggestion(units[idx], sugg, todayStr);
       return day;
     }
     // Schon übernommen? (abgeleitet aus dem Plan, kein eigener Status – nach Rückgängig erscheint der
     // Vorschlag dadurch automatisch wieder). Ruhetag: Original-Einheit nicht mehr im Tag.
-    function isPlanSuggestionAdopted(units, sugg) {
+    function isPlanSuggestionAdopted(units, sugg, todayStr) {
       if (!sugg) return false;
       const cur = (units || []).find(u => u.id === sugg.originalUnitId);
       if (sugg.unit.typ === 'ruhetag') return !cur;
-      return !!cur && JSON.stringify(normalizePlanUnit(cur)) === JSON.stringify(normalizePlanUnit({ ...sugg.unit, id: sugg.originalUnitId }));
+      return !!cur && JSON.stringify(normalizePlanUnit(cur)) === JSON.stringify(planUnitFromSuggestion(cur, sugg, todayStr));
     }
     // Gleicher Speicherpfad wie planEditorSave (planNextVersionAfter → planAskScope → planCommitSave →
     // planScheduleSaveUndo); nur "Nur diese Woche" (Standard) und "Ab dieser Woche dauerhaft".
@@ -10637,7 +10654,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       const X = planCurrentMonday();
       const key = planDayKeyForDate(todayStr);
       const original = normalizeTrainingPlan(trainingPlan);
-      const newDay = planDayWithSuggestion(original[key], sugg);
+      const newDay = planDayWithSuggestion(original[key], sugg, todayStr);
       if (!newDay) { showToast('Original-Einheit nicht mehr im Plan', 'bad'); return; }
       const draft = normalizeTrainingPlan({ ...original, [key]: newDay });
       let laterVersion;
@@ -10722,7 +10739,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
         // status mitgegeben, damit planMatchDay einen akzeptierten Ruhetag-Vorschlag erkennt (Task 1).
         const todaySuggestion = (isToday && dailyCheckState?.date === ds && dailyCheckState.planSuggestion
           && dailyCheckState.suggestionStatus !== 'verworfen'
-          && !isPlanSuggestionAdopted(units, dailyCheckState.planSuggestion))
+          && !isPlanSuggestionAdopted(units, dailyCheckState.planSuggestion, ds))
           ? { ...dailyCheckState.planSuggestion, status: dailyCheckState.suggestionStatus } : null;
         const { result, extra, suggestionMatch } = planMatchDay(units, dayEntries, todaySuggestion, ds);
         totalPlanned += result.length;

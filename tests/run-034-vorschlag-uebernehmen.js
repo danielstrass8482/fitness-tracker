@@ -200,6 +200,39 @@ async function main() {
     await page.close();
   }
 
+
+  // 034a: pausierte Uebungen bleiben nach Uebernahme im Plan
+  {
+    const EX = (typ, extra) => ({ typ, variant: '', mode: 'time', holdSec: 30, wdh: 0, pauseSec: 0, perSide: false, ...(extra || {}) });
+    const orig4 = [EX('custom_a'), EX('custom_b'), EX('custom_c'), EX('custom_d')];
+    const Z4 = { ...ZIRKEL_DO, uebungen: orig4 };
+    const mk = (sugEx, paused) => {
+      const st = store('zirkel');
+      st[U('trainingplans')] = [planDoc(BASE_MONDAY, [Z4])];
+      st[U('dailyCheck')][0].data.planSuggestion = { originalUnitId: 'u_zirkel_do', reason: 'Test.',
+        unit: { ...SUGG.zirkel.unit, uebungen: sugEx } };
+      st[U('settings')].push({ id: 'exercises', data: paused ? { custom_b: { pausedUntil: '2026-12-31' } } : {} });
+      return st;
+    };
+    const typs = w => w?.data?.do?.[0]?.uebungen?.map(x => x.typ);
+    const cases = [
+      ['b: pausierte Uebung fehlt im Vorschlag -> alle 4 in Originalreihenfolge', mk([EX('custom_a'), EX('custom_c'), EX('custom_d')], true), ['custom_a', 'custom_b', 'custom_c', 'custom_d']],
+      ['a: pausierter Slot ersetzt -> Payload = Vorschlag', mk([EX('custom_a'), EX('custom_x'), EX('custom_c'), EX('custom_d')], true), ['custom_a', 'custom_x', 'custom_c', 'custom_d']],
+      ['keine pausierte Uebung -> Payload wie 034', mk([EX('custom_a'), EX('custom_c'), EX('custom_d')], false), ['custom_a', 'custom_c', 'custom_d']],
+    ];
+    for (const [, label] of SCOPES) for (const [name, st, expect] of cases) {
+      const { page, h } = await start(browser, st);
+      await page.click('#training-plan-container button:has-text("In Plan übernehmen")');
+      await page.waitForSelector('#plan-scope-modal', { state: 'visible' });
+      await pick(page, label);
+      const cur = planWrites(await writes(page)).find(w => w.path === planPath(CUR_MONDAY));
+      check(`034a/${label}: ${name}`, JSON.stringify(typs(cur)) === JSON.stringify(expect), typs(cur));
+      if (name.startsWith('b:')) check(`034a/${label}: Vorschlagszeile nach Uebernahme weg`, !(await containerText(page)).includes('In Plan übernehmen'), null);
+      errors.push(...h.consoleErrors);
+      await page.close();
+    }
+  }
+
   await browser.close();
   check('Keine Konsolenfehler/Exceptions', errors.length === 0, errors);
   if (process.argv.includes('--payloads')) console.log('\nPAYLOADS ' + JSON.stringify(payloadLog));

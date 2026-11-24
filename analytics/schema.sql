@@ -960,3 +960,7 @@ CREATE TABLE IF NOT EXISTS raw.activity_notes (
   deleted_at timestamptz
 );
 GRANT SELECT, INSERT, UPDATE ON raw.activity_notes TO fuelofit_sync;
+
+-- ===== Wetter je Aktivitaet (044, Migration 022_aktivitaet_wetter.sql) =====
+-- raw.aktivitaet_wetter, Rolle fuelofit_wetter_write und die um Wetter-Spalten erweiterten Views
+-- training_sessions/lauf_kilometer stehen NUR in Migration 022 (braucht 014/021) -- nach 021 ausfuehren.

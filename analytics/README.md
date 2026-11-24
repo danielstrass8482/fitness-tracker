@@ -101,7 +101,7 @@ bleibt die vollstaendige Referenz fuer einen Neuaufbau von Null.
 Claude-Code-Session ausgegeben und sollte nach demselben Verfahren (fuer das Garmin-Ingest statt
 Analytics-Secret, inkl. Update auf dem Garmin-Sync-Job unter User `fuelofit`) rotiert werden.
 
-## Garmin-FIT-Detaildaten (Migration 014, 017, 021)
+## Garmin-FIT-Detaildaten (Migration 014, 017, 021, 022)
 
 Zweiter Schreibpfad neben `sync.py`: der Garmin-Sync (`fit_sync.py`, User `fuelofit`, Repo
 fuelofit-functions `vps/garmin/`, Rolle `fuelofit_fit_write`) laedt FIT-Dateien und schreibt direkt
@@ -143,3 +143,14 @@ nur Laeufe: pod/brustgurt/keine; `fit_sync.detect_rd_source`, Altbestand einmali
 ALWAYS_FULL) und `views.aktivitaet_sensoren`; die Spalten `hf_quelle`, `laufdynamik_quelle`, `hf_verwertbar`,
 `laufdynamik_verwertbar`, `notiz` sind an training_sessions, lauf_kilometer, aktivitaet_runden und
 aktivitaet_verlauf angehaengt (Regeln im Kopf von `migrations/021_aktivitaet_notiz_sensoren.sql`).
+
+**022 (Aufgabe 044, 24.11.2026)**: `raw.aktivitaet_wetter` = Wetterdienst-Werte je Outdoor-Aktivitaet
+(FIT-Session mit Start-GPS, nicht indoor), geschrieben von `vps/garmin/wetter_sync.py` (fuelofit-functions,
+Rolle `fuelofit_wetter_write`: Schreibrecht nur auf diese Tabelle, Lesen nur der noetigen Session-Spalten).
+Quelle Bright Sky (DWD-Stationsmessungen, Station <= 30 km), Fallback Open-Meteo Archive (Modell). An die
+Dienste gehen nur auf 0,1 Grad gerundete Startkoordinaten; gerundete Werte nur in raw. Aufruf nach jedem
+Garmin-Sync (`sync_official.py`, max. 20 Requests/Lauf, Aktivitaet >= 2 h beendet), Backfill ab 05.2024 per
+`wetter_sync.py --budget N`. Spalten `temp_c_start`, `temp_c_mittel`, `gefuehlt_c_mittel`,
+`luftfeuchte_pct_mittel`, `taupunkt_c_mittel`, `wind_kmh_mittel`, `boeen_kmh_max`, `niederschlag_mm`,
+`bewoelkung_pct_mittel`, `wetter_quelle` an training_sessions und lauf_kilometer angehaengt (Rechenweg im
+Kopf von `migrations/022_aktivitaet_wetter.sql`).

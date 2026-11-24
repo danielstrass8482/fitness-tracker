@@ -833,3 +833,5 @@ Vor dem Commit per grep geprüft: kein Treffer für die reale uid (nur `{uid}`),
 keine Token- oder Key-Muster (`sk-ant-`, `AIza`, `ya29.`, `-----BEGIN`). Werte aus `settings/`,
 `integrations/` und `oura_tokens` wurden nie übertragen. Andere Collections wurden zwar gelesen, die
 Ausgabe enthielt aber nur Feldnamen, Typen und Kategorie-Werte.
+
+**Startzeit (041, 24.11.2026)**: Migration `analytics/migrations/020_startzeit.sql`. `views.training_sessions` bekommt `start_lokal` (Europe/Berlin, timestamp), `ende_lokal`, `startzeit_quelle` (fit / garmin_api / entry_field / NULL); `views.lauf_kilometer` und `views.aktivitaet_runden` bekommen `start_lokal` (aus `raw.garmin_fit_session`). Google-Fit: `entries.timestamp` (UTC) = Start; manual/plan: `timestamp` = Speicherzeit (plan = Ende) → keine Startzeit. `entries.garminTime` war bis 31.10.2025 UTC-Uhrzeit.

@@ -299,8 +299,13 @@ CREATE OR REPLACE VIEW views.training_sessions AS
 WITH ga_all AS (
   SELECT g.id, g.day, g.data,
          substr(g.data->>'startLocal', 12, 8) AS start_time,
-         EXISTS (SELECT 1 FROM raw.garmin_hidden h WHERE h.id = g.id AND h.deleted_at IS NULL) AS hidden
+         EXISTS (SELECT 1 FROM raw.garmin_hidden h WHERE h.id = g.id AND h.deleted_at IS NULL) AS hidden,
+         -- Startzeit (Migration 020): FIT-Session bevorzugt (UTC -> Europe/Berlin), sonst startLocal
+         -- (Garmin-Ortsuhrzeit, erste 19 Zeichen). fit_elapsed_sec = FIT total_elapsed_time_sec.
+         (f.start_time AT TIME ZONE 'Europe/Berlin') AS fit_start_lokal,
+         f.total_elapsed_time_sec AS fit_elapsed_sec
   FROM raw.garmin_activities g
+  LEFT JOIN raw.garmin_fit_session f ON f.activity_id::text = g.id
   WHERE g.deleted_at IS NULL
 ),
 gfit_match AS (
@@ -367,7 +372,11 @@ base AS (
     (g.data->>'elevationGainM')::numeric AS elevation_gain_m,
     (g.data->>'avgSpeedMs')::numeric AS avg_speed_ms,
     (g.data->>'avgCadence')::numeric AS avg_cadence,
-    (g.data->>'maxCadence')::numeric AS max_cadence
+    (g.data->>'maxCadence')::numeric AS max_cadence,
+    COALESCE(g.fit_start_lokal, substr(g.data->>'startLocal', 1, 19)::timestamp) AS start_lokal,
+    CASE WHEN g.fit_start_lokal IS NOT NULL THEN 'fit'
+         WHEN g.data->>'startLocal' IS NOT NULL THEN 'garmin_api' END AS startzeit_quelle,
+    g.fit_elapsed_sec
   FROM ga_all g
   LEFT JOIN gfit_match m ON m.garmin_id = g.id
   LEFT JOIN snap_kcal sk ON sk.act_id = 'garmin_' || g.id
@@ -388,7 +397,14 @@ base AS (
     (e.data->>'act_kcal_calc')::numeric,
     (e.data->>'steps')::numeric,
     NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric,
-    NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric,
+    -- Startzeit nur bei Google Fit (timestamp = Start der Health-Sync-Einheit, UTC mit 'Z' -> Berlin).
+    -- manual/plan: NULL (timestamp dort = Erfassungs-/Speicherzeit, kein Start; Migration 020).
+    CASE WHEN e.data->>'source' = 'googlefit' AND e.data->>'timestamp' ~ '(Z|[+-]\d\d:\d\d)$'
+         THEN ((e.data->>'timestamp')::timestamptz AT TIME ZONE 'Europe/Berlin') END,
+    CASE WHEN e.data->>'source' = 'googlefit' AND e.data->>'timestamp' ~ '(Z|[+-]\d\d:\d\d)$'
+         THEN 'entry_field' END,
+    NULL::numeric
   FROM raw.entries e
   WHERE e.deleted_at IS NULL
     AND e.data->>'typ' NOT IN ('tageslog', 'phonesteps')
@@ -431,7 +447,10 @@ SELECT
   elevation_gain_m,
   avg_speed_ms,
   avg_cadence,
-  max_cadence
+  max_cadence,
+  start_lokal,
+  start_lokal + COALESCE(fit_elapsed_sec, duration_sec) * interval '1 second' AS ende_lokal,
+  startzeit_quelle
 FROM calc;
 
 GRANT SELECT ON views.training_sessions TO fuelofit_ro;

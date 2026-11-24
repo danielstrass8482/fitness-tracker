@@ -60,6 +60,7 @@ leere Collections)
 | `garminHidden` | `{activityId}` | 0 | – | – | Bewegung |
 | `gear` (028b, 21.11.2026, neu/additiv) | `gear_{ms}` | 0 | – | – | Bewegung (Ausrüstung) |
 | `gearAssignments` (028b, 21.11.2026, neu/additiv) | `{activityId}` | 0 | – | – | Bewegung (Zuordnung Lauf → Schuh) |
+| `activityNotes` (042, 24.11.2026, neu/additiv) | `{activityId}` | 1 | – | – | Bewegung (Notiz + Sensor-Vermerk je Garmin-Aktivität) |
 | `data` | – | 0 | – | – | toter Code (`userCol()`, kein Aufruf) |
 
 Rekursive Suche nach Subcollections: `listCollectionIds` auf allen Dokumenten der kleinen Collections
@@ -373,6 +374,11 @@ sind also wie jedes Feld indiziert. Es gibt keine Index-Ausnahmen für sie.
   Läufe ohne Dokument mit `startLocal >= standard_seit` des aktiven Standardschuhs. km je Schuh =
   `start_km + Σ distanceM/1000` der zugeordneten, nicht ausgeblendeten Läufe (App: `gearStats`, Connector:
   `views.ausruestung`).
+- `activityNotes/{activityId}` (042) = `{text (max. 1000 Zeichen, '' erlaubt), ohneBrustgurt (bool), ohnePod (bool),
+  updatedAt (ISO)}` – Notiz + Sensor-Vermerk zu einer Garmin-Aktivität (`garminActivities`-ID), gesetzt in der App
+  ("Letzte Einträge" → Button „Notiz“ an jeder Garmin-Zeile, `saveActivityNote`, `set()` ohne merge). Eigene
+  Collection aus demselben Grund wie `gearAssignments` (Ingest überschreibt `garminActivities`). Nur für Auswertungen
+  (Connector-Flags `hf_verwertbar`/`laufdynamik_verwertbar`), Kalorien-/Zielberechnung ignoriert das Dokument.
 - `stravaAthletes/{id}.userId` → `{uid}`. `oura_tokens/{uid}` ↔ `users/{uid}`.
 - Tagesschlüssel `YYYY-MM-DD` verbinden `garminDaily`, `ciqSteps`, `oura_daily`, `dailyCheck` mit
   `entries.datum`/`logEntries.date`. `garminActivities.startLocal` ordnet über das Datum zu.
@@ -658,6 +664,7 @@ Wiederaufbau: `analytics/README.md`.
 | `garminHidden` | `users/{uid}/` | – | nur full |
 | `gear` (028b) | `users/{uid}/` | – | nur full |
 | `gearAssignments` (028b) | `users/{uid}/` | – | nur full |
+| `activityNotes` (042) | `users/{uid}/` | – | nur full (sync.py: in jedem Lauf, ALWAYS_FULL) |
 | `foods` | Top-Level | – | nur full |
 | `recipes` | `users/{uid}/` | – | nur full |
 | `weeklyStats` | `users/{uid}/` | – | nur full |
@@ -835,3 +842,5 @@ keine Token- oder Key-Muster (`sk-ant-`, `AIza`, `ya29.`, `-----BEGIN`). Werte a
 Ausgabe enthielt aber nur Feldnamen, Typen und Kategorie-Werte.
 
 **Startzeit (041, 24.11.2026)**: Migration `analytics/migrations/020_startzeit.sql`. `views.training_sessions` bekommt `start_lokal` (Europe/Berlin, timestamp), `ende_lokal`, `startzeit_quelle` (fit / garmin_api / entry_field / NULL); `views.lauf_kilometer` und `views.aktivitaet_runden` bekommen `start_lokal` (aus `raw.garmin_fit_session`). Google-Fit: `entries.timestamp` (UTC) = Start; manual/plan: `timestamp` = Speicherzeit (plan = Ende) → keine Startzeit. `entries.garminTime` war bis 31.10.2025 UTC-Uhrzeit.
+
+**Notiz + Sensor-Flags (042, 24.11.2026)**: Migration `analytics/migrations/021_aktivitaet_notiz_sensoren.sql`. Neu `raw.activity_notes` (aus `activityNotes`), `raw.garmin_fit_session.rd_source` (Laufdynamik-Quelle aus FIT `device_info`, nur Läufe: `pod` = ANT+-Gerät Typ 30/`running_dynamics_pod`, `brustgurt` = Garmin-HF-Gurt ohne Pod, `keine` – die Uhr schreibt dann trotzdem geschätzte Werte; gesetzt von `fit_sync.py`, Altbestand per `backfill_rd_source_042.py`), View `views.aktivitaet_sensoren`. An `training_sessions`, `lauf_kilometer`, `aktivitaet_runden`, `aktivitaet_verlauf` angehängt: `hf_quelle` (brustgurt/handgelenk aus `hr_source`), `laufdynamik_quelle`, `hf_verwertbar` (false bei Notiz „ohne Brustgurt“ oder Lauf mit Handgelenk-HF), `laufdynamik_verwertbar` (false bei Notiz „ohne Pod“ oder Lauf ohne Pod/Garmin-Gurt; NULL bei Nicht-Läufen), `notiz`. Google-Fit-Zeilen in `training_sessions` über die FIT-Session gleichen Tags mit Start ≤ 60 s.

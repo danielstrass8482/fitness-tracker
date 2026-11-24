@@ -101,7 +101,7 @@ bleibt die vollstaendige Referenz fuer einen Neuaufbau von Null.
 Claude-Code-Session ausgegeben und sollte nach demselben Verfahren (fuer das Garmin-Ingest statt
 Analytics-Secret, inkl. Update auf dem Garmin-Sync-Job unter User `fuelofit`) rotiert werden.
 
-## Garmin-FIT-Detaildaten (Migration 014, 017)
+## Garmin-FIT-Detaildaten (Migration 014, 017, 021)
 
 Zweiter Schreibpfad neben `sync.py`: der Garmin-Sync (`fit_sync.py`, User `fuelofit`, Repo
 fuelofit-functions `vps/garmin/`, Rolle `fuelofit_fit_write`) laedt FIT-Dateien und schreibt direkt
@@ -136,3 +136,10 @@ berechneten Werte ab (`users/{uid}/dailySnapshots/{date}`), der ueber `exportAna
 `sync.py` nach `raw.daily_snapshots` / `views.daily_summary` repliziert wird (eine
 Formelquelle: dieselben Funktionen wie Anzeige/Kalorienziel, siehe `docs/datenmodell.md`
 Abschnitt 8).
+
+**021 (Aufgabe 042, 24.11.2026)**: `raw.garmin_fit_session.rd_source` (Laufdynamik-Quelle aus FIT `device_info`,
+nur Laeufe: pod/brustgurt/keine; `fit_sync.detect_rd_source`, Altbestand einmalig per
+`backfill_rd_source_042.py` aus `fit_archive`), `raw.activity_notes` (Firestore `activityNotes`, sync.py,
+ALWAYS_FULL) und `views.aktivitaet_sensoren`; die Spalten `hf_quelle`, `laufdynamik_quelle`, `hf_verwertbar`,
+`laufdynamik_verwertbar`, `notiz` sind an training_sessions, lauf_kilometer, aktivitaet_runden und
+aktivitaet_verlauf angehaengt (Regeln im Kopf von `migrations/021_aktivitaet_notiz_sensoren.sql`).

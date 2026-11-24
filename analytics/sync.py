@@ -75,11 +75,12 @@ COLLECTIONS = [
     ("garminHidden", "garmin_hidden", False),
     ("gear", "gear", False),                       # 028b, s. ALWAYS_FULL
     ("gearAssignments", "gear_assignments", True), # 028b, Fenster ueber 'at'
+    ("activityNotes", "activity_notes", False),    # 042, s. ALWAYS_FULL
 ]
 
 # Sehr kleine Collections ohne Datumsfeld, die trotzdem zeitnah im Connector stehen sollen: werden
 # auch in jedem window-Lauf komplett (mode=full) geholt (028b: Laufschuhe, wenige Dokumente).
-ALWAYS_FULL = {"gear"}
+ALWAYS_FULL = {"gear", "activityNotes"}  # 042: activityNotes (Notiz/Sensor-Vermerk je Aktivitaet, wenige Dokumente)
 
 log = logging.getLogger("analytics_sync")
 

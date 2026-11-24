@@ -1849,6 +1849,29 @@
     <div id="zirkel-timer-body" class="iv-timer-body"></div>
   </div>
 
+  <!-- Aktivitäts-Notiz (042): Notiz + Sensor-Vermerk je Garmin-Aktivität, users/{uid}/activityNotes/{activityId} -->
+  <div id="activity-note-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)closeActivityNote()">
+    <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
+      <div class="fo-sheet__head">
+        <h3 class="fo-sheet__title">Notiz zur Aktivität</h3>
+      </div>
+      <div class="fo-sheet__body">
+        <div id="activity-note-sub" class="fo-help" style="font-size:var(--fo-fs-small);"></div>
+        <div class="fo-field">
+          <label class="fo-label" for="activity-note-text">Notiz</label>
+          <textarea id="activity-note-text" class="fo-input" rows="3" maxlength="1000" style="min-width:0;width:100%;resize:vertical;"></textarea>
+        </div>
+        <label class="fo-checklabel"><input type="checkbox" id="activity-note-ohne-brustgurt"> ohne Brustgurt (Puls nicht auswerten)</label>
+        <label class="fo-checklabel"><input type="checkbox" id="activity-note-ohne-pod"> ohne Pod (Laufdynamik nicht auswerten)</label>
+        <div class="fo-help" style="font-size:var(--fo-fs-small);">Nur für Auswertungen. Kalorien bleiben unverändert.</div>
+      </div>
+      <div class="fo-sheet__foot" style="padding-bottom:max(80px, env(safe-area-inset-bottom, 80px));">
+        <button class="fo-btn fo-btn--secondary" type="button" onclick="closeActivityNote()">Abbrechen</button>
+        <button class="fo-btn fo-btn--primary" type="button" onclick="saveActivityNote()" style="flex:2;">Speichern</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Kopieren Modal -->
   <div id="copy-entry-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--fo-scrim);z-index:9999;align-items:flex-end;" onclick="if(event.target===this)this.style.display='none'">
     <div class="fo-sheet" style="width:100%;max-width:500px;margin:0 auto;">
@@ -2101,7 +2124,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-24 20:07';
+    const APP_BUILD = '2026-11-24 21:22';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -2145,6 +2168,7 @@
     // ginge beim nächsten Ingest derselben Aktivität verloren. Gleiches Muster wie garminHidden/garminLinks.
     let gearAll = [];                     // [{ id, name, typ, start_km, wechsel_km, aktiv, standard, standard_seit, angelegt_am, ausgemustert_am }]
     let gearAssignByActivity = new Map(); // activityId (String) -> { gearId, quelle, at }
+    let activityNotesById = new Map();    // 042: Garmin-activityId (String) -> { text, ohneBrustgurt, ohnePod, updatedAt }
 
     // ciqSteps/{heute} (Phase 1c, Connect-IQ-Proof-of-Concept, 01.11.2026): Tagesschritte, die eine
     // eigene Connect-IQ-App direkt von der Uhr sendet (ingestCiqSteps, alle 5 Min), an Garmin Connects
@@ -2220,6 +2244,7 @@
     const userGarminLinksCol = () => collection(db, 'users', userId, 'garminLinks'); // zweite Schreibquelle (Zirkel-Zusammenführung, 01.11.2026): {activityId}: {unlinked:true, at} für "Zuordnung lösen"
     const userGearCol = () => collection(db, 'users', userId, 'gear'); // Ausrüstung (028b), nur von der App geschrieben
     const userGearAssignCol = () => collection(db, 'users', userId, 'gearAssignments'); // Lauf -> Schuh (028b), Doc-ID = Garmin-activityId
+    const userActivityNotesCol = () => collection(db, 'users', userId, 'activityNotes'); // 042: Notiz + Sensor-Vermerk je Garmin-Aktivität, Doc-ID = Garmin-activityId, nur von der App geschrieben
     const userCiqStepsDoc = date => doc(db, 'users', userId, 'ciqSteps', date); // von ingestCiqSteps (Cloud Function) befüllt, nur gelesen - nur das Tagesdokument, nie die samples-Subcollection (R6)
 
     // Heutiges Datum im Europe/Berlin-Kalender (YYYY-MM-DD). toISOString() wäre UTC und liefert
@@ -2323,10 +2348,17 @@
       ]);
       // Ausrüstung (028b): eigene Fehlerbehandlung - ein Lesefehler hier darf den Garmin-Load nicht stoppen.
       // Bei Fehler bleibt der bisherige Stand stehen und es wird NICHT automatisch zugeordnet.
-      const [gearSnap, gearAssignSnap] = await Promise.all([
+      const [gearSnap, gearAssignSnap, notesSnap] = await Promise.all([
         getDocs(userGearCol()).catch(e => { console.warn('gear load error:', e); return null; }),
         getDocs(userGearAssignCol()).catch(e => { console.warn('gearAssignments load error:', e); return null; }),
+        getDocs(userActivityNotesCol()).catch(e => { console.warn('activityNotes load error:', e); return null; }), // 042, klein (nur manuell befüllt)
       ]);
+      if (notesSnap) {
+        const nextNotes = new Map();
+        notesSnap.forEach(d => nextNotes.set(String(d.id), d.data() || {}));
+        activityNotesById = nextNotes;
+        window.activityNotesById = activityNotesById;
+      }
 
       const nextDaily = {};
       dailySnap.forEach(d => { nextDaily[d.id] = d.data(); });
@@ -6484,7 +6516,8 @@
       'zirkel-template-modal',
       'plan-zirkel-pick-modal',
       'zirkel-timer-modal',
-      'workout-builder-modal'
+      'workout-builder-modal',
+      'activity-note-modal'
     ];
 
     // Wenn ein Modal geöffnet wird, pushState damit Back-Button es schließen kann
@@ -7573,11 +7606,12 @@
             ${strengthNettoLabel ? `<div class="fo-row__sub fo-row__sub--wrap" style="color:var(--fo-text-3);">${strengthNettoLabel}</div>` : ''}
             <div class="fo-row__sub">${e.datum}${e.notiz ? ' · ' + escHtml(e.notiz) : ''}</div>
             ${isGarminLive && !e.garminHiddenEntry && typ === 'laufen' ? gearSelectHtml(e.garminActivityId) : ''}
+            ${isGarminLive && !e.garminHiddenEntry ? activityNoteLineHtml(e.garminActivityId) : ''}
             ${zirkelOpen ? historyZirkelRoundsHtml(e) + historyZirkelGarminHtml(e) : ''}
           </div>
           <div class="fo-row__actions" onclick="event.stopPropagation()">
             ${e.garminHiddenEntry ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="unhideGarminActivity('${e.garminActivityId}')">Wiederherstellen</button>`
-              : isGarminLive ? `<button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="hideGarminActivity('${e.garminActivityId}')">Ausblenden</button>${isUnlinkedStrength ? ` <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="relinkGarminActivity('${e.garminActivityId}')">Wieder verknüpfen</button>` : ''}`
+              : isGarminLive ? `<button class="fo-btn fo-btn--secondary fo-btn--sm activity-note-btn" type="button" data-activity-id="${escHtml(String(e.garminActivityId))}" onclick="openActivityNote('${escHtml(String(e.garminActivityId))}')">Notiz</button> <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="hideGarminActivity('${e.garminActivityId}')">Ausblenden</button>${isUnlinkedStrength ? ` <button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="relinkGarminActivity('${e.garminActivityId}')">Wieder verknüpfen</button>` : ''}`
               : `${isManual ? `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="editTraining('${e.id}')">Ändern</button>` : ''}
                  <button class="fo-btn fo-btn--danger fo-btn--sm" type="button" onclick="deleteTraining('${e.id}')">Löschen</button>`}
           </div>
@@ -7586,6 +7620,60 @@
       renderGearSection();
       renderTrainingPlan();
     }
+
+    // Notiz + Sensor-Vermerk je Garmin-Aktivität (042): users/{uid}/activityNotes/{activityId}
+    // {text, ohneBrustgurt, ohnePod, updatedAt (ISO)}. Nur Anzeige/Analyse (Connector-Flags
+    // hf_verwertbar/laufdynamik_verwertbar) - Kalorien- und alle anderen Berechnungen ignorieren das.
+    function activityNoteLineHtml(activityId) {
+      const n = activityNotesById.get(String(activityId));
+      if (!n) return '';
+      const flags = [n.ohneBrustgurt ? 'ohne Brustgurt' : '', n.ohnePod ? 'ohne Pod' : ''].filter(Boolean).join(' · ');
+      const text = String(n.text || '').trim();
+      if (!flags && !text) return '';
+      return `<div class="fo-row__sub fo-row__sub--wrap activity-note-line" data-activity-id="${escHtml(String(activityId))}" style="color:var(--fo-text-3);">${foIcon('edit', 'fo-i--sm')} ${flags ? `<span style="font-weight:600;">${escHtml(flags)}</span>` : ''}${flags && text ? ' – ' : ''}${escHtml(text)}</div>`;
+    }
+
+    let activityNoteEditId = null;
+    window.openActivityNote = function(activityId) {
+      const id = String(activityId);
+      const n = activityNotesById.get(id) || {};
+      activityNoteEditId = id;
+      document.getElementById('activity-note-text').value = n.text || '';
+      document.getElementById('activity-note-ohne-brustgurt').checked = !!n.ohneBrustgurt;
+      document.getElementById('activity-note-ohne-pod').checked = !!n.ohnePod;
+      const a = garminActivitiesAll.find(x => String(x.id) === id);
+      const day = a ? garminActivityDateKey(a) : null;
+      document.getElementById('activity-note-sub').textContent = a
+        ? [day ? day.split('-').reverse().join('.') : '', String(a.startLocal || '').slice(11, 16), a.mappedTyp || a.garminType || ''].filter(Boolean).join(' · ')
+        : '';
+      document.getElementById('activity-note-modal').style.display = 'flex';
+      pushModalState();
+    };
+    window.closeActivityNote = function() {
+      document.getElementById('activity-note-modal').style.display = 'none';
+      activityNoteEditId = null;
+    };
+    window.saveActivityNote = async function() {
+      const id = activityNoteEditId;
+      if (!id) return;
+      const data = {
+        text: document.getElementById('activity-note-text').value.trim().slice(0, 1000),
+        ohneBrustgurt: document.getElementById('activity-note-ohne-brustgurt').checked,
+        ohnePod: document.getElementById('activity-note-ohne-pod').checked,
+        updatedAt: new Date().toISOString()
+      };
+      try {
+        await setDoc(doc(userActivityNotesCol(), id), data);
+        activityNotesById.set(id, data);
+        window.activityNotesById = activityNotesById;
+        closeActivityNote();
+        renderTrainingHistory();
+        showToast('Notiz gespeichert', 'ok');
+      } catch (err) {
+        console.error('saveActivityNote error:', err);
+        showToast('Notiz speichern fehlgeschlagen', 'bad');
+      }
+    };
 
     // Garmin-Aktivität ausblenden/wiederherstellen (Korrektur 3, 01.11.2026): einzige neue Schreibquelle
     // der App für Garmin-Daten, bewusste Ausnahme von Harter Regel 2 dieses Auftrags. Schreibt/löscht

@@ -31,6 +31,7 @@ const TESTS = [
   { file: 'run-034-vorschlag-uebernehmen.js', args: [] },
   { file: '../labor/test/run-kern.js', args: [] },
   { file: 'run-038-zaehl-labor.js', args: [] },
+  { file: 'run-042-aktivitaet-notiz.js', args: [] },
 ];
 
 function statusFor(code) {

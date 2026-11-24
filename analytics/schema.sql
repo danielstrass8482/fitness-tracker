@@ -944,3 +944,19 @@ GRANT SELECT ON views.ausruestung TO fuelofit_ro;
 -- (Migration 014, ebenfalls nicht in dieser Datei -- FIT-Tabellen werden vom Garmin-Sync
 -- geschrieben, nicht von sync.py). Tabelle, Zuordnungsregel und views.kraft_saetze stehen
 -- vollstaendig in analytics/migrations/017_kraft_saetze.sql (nach 014 ausfuehren).
+
+-- ===== Notiz + Sensor-Flags je Aktivitaet (042, Migration 021_aktivitaet_notiz_sensoren.sql) =====
+-- raw.activity_notes (Firestore users/{uid}/activityNotes, sync.py, nur full) steht hier, damit sync.py
+-- bei einem Neuaufbau laeuft. raw.garmin_fit_session.rd_source, views.aktivitaet_sensoren und die um
+-- hf_quelle/laufdynamik_quelle/hf_verwertbar/laufdynamik_verwertbar/notiz ERWEITERTEN Views
+-- training_sessions/lauf_kilometer/aktivitaet_runden/aktivitaet_verlauf stehen NUR in Migration 021
+-- (braucht die FIT-Tabellen aus 014) -- training_sessions oben ist der Stand vor 021; nach 014/017/020
+-- die Migration 021 ausfuehren.
+CREATE TABLE IF NOT EXISTS raw.activity_notes (
+  id text PRIMARY KEY,            -- Garmin-activityId
+  day date,                       -- immer NULL (mode=full)
+  data jsonb NOT NULL,
+  synced_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+GRANT SELECT, INSERT, UPDATE ON raw.activity_notes TO fuelofit_sync;

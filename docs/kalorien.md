@@ -56,22 +56,31 @@ Alle Formeln außer den Alltagsschritten skalieren linear mit dem Körpergewicht
   Bei 5,5 km/h in der Ebene wären es weniger kcal je Schritt. Je kg mehr Gewicht steigt der Wert linear,
   der Alltagswert 0,04 nicht.
 
-## 5. Makroziele (040, Daniel 24.11.2026) – `calcMacroGoals(date)` / `macroSplit(G, kg)`
+## 5. Makroziele (040a Hybridmodell, Daniel 24.11.2026 19:59) – `calcMacroGoals(date)` / `macroSplit({baseKcal, activityKcal, weight})`
 
-- G = `calcHistoricalKcalGoal(date).total` (unverändert).
-- Protein P = round(max(20 % × G / 4, 1,8 g/kg × `weightForDate`)); Fett F = round(33 % × G / 9);
-  Kohlenhydrate C = round((G − 4P − 9F) / 4). Greift die Protein-Untergrenze, gehen die Mehr-kcal von
-  den KH ab (`proteinFloorApplied`, Hinweis „Mindestwert 1,8 g/kg“ in Kachel/Tagebuch).
+- Aus `calcHistoricalKcalGoal(date)` (unverändert): Basis B = `base + daily` (Grundumsatz-Basis +
+  Alltagsschritte), Aktivität A = `activity` (Trainings), G = B + A = `total`.
+- Protein P = round(max(150 g, 1,8 g/kg × `weightForDate`)) – Untergrenze greift erst über 83,3 kg
+  (`proteinFloorApplied`, Hinweis „Mindestwert 1,8 g/kg“ in Kachel/Tagebuch).
+- Fett F = round((33 % × B + 30 % × A) / 9); Kohlenhydrate C = max(0, round((G − 4P − 9F) / 4)) = Rest,
+  d. h. Aktivitäts-kcal gehen zu 30 % in Fett und 70 % in KH.
 - Summe 4P + 9F + 4C = G bis auf Rundung: ganze Gramm machen exakte Gleichheit für beliebiges G
-  unmöglich; C ist Rest → Abweichung höchstens 2 kcal (Test: 50 zufällige G, −1 … +2 kcal).
-- Makro-Prognose (nur heute, offene Plan-Einheiten, `plannedOpenUnitsKcal`): dasselbe Modell auf
-  G + Zusatz-kcal; nur Anzeige und Snapshot-Zusatzfelder, `goal_*` bleiben Ist.
+  unmöglich; C ist Rest → Abweichung höchstens 2 kcal (Test: 1.000 Fälle B 1.800–3.000 / A 0–2.000, −1 … +2 kcal).
+- Kontrollwerte (75,4 kg): B 2.661 / A 0 → 150/98/295; A 512 → 150/115/385; A 1.049 → 150/133/478;
+  90 kg, A 0 → 162/98/283.
+- Makro-Prognose (nur heute, offene Plan-Einheiten, `plannedOpenUnitsKcal`): Zusatz-kcal zählen als
+  Aktivität (30 % Fett / 70 % KH); nur Anzeige und Snapshot-Zusatzfelder, `goal_*` bleiben Ist.
+- Snapshot-Feld `makro_modell` = `'hybrid_040a'` (Konstante `MACRO_MODEL`); Connector
+  `views.daily_summary.makro_modell` liest es (Migration 019), ohne Feld Datums-Rückfall wie 018.
 - Fett-Hinweis (nur Anzeige): „Fettanteil [heute] X % (über 35 %)“, wenn 9 × Fett / aufgenommene kcal
   > 35 %; vergangene Tage immer, heute erst ab 50 % des Kalorienziels erfasst.
-- Konstanten zentral: `MACRO_SHARE`, `MACRO_PROTEIN_MIN_G_PER_KG`, `MACRO_KCAL_PER_G`,
-  `MACRO_FAT_HINT_SHARE`, `MACRO_FAT_HINT_TODAY_MIN_LOGGED`.
-- Vorher (027/027b, 21.–24.11.2026): Protein 150 g und Fett 100 g fix (Einstellungen), KH = Rest,
-  mind. 3 g/kg, Prognose 100 % KH. `settings.proteinGoal/fatGoal/carbsGoal` bleiben im Dokument,
+- Konstanten zentral: `MACRO_MODEL`, `MACRO_PROTEIN_FIXED_G`, `MACRO_PROTEIN_MIN_G_PER_KG`,
+  `MACRO_BASE_FAT_SHARE`, `MACRO_ACTIVITY_FAT_SHARE`, `MACRO_KCAL_PER_G`, `MACRO_FAT_HINT_SHARE`,
+  `MACRO_FAT_HINT_TODAY_MIN_LOGGED`.
+- Modelle nach Zeitraum (`makro_modell`): `fix_027` 21.–23.11.2026 (Protein 150 g / Fett 100 g fix,
+  KH = Rest, mind. 3 g/kg, Prognose 100 % KH); `prozent_040` 24.11.2026 (Protein 20 % des Ziels,
+  mind. 1,8 g/kg, Fett 33 %, KH 47 %/Rest); `hybrid_040a` ab Release 040a.
+- `settings.proteinGoal/fatGoal/carbsGoal` bleiben im Dokument,
   werden nicht mehr verwendet; Eingabefelder und „Makro-Vorschlag“ in den Einstellungen entfernt.
 - Gesättigte Fettsäuren: nicht erfasst (weder `foods`, `logEntries`, OFF-Import noch
   `data/bls-makros.json` haben ein Feld dafür) → kein Hinweis möglich.

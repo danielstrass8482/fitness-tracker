@@ -505,7 +505,10 @@ SELECT
   (ds.data->>'goal_fat_g')::numeric AS ziel_fett_g,
   (ds.data->>'goal_carbs_g')::numeric AS ziel_kh_g,
   CASE
-    WHEN ds.data->>'goal_protein_g' IS NULL OR ds.day < DATE '2026-11-21' THEN NULL
+    WHEN ds.data->>'goal_protein_g' IS NULL THEN NULL
+    -- Migration 019 (040a): Modellkennung aus dem Snapshot, sonst Datums-Rueckfall (018)
+    WHEN ds.data->>'makro_modell' IS NOT NULL THEN ds.data->>'makro_modell'
+    WHEN ds.day < DATE '2026-11-21' THEN NULL
     WHEN ds.day < DATE '2026-11-24' THEN 'fix_027'
     ELSE 'prozent_040'
   END AS makro_modell

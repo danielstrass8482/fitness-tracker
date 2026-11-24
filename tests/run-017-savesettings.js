@@ -45,7 +45,7 @@ async function testNormalSavePayload(browser) {
   await page.fill('#settings-tdee', '2600');
   // 040: Makrofelder sind nur Anzeige (Prozentmodell, calcMacroGoals) - kein Eintippen mehr moeglich
   const macroFields = await page.evaluate(() => ['settings-protein', 'settings-carbs', 'settings-fat'].map(id => { const e = document.getElementById(id); return { tag: e.tagName, v: e.textContent.trim() }; }));
-  check('040: Makrofelder sind reine Anzeige (DIV) mit 20 % / 47 % / 33 %', macroFields.every(f => f.tag === 'DIV') && macroFields[0].v === '20 % · mind. 1,8 g/kg' && macroFields[1].v === '47 % (Rest)' && macroFields[2].v === '33 %', macroFields);
+  check('040/040a: Makrofelder sind reine Anzeige (DIV) mit Hybridmodell-Texten', macroFields.every(f => f.tag === 'DIV') && macroFields[0].v === '150 g fix (mind. 1,8 g/kg)' && macroFields[1].v === 'Rest' && macroFields[2].v === '33 % der Basis + 30 % der Aktivität', macroFields);
   check('040: Makro-Vorschlag entfernt', await page.evaluate(() => !document.getElementById('macro-suggestion') && typeof window.calcMacroSuggestion === 'undefined'));
   await page.evaluate(() => window.saveSettings());
   await page.waitForTimeout(100);

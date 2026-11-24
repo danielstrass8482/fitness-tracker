@@ -43,11 +43,10 @@ async function testNormalSavePayload(browser) {
   await page.selectOption('#settings-gender', 'female');
   await page.selectOption('#settings-recipe-display', 'expanded');
   await page.fill('#settings-tdee', '2600');
-  await page.fill('#settings-protein', '160');
-  // 027: KH-Feld ist nur Anzeige "automatisch (Rest)" (readonly) - kein Eintippen mehr moeglich
-  const carbsField = await page.$eval('#settings-carbs', e => ({ tag: e.tagName, v: e.textContent.trim() }));
-  check('027: KH-Feld ist reine Anzeige "automatisch (Rest)" (kein Eingabefeld)', carbsField.tag === 'DIV' && carbsField.v === 'automatisch (Rest)', carbsField);
-  await page.fill('#settings-fat', '90');
+  // 040: Makrofelder sind nur Anzeige (Prozentmodell, calcMacroGoals) - kein Eintippen mehr moeglich
+  const macroFields = await page.evaluate(() => ['settings-protein', 'settings-carbs', 'settings-fat'].map(id => { const e = document.getElementById(id); return { tag: e.tagName, v: e.textContent.trim() }; }));
+  check('040: Makrofelder sind reine Anzeige (DIV) mit 20 % / 47 % / 33 %', macroFields.every(f => f.tag === 'DIV') && macroFields[0].v === '20 % · mind. 1,8 g/kg' && macroFields[1].v === '47 % (Rest)' && macroFields[2].v === '33 %', macroFields);
+  check('040: Makro-Vorschlag entfernt', await page.evaluate(() => !document.getElementById('macro-suggestion') && typeof window.calcMacroSuggestion === 'undefined'));
   await page.evaluate(() => window.saveSettings());
   await page.waitForTimeout(100);
 
@@ -68,9 +67,9 @@ async function testNormalSavePayload(browser) {
   check('setDoc OHNE merge gefunden (saveSettings)', !!fullWrite, settingsWrites);
   check('Payload hat GENAU die 10 erwarteten Felder, keine weiteren, keine fehlenden', fullWrite && JSON.stringify(Object.keys(fullWrite.data).sort()) === JSON.stringify([...EXPECTED_10_FIELDS].sort()), fullWrite && Object.keys(fullWrite.data));
   check('tdee = 2600 (neuer Formularwert)', fullWrite?.data.tdee === 2600, fullWrite?.data);
-  check('proteinGoal = 160', fullWrite?.data.proteinGoal === 160, fullWrite?.data);
+  check('040: proteinGoal = gespeicherter Altwert 150 (unveraendert, kein Loeschen)', fullWrite?.data.proteinGoal === 150, fullWrite?.data);
   check('027: carbsGoal = gespeicherter Altwert 325 (unveraendert, kein Loeschen)', fullWrite?.data.carbsGoal === 325, fullWrite?.data);
-  check('fatGoal = 90', fullWrite?.data.fatGoal === 90, fullWrite?.data);
+  check('040: fatGoal = gespeicherter Altwert 95 (unveraendert, kein Loeschen)', fullWrite?.data.fatGoal === 95, fullWrite?.data);
   check('gender = female', fullWrite?.data.gender === 'female', fullWrite?.data);
   check('age = 36', fullWrite?.data.age === 36, fullWrite?.data);
   check('height = 181', fullWrite?.data.height === 181, fullWrite?.data);

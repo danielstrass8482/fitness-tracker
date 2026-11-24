@@ -499,7 +499,16 @@ SELECT
   bw.weight_kg,
   (ds.data->>'final')::boolean AS final,
   (ds.data->>'backfilled')::boolean AS backfilled,
-  ds.data->>'appBuild' AS app_build
+  ds.data->>'appBuild' AS app_build,
+  -- Migration 018 (Aufgabe 040): Makroziele des Tages aus dem Snapshot, keine Rueckrechnung
+  (ds.data->>'goal_protein_g')::numeric AS ziel_protein_g,
+  (ds.data->>'goal_fat_g')::numeric AS ziel_fett_g,
+  (ds.data->>'goal_carbs_g')::numeric AS ziel_kh_g,
+  CASE
+    WHEN ds.data->>'goal_protein_g' IS NULL OR ds.day < DATE '2026-11-21' THEN NULL
+    WHEN ds.day < DATE '2026-11-24' THEN 'fix_027'
+    ELSE 'prozent_040'
+  END AS makro_modell
 FROM raw.daily_snapshots ds
 LEFT JOIN views.body_weight bw ON bw.day = ds.day
 WHERE ds.deleted_at IS NULL;

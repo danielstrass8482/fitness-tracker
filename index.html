@@ -1301,6 +1301,8 @@
       <div id="diary-summary" class="fo-card fo-sum" style="margin-bottom:8px;">
         <div id="diary-kcal-line" class="fo-sum__top"></div>
         <div id="diary-macro-line" class="fo-macros"></div>
+        <!-- 040: Fett-Hinweis (nur Anzeige), gefüllt in renderFoodLog -->
+        <div id="diary-fat-hint" class="fo-help" style="display:none;margin-top:6px;"></div>
       </div>
 
       <!-- Add Food Button -->
@@ -1421,38 +1423,22 @@
             <p class="fo-help" style="margin:0;">Wird automatisch aus dem Rechner befüllt, kann aber manuell überschrieben werden</p>
           </div>
 
-          <!-- Makro-Vorschlag -->
-          <div style="background:var(--fo-surface-2);border-radius:var(--fo-r-md);padding:12px;display:flex;flex-direction:column;gap:12px;">
-            <span class="fo-label">Makro-Vorschlag berechnen</span>
-            <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
-              <div class="fo-field">
-                <label class="fo-label" for="macro-goal">Ziel</label>
-                <div class="fo-select"><select id="macro-goal">
-                  <option value="lose">Abnehmen (−300 kcal Defizit)</option>
-                  <option value="maintain" selected>Gewicht halten</option>
-                  <option value="gain">Aufbauen (+200 kcal Überschuss)</option>
-                </select><svg class="fo-i" aria-hidden="true"><use href="#i-chevD"/></svg></div>
-              </div>
-              <button class="fo-btn fo-btn--secondary" type="button" onclick="calcMacroSuggestion()" style="white-space:nowrap;">Vorschlag berechnen</button>
-            </div>
-            <div id="macro-suggestion" class="fo-help" style="display:none;line-height:1.8;"></div>
-          </div>
-
+          <!-- 040: Makroziele automatisch als Anteile des Tages-Kalorienziels (calcMacroGoals), nur Anzeige -->
           <div class="fo-grid3">
             <div class="fo-field">
-              <label class="fo-label" for="settings-protein">Protein-Ziel (g)</label>
-              <input class="fo-input" type="number" id="settings-protein" placeholder="150">
+              <span class="fo-label">Protein</span>
+              <div class="fo-input" aria-readonly="true" style="color:var(--fo-text-3);display:flex;align-items:center;height:auto;min-height:44px;font-size:13px;line-height:1.2;white-space:normal;" id="settings-protein">20 % · mind. 1,8 g/kg</div>
             </div>
             <div class="fo-field">
-              <span class="fo-label">Kohlenhydrate (g)</span>
-              <!-- 027: nur Anzeige, KH-Ziel = Rest des Tagesziels (calcMacroGoals) -->
-              <div class="fo-input" id="settings-carbs" aria-readonly="true" title="Tagesziel − Protein − Fett" style="color:var(--fo-text-3);display:flex;align-items:center;height:auto;min-height:44px;font-size:13px;line-height:1.2;white-space:normal;">automatisch (Rest)</div>
+              <span class="fo-label">Kohlenhydrate</span>
+              <div class="fo-input" aria-readonly="true" style="color:var(--fo-text-3);display:flex;align-items:center;height:auto;min-height:44px;font-size:13px;line-height:1.2;white-space:normal;" id="settings-carbs">47 % (Rest)</div>
             </div>
             <div class="fo-field">
-              <label class="fo-label" for="settings-fat">Fett (g)</label>
-              <input class="fo-input" type="number" id="settings-fat" placeholder="100">
+              <span class="fo-label">Fett</span>
+              <div class="fo-input" aria-readonly="true" style="color:var(--fo-text-3);display:flex;align-items:center;height:auto;min-height:44px;font-size:13px;line-height:1.2;white-space:normal;" id="settings-fat">33 %</div>
             </div>
           </div>
+          <p class="fo-help" style="margin:0;">Makroziele werden automatisch aus dem Kalorienziel des Tages berechnet.</p>
 
           <div class="fo-field">
             <label class="fo-label" for="settings-recipe-display">Rezeptanzeige im Tagebuch</label>
@@ -2115,7 +2101,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-23 05:07';
+    const APP_BUILD = '2026-11-24 19:09';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4568,7 +4554,7 @@
       document.getElementById('daily-fat').textContent = Math.round(totalFat) + 'g';
       
       // Kalorienziel: historisch korrekt (Gewicht + Alter des Tages)
-      // 027: Protein/Fett fix aus den Einstellungen, KH = Rest des Ist-Kalorienziels
+      // 040: Makroziele = feste Anteile des Ist-Kalorienziels (calcMacroGoals), Protein mind. 1,8 g/kg
       const macroGoals = calcMacroGoals(currentDate);
       // 027b (Daniel 22.11.): Kalorienziel IMMER Ist, keine Prognose/Kennzeichnung. Prognose nur als Zusatz
       // beim KH-(bzw. Fett-)Ziel, Balken/Differenz der Makros weiter gegen das Ist-Ziel.
@@ -4624,12 +4610,17 @@
       setBar('bar-fat', fatPct, 'fett', totalFat, fatGoal, 'g');
       
       // Makro goals in tiles (Zeile 3)
-      document.getElementById('daily-protein-goal').textContent = proteinGoal > 0 ? `Ziel ${fmt(proteinGoal)} g Protein` : 'Protein';
+      // 040: Hinweis Protein-Untergrenze; Makro-Prognose (027b) jetzt je Makro nach demselben Prozentmodell
+      const proteinFloorHint = `Mindestwert ${fmt(MACRO_PROTEIN_MIN_G_PER_KG, 1)} g/kg`;
+      const fcHint = (fcVal, ziel) => macroFc && fcVal > ziel ? ` · ${macroFcLabel} ~${fmt(fcVal)} g (Prognose)` : '';
+      document.getElementById('daily-protein-goal').textContent = proteinGoal > 0
+        ? `Ziel ${fmt(proteinGoal)} g Protein${macroGoals.proteinFloorApplied ? ` · ${proteinFloorHint}` : ''}${fcHint(macroFc && macroFc.protein, proteinGoal)}`
+        : 'Protein';
       document.getElementById('daily-carbs-goal').textContent = carbsGoal > 0
-        ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate${macroGoals.floorApplied ? ` · Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : ''}${macroFc && macroFc.carbs > carbsGoal ? ` · ${macroFcLabel} ~${fmt(macroFc.carbs)} g (Prognose)` : ''}`
+        ? `Ziel ${fmt(carbsGoal)} g Kohlenhydrate${fcHint(macroFc && macroFc.carbs, carbsGoal)}`
         : 'Kohlenhydrate';
       document.getElementById('daily-fat-goal').textContent = fatGoal > 0
-        ? `Ziel ${fmt(fatGoal)} g Fett${macroFc && macroFc.fat > fatGoal ? ` · ${macroFcLabel} ~${fmt(macroFc.fat)} g (Prognose)` : ''}`
+        ? `Ziel ${fmt(fatGoal)} g Fett${fcHint(macroFc && macroFc.fat, fatGoal)}`
         : 'Fett';
 
       // Kompakte Kalorienzeile im Tagebuch: "2.231 / 2.541 kcal · −310", darunter Makros Ist / Ziel (gleiche Farben wie die Kacheln)
@@ -4645,14 +4636,29 @@
         macroLine.innerHTML = [['protein', 'Protein', totalProtein, proteinGoal], ['kh', 'Kohlenhydrate', totalCarbs, carbsGoal], ['fett', 'Fett', totalFat, fatGoal]]
           .map(([kennzahl, label, ist, ziel]) => {
             const m = kpiDisplay(kennzahl, ist, ziel);
-            // 027/027b: KH-/Fett-Ziel wie in der Übersichtskachel kennzeichnen (Untergrenze / Makro-Prognose)
-            const fcVal = !macroFc ? 0 : kennzahl === 'kh' ? macroFc.carbs : kennzahl === 'fett' ? macroFc.fat : 0;
+            // 040: Ziel wie in der Übersichtskachel kennzeichnen (Protein-Untergrenze / Makro-Prognose)
+            const fcVal = !macroFc ? 0 : kennzahl === 'kh' ? macroFc.carbs : kennzahl === 'fett' ? macroFc.fat : macroFc.protein;
             const khHint = m.cls
-              ? [kennzahl === 'kh' && macroGoals.floorApplied ? `Mindestwert ${MACRO_CARBS_MIN_G_PER_KG} g/kg` : '',
+              ? [kennzahl === 'protein' && macroGoals.proteinFloorApplied ? proteinFloorHint : '',
                  fcVal > ziel ? `${macroFcLabel} ~${fmt(fcVal)} g (Prognose)` : ''].filter(Boolean).join(' · ')
               : '';
             return `<div><div class="fo-macro__label">${label}</div> <div class="fo-macro__value ${m.cls || ''}"><b>${fmt(m.istR)}</b>${m.cls ? ' / ' + fmt(m.zielR) : ''} g</div>${khHint ? `<div class="fo-macro__label" data-kh-hint>${khHint}</div>` : ''}</div>`;
           }).join(' ');
+      }
+
+      // 040: Fett-Hinweis (nur Anzeige, keine Wirkung auf Ziele/Farben): Fett-kcal / aufgenommene kcal
+      // > 35 %. Vergangene Tage immer; heute erst ab 50 % des Kalorienziels erfasst; künftige Tage nie.
+      const fatHintEl = document.getElementById('diary-fat-hint');
+      if (fatHintEl) {
+        const todayStrFH = berlinTodayStr();
+        const fatShareDay = totalKcal > 0 ? (MACRO_KCAL_PER_G.fat * totalFat) / totalKcal : 0;
+        const fatHintEligible = currentDate < todayStrFH
+          || (currentDate === todayStrFH && todayGoal > 0 && totalKcal >= MACRO_FAT_HINT_TODAY_MIN_LOGGED * todayGoal);
+        const showFatHint = fatHintEligible && fatShareDay > MACRO_FAT_HINT_SHARE;
+        fatHintEl.style.display = showFatHint ? 'block' : 'none';
+        fatHintEl.textContent = showFatHint
+          ? `Fettanteil ${currentDate === todayStrFH ? 'heute ' : ''}${Math.round(fatShareDay * 100) > Math.round(MACRO_FAT_HINT_SHARE * 100) ? fmt(Math.round(fatShareDay * 100)) : fmt(fatShareDay * 100, 1)} % (über ${fmt(Math.round(MACRO_FAT_HINT_SHARE * 100))} %)`
+          : '';
       }
 
       // ── Schritte + Aktivitäten unter den Kacheln ─────────────────────────
@@ -7970,21 +7976,25 @@
     }
     window.fmt = fmt;
 
-    // 027: Makroziel-Konstanten (calcMacroGoals)
-    const MACRO_FAT_DEFAULT_G = 100;         // Daniel 21.11.2026: Fett fix 100 g
-    const MACRO_PROTEIN_DEFAULT_G = 150;
-    const MACRO_CARBS_MIN_G_PER_KG = 3;
+    // 040: Makroziel-Konstanten (calcMacroGoals) – Daniel 24.11.2026: feste Anteile des gesamten
+    // Tages-Kalorienziels (Protein 20 %, Fett 33 %, Kohlenhydrate 47 %), Protein mind. 1,8 g/kg;
+    // Differenz geht von den Kohlenhydraten ab. Ersetzt das 027/027b-Modell (P 150 g / F 100 g fix,
+    // KH = Rest, mind. 3 g/kg, Prognose 100 % KH). NICHT ohne Auftrag ändern.
+    const MACRO_SHARE = { protein: 0.20, fat: 0.33, carbs: 0.47 };
+    const MACRO_PROTEIN_MIN_G_PER_KG = 1.8;
     const MACRO_KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 };
-    // 027b prognoseAnteilFett: Anteil der Zusatz-kcal geplanter, noch offener Einheiten, der in der
-    // Makro-Prognose ins Fett geht (Rest -> Kohlenhydrate). Daniel 22.11.2026: derzeit 0 (100 % KH);
-    // ein späterer Fett-Anteil ist nur diese Konstante – NICHT ohne Auftrag ändern.
-    const MACRO_FORECAST_FAT_SHARE = 0;
+    // 040 Fett-Hinweis (nur Anzeige): Fettanteil an den aufgenommenen kcal über diesem Wert
+    const MACRO_FAT_HINT_SHARE = 0.35;
+    // heute erst ab diesem Anteil des Kalorienziels erfasster kcal (kein Frühstücks-Rauschen)
+    const MACRO_FAT_HINT_TODAY_MIN_LOGGED = 0.5;
 
     let settings = {
       tdee: 2700,
-      proteinGoal: MACRO_PROTEIN_DEFAULT_G,
-      carbsGoal: 325, // 027: nicht mehr verwendet (KH = Rest, calcMacroGoals); bleibt im Dokument
-      fatGoal: MACRO_FAT_DEFAULT_G,
+      // 040: proteinGoal/carbsGoal/fatGoal werden nicht mehr verwendet (Prozentmodell, calcMacroGoals);
+      // gespeicherte Werte bleiben unverändert im Dokument (saveSettings schreibt sie zurück).
+      proteinGoal: null,
+      carbsGoal: null,
+      fatGoal: null,
       gender: 'male',
       age: null,
       height: null,
@@ -8018,8 +8028,6 @@
         // Fill form
         if (document.getElementById('settings-tdee')) {
           document.getElementById('settings-tdee').value = settings.tdee || '';
-          document.getElementById('settings-protein').value = settings.proteinGoal || '';
-          document.getElementById('settings-fat').value = settings.fatGoal || '';
           const rdSel = document.getElementById('settings-recipe-display');
           if (rdSel) rdSel.value = settings.recipeDisplay || 'block';
           document.getElementById('settings-gender').value = settings.gender || 'male';
@@ -8114,11 +8122,11 @@
         return;
       }
       const tdee = parseInt(document.getElementById('settings-tdee').value) || 2700;
-      const protein = parseInt(document.getElementById('settings-protein').value) || 150;
-      // 027: KH-Ziel ist automatisch (Rest) - gespeicherten Altwert unverändert zurückschreiben (setDoc
-      // ohne merge, kein Löschen), er wird aber nicht mehr verwendet.
+      // 040: Makroziele automatisch (Prozentmodell, calcMacroGoals) - gespeicherte Altwerte unverändert
+      // zurückschreiben (setDoc ohne merge, kein Löschen), sie werden aber nicht mehr verwendet.
+      const protein = settings.proteinGoal ?? null;
       const carbs = settings.carbsGoal ?? null;
-      const fat = parseInt(document.getElementById('settings-fat').value) || MACRO_FAT_DEFAULT_G;
+      const fat = settings.fatGoal ?? null;
       const gender = document.getElementById('settings-gender').value;
       const age = parseInt(document.getElementById('settings-age').value) || null;
       const height = parseFloat(document.getElementById('settings-height').value) || null;
@@ -8353,42 +8361,43 @@
     }
     window.plannedOpenUnitsKcal = plannedOpenUnitsKcal;
 
-    // ── 027: Makroziele dynamisch ("fuel for the work required", Daniel 19.11./21.11.2026) ─────────
-    // Protein und Fett fix (Einstellungen), Kohlenhydrate = (Kalorienziel − 4×Protein − 9×Fett) / 4.
-    // Kalorienziel = IMMER das Ist (calcHistoricalKcalGoal, unverändert) – 027b: keine Prognose darin.
-    // Untergrenze KH: MACRO_CARBS_MIN_G_PER_KG × Gewicht des Tages (weightForDate); greift sie, wird
-    // floorApplied gesetzt und in der Anzeige ein Hinweis gezeigt. settings.carbsGoal wird nicht mehr verwendet.
-    // 027b Makro-Prognose (nur HEUTE, nur aus dem Plan): Zusatz-kcal offener Plan-Einheiten
-    // (plannedOpenUnitsKcal) gehen nach dem Rest-Modell in die Makros – Anteil MACRO_FORECAST_FAT_SHARE
-    // (prognoseAnteilFett) ins Fett, der Rest in die Kohlenhydrate; Protein unverändert.
+    // ── 040: Makroziele als feste Anteile des Tages-Kalorienziels (Daniel 24.11.2026) ─────────────
+    // G = Kalorienziel des Tages (calcHistoricalKcalGoal(date).total, IMMER das Ist, unverändert).
+    // P = round(max(20 %·G/4, 1,8 g/kg × weightForDate(date))), F = round(33 %·G/9),
+    // C = round((G − 4·P − 9·F)/4) – greift die Protein-Untergrenze, gehen die Mehr-kcal von den KH ab.
+    // Summe 4P+9F+4C = G bis auf Rundung: mit ganzen Gramm ist Gleichheit für beliebiges G nicht
+    // möglich (4P+4C ist ein Vielfaches von 4, 9F von 9); da C als Rest gerundet wird, ist die
+    // Abweichung höchstens 4 × 0,5 = 2 kcal.
+    // Makro-Prognose (027b, nur HEUTE, nur aus dem Plan): dasselbe Modell auf G + Zusatz-kcal der
+    // offenen Plan-Einheiten (plannedOpenUnitsKcal); nur Anzeige/Snapshot-Zusatz, goal_* bleiben Ist.
     // forecast = null, wenn keine offene Plan-Einheit oder die Prognose die Ist-Makros nicht erhöht.
-    // Konstanten MACRO_* zentral oberhalb von `let settings` (dort als Default gebraucht)
+    // settings.proteinGoal/fatGoal/carbsGoal werden nicht mehr verwendet. Konstanten MACRO_* zentral
+    // oberhalb von `let settings`.
+    function macroSplit(kcalGoal, weight) {
+      if (!(kcalGoal > 0)) return { protein: 0, fat: 0, carbs: 0, proteinFloorApplied: false };
+      const proteinShareG = MACRO_SHARE.protein * kcalGoal / MACRO_KCAL_PER_G.protein;
+      const proteinMinG = weight > 0 ? MACRO_PROTEIN_MIN_G_PER_KG * weight : 0;
+      const protein = Math.round(Math.max(proteinShareG, proteinMinG));
+      const fat = Math.round(MACRO_SHARE.fat * kcalGoal / MACRO_KCAL_PER_G.fat);
+      const carbs = Math.max(0, Math.round((kcalGoal - MACRO_KCAL_PER_G.protein * protein - MACRO_KCAL_PER_G.fat * fat) / MACRO_KCAL_PER_G.carbs));
+      return { protein, fat, carbs, proteinFloorApplied: proteinMinG > proteinShareG };
+    }
+    window.macroSplit = macroSplit;
     function calcMacroGoals(dateStr) {
-      const protein = Number(settings.proteinGoal) || MACRO_PROTEIN_DEFAULT_G;
-      const fat = Number(settings.fatGoal) || MACRO_FAT_DEFAULT_G;
       const kcalGoal = calcHistoricalKcalGoal(dateStr)?.total || 0;
-      const weight = weightForDate(dateStr);
-      const minCarbs = weight > 0 ? Math.round(MACRO_CARBS_MIN_G_PER_KG * weight) : 0;
-      const restCarbsExact = kcalGoal > 0
-        ? (kcalGoal - MACRO_KCAL_PER_G.protein * protein - MACRO_KCAL_PER_G.fat * fat) / MACRO_KCAL_PER_G.carbs
-        : 0;
-      const restCarbs = Math.round(restCarbsExact);
-      const floorApplied = kcalGoal > 0 && restCarbs < minCarbs;
-      const carbs = kcalGoal > 0 ? (floorApplied ? minCarbs : restCarbs) : 0;
+      const weight = Number(weightForDate(dateStr)) || 0;
+      const m = macroSplit(kcalGoal, weight);
       let forecast = null;
       if (kcalGoal > 0 && dateStr === berlinTodayStr()) {
         const open = plannedOpenUnitsKcal(dateStr);
         if (open.kcal > 0) {
-          const fatShare = MACRO_FORECAST_FAT_SHARE;
-          const fcFat = Math.round(fat + open.kcal * fatShare / MACRO_KCAL_PER_G.fat);
-          const fcRestCarbs = Math.round(restCarbsExact + open.kcal * (1 - fatShare) / MACRO_KCAL_PER_G.carbs);
-          const fcCarbs = Math.max(fcRestCarbs, minCarbs);
-          if (fcCarbs > carbs || fcFat > fat) {
-            forecast = { carbs: fcCarbs, fat: fcFat, zusatzKcal: open.kcal, geplant: open.geplant, floorApplied: fcRestCarbs < minCarbs };
+          const fc = macroSplit(kcalGoal + open.kcal, weight);
+          if (fc.carbs > m.carbs || fc.fat > m.fat || fc.protein > m.protein) {
+            forecast = { ...fc, zusatzKcal: open.kcal, geplant: open.geplant };
           }
         }
       }
-      return { protein, fat, carbs, kcalGoal: Math.round(kcalGoal), floorApplied, minCarbs, restCarbs, forecast };
+      return { ...m, kcalGoal: Math.round(kcalGoal), weight, proteinMinG: Math.round(MACRO_PROTEIN_MIN_G_PER_KG * weight), forecast };
     }
     window.calcMacroGoals = calcMacroGoals;
 
@@ -8719,8 +8728,8 @@
         makroziele_heute: (() => {
           const m = calcMacroGoals(todayStr);
           return {
-            protein_g: m.protein, fett_g: m.fat, kohlenhydrate_g: m.carbs, kh_untergrenze_aktiv: m.floorApplied,
-            hinweis: 'Ist-Makroziele: Protein und Fett fix; Kohlenhydrate = Rest des Ist-Kalorienziels (kalorienziel_ist), mind. ' + MACRO_CARBS_MIN_G_PER_KG + ' g/kg.'
+            protein_g: m.protein, fett_g: m.fat, kohlenhydrate_g: m.carbs, protein_untergrenze_aktiv: m.proteinFloorApplied,
+            hinweis: 'Ist-Makroziele als feste Anteile des Ist-Kalorienziels (kalorienziel_ist): Protein ' + Math.round(MACRO_SHARE.protein * 100) + ' %, Fett ' + Math.round(MACRO_SHARE.fat * 100) + ' %, Kohlenhydrate ' + Math.round(MACRO_SHARE.carbs * 100) + ' %; Protein mindestens ' + MACRO_PROTEIN_MIN_G_PER_KG + ' g/kg (Mehr-kcal gehen von den Kohlenhydraten ab).'
           };
         })(),
         makro_prognose: (() => {
@@ -8728,10 +8737,10 @@
           const fc = m.forecast;
           if (!fc) return { aktiv: false, hinweis: 'Keine offene geplante Einheit heute – Makro-Prognose = Ist-Makroziele.' };
           return {
-            aktiv: true, kohlenhydrate_g: fc.carbs, fett_g: fc.fat, protein_g: m.protein,
+            aktiv: true, kohlenhydrate_g: fc.carbs, fett_g: fc.fat, protein_g: fc.protein,
             zusatz_kcal_geplant: fc.zusatzKcal,
             geplante_einheiten: fc.geplant.map(g => ({ typ: g.typ, distanz_km: g.distanz_km, dauer_min: g.dauer_min, kcal: g.kcal })),
-            hinweis: 'PROGNOSE nur für die Makros: Ist-Makroziele + Zusatz-kcal der geplanten, noch nicht erfassten Einheiten (' + Math.round((1 - MACRO_FORECAST_FAT_SHARE) * 100) + ' % Kohlenhydrate, ' + Math.round(MACRO_FORECAST_FAT_SHARE * 100) + ' % Fett). Keine Schritt-Annahme.'
+            hinweis: 'PROGNOSE nur für die Makros: Ist-Makroziele + Zusatz-kcal der geplanten, noch nicht erfassten Einheiten, verteilt nach demselben Prozentmodell (Ist-Kalorienziel + Zusatz-kcal). Keine Schritt-Annahme.'
           };
         })(),
         schritte_letzte_7_tage: stepsHistory,
@@ -9381,61 +9390,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       </div>`;
     }
 
-    window.calcMacroSuggestion = function() {
-      const weight = parseFloat(document.getElementById('settings-weight')?.value) || settings.weight || 75;
-      const tdee = parseInt(document.getElementById('settings-tdee')?.value) || settings.tdee || 2300;
-      const goal = document.getElementById('macro-goal')?.value || 'maintain';
-
-      if (!weight || !tdee) {
-        showToast('Bitte erst Gewicht und TDEE eintragen');
-        return;
-      }
-
-      // Adjust kcal target based on goal
-      const kcalAdj = goal === 'lose' ? -300 : goal === 'gain' ? 200 : 0;
-      const targetKcal = tdee + kcalAdj;
-
-      // Protein: 1.8–2.0g/kg for hybrid athlete (upper range)
-      const proteinFactor = goal === 'gain' ? 2.0 : goal === 'lose' ? 2.2 : 1.8;
-      const protein = Math.round(weight * proteinFactor);
-      const proteinKcal = protein * 4;
-
-      // Fat: minimum 0.9g/kg, rounded to sensible number
-      const fatMin = Math.round(weight * 0.9);
-      const fatKcal = fatMin * 9;
-
-      // Carbs: remaining calories
-      const carbsKcal = targetKcal - proteinKcal - fatKcal;
-      const carbs = Math.max(50, Math.round(carbsKcal / 4));
-
-      // Recalc fat with remaining if carbs went negative (shouldn't happen but safety)
-      const fat = Math.round((targetKcal - protein * 4 - carbs * 4) / 9);
-      const actualKcal = protein * 4 + carbs * 4 + fat * 9;
-
-      // Show explanation
-      const goalLabel = goal === 'lose' ? 'Abnehmen (−300 kcal)' : goal === 'gain' ? 'Aufbauen (+200 kcal)' : 'Gewicht halten';
-      document.getElementById('macro-suggestion').style.display = 'block';
-      document.getElementById('macro-suggestion').innerHTML = `
-        <strong style="color:var(--text);">Ziel: ${goalLabel} → ${fmt(targetKcal)} kcal</strong><br>
-        Protein: <strong>${protein}g</strong> (${fmt(proteinFactor, 1)}g × ${weight}kg = ${fmt(protein * 4)} kcal)<br>
-        Kohlenhydrate: <strong>${carbs}g</strong> (= ${fmt(carbs * 4)} kcal)<br>
-        Fett: <strong>${fat}g</strong> (min. 0,9g/kg = ${fmt(fat * 9)} kcal)<br>
-        <span style="color:var(--primary);">Gesamt: ${fmt(actualKcal)} kcal</span>
-        <br><br>
-        <button onclick="applyMacroSuggestion(${protein},${carbs},${fat})" 
-          style="padding:7px 14px;background:var(--primary);border:none;border-radius:6px;color:var(--fo-on-primary);cursor:pointer;font-size:13px;">
-          Vorschlag übernehmen
-        </button>
-      `;
-    };
-
-    window.applyMacroSuggestion = function(protein, carbs, fat) {
-      document.getElementById('settings-protein').value = protein;
-      // 027: KH-Feld ist nur noch Anzeige (automatisch Rest des Tagesziels)
-      document.getElementById('settings-fat').value = fat;
-      document.getElementById('macro-suggestion').style.display = 'none';
-      showToast('Makros übernommen – bitte Einstellungen speichern', 'ok');
-    };
+    // 040: Makro-Vorschlag (calcMacroSuggestion/applyMacroSuggestion) entfernt – Makroziele sind
+    // automatisch (Prozentmodell, calcMacroGoals), die Eingabefelder gibt es nicht mehr.
 
 
     // ── Google Fit: in der App abgeschaltet (012b, 14.11.2026) ───────────────────────────
@@ -13639,13 +13595,13 @@ Regeln:
         steps,
         activities,
         intake: getDayIntakeTotals(date),
-        // 027: Makroziele des Tages (Auswertung über den Connector; View-Erweiterung eigener Auftrag)
+        // 027/040: Makroziele des Tages (Connector: views.daily_summary ziel_*_g, Migration 018)
         ...(() => {
           const m = calcMacroGoals(date);
-          // 027b: goal_* = Ist-Makroziele; Prognose nur separat und nur wenn aktiv (goal_is_forecast entfällt)
+          // goal_* = Ist-Makroziele (040: Prozentmodell); Prognose nur separat und nur wenn aktiv
           return {
             goal_protein_g: m.protein, goal_fat_g: m.fat, goal_carbs_g: m.carbs,
-            ...(m.forecast ? { goal_carbs_forecast_g: m.forecast.carbs, goal_fat_forecast_g: m.forecast.fat } : {})
+            ...(m.forecast ? { goal_protein_forecast_g: m.forecast.protein, goal_carbs_forecast_g: m.forecast.carbs, goal_fat_forecast_g: m.forecast.fat } : {})
           };
         })()
       };

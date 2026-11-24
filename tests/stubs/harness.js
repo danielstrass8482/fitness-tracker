@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const { filterKnownConsoleErrors } = require('./known-errors.js');
 
-const INDEX_HTML = path.join(__dirname, '..', '..', 'index.html');
+// 040: INDEX_HTML per Umgebungsvariable ueberschreibbar (Vorher/Nachher-Vergleich gegen alte Version)
+const INDEX_HTML = process.env.INDEX_HTML || path.join(__dirname, '..', '..', 'index.html');
 const STUB_PATH = path.join(__dirname, 'firebase-stub.mjs');
 const TEST_UID = 'TESTUID0000000000000001';
 

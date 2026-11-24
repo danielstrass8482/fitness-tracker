@@ -24,7 +24,7 @@ const TESTS = [
   { file: 'run-024-tagescheck.js', args: [] },
   { file: 'run-025-zirkel-einfuegen.js', args: [] },
   { file: 'run-026-kategorie-bestaetigen.js', args: [] },
-  { file: 'run-027-makroziele.js', args: [] },
+  { file: 'run-040-makro-prozent.js', args: [] }, // ersetzt run-027-makroziele.js (027/027b-Modell, abgeloest durch 040)
   { file: 'run-028b-ausruestung.js', args: [] },
   { file: 'run-032-oura-karte.js', args: [] },
   { file: 'run-033-bls-rezeptsuche.js', args: [] },

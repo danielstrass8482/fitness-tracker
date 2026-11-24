@@ -143,7 +143,7 @@ Felder (Präsenz = Count über alle 1250 Docs):
 | `datum` | string | **29632** – 1715 Docs ohne `datum` (s. 1d) |
 | `meal` | string, Werte `Morgens`, `Mittags`, `Nachmittags`, `Abends` | immer |
 | `amount` | int (Stichproben) | immer |
-| `kcal`, `protein`, `carbs`, `fat` | int\|double | immer |
+| `kcal`, `protein`, `carbs`, `fat` | int\|double | immer (gesättigte Fettsäuren nicht erfasst, 040) |
 | `recipeId` | string | 421 (2026-05-12 – 2026-11-04) |
 | `_fromRecipe` | (nicht gelesen) | 44 (2026-04-25 – 2026-04-30) |
 | `unit` | string, Werte `grams` (6), `portions` (2) | 8 (ab 2026-11-03) |
@@ -313,7 +313,7 @@ Kandidatennamen aus dem Code geprüft. Typen stammen aus typ-spezifischen Bereic
 
 | Dokument | Felder (Typ) | Secret-Felder |
 |---|---|---|
-| `settings/main` | `activityLevel`, `age`, `carbsGoal`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`); `assumedDailySteps` ungenutzt seit 012d (15.11.2026, Platzhalter "Angenommene Alltagsschritte" entfernt) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht; `detailDays` ebenso ungenutzt seit 021 (18.11.2026, Einstellung "Detaildaten laden" entfernt - nirgends ausgewertet) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht (verschwindet beim nächsten Speichern) | – |
+| `settings/main` | `activityLevel`, `age`, `carbsGoal`, `fatGoal`, `height`, `proteinGoal`, `tdee`, `weight` (number), `gender`, `recipeDisplay` (string); `anthropicApiKey` am 10.11.2026 entfernt (005c2, KI nur noch über `anthropicProxy`); `assumedDailySteps` ungenutzt seit 012d (15.11.2026, Platzhalter "Angenommene Alltagsschritte" entfernt) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht; `proteinGoal`/`fatGoal`/`carbsGoal` ungenutzt seit 040 (24.11.2026, Makroziele automatisch als Anteile des Kalorienziels) - saveSettings schreibt die gespeicherten Werte unverändert zurück; `detailDays` ebenso ungenutzt seit 021 (18.11.2026, Einstellung "Detaildaten laden" entfernt - nirgends ausgewertet) - App liest/schreibt es nicht mehr, Feld in Firestore nicht migriert/gelöscht (verschwindet beim nächsten Speichern) | – |
 | `settings/favorites` | `ids` (array) | – |
 | `settings/backup` | `lastDriveBackup`, `lastDriveFileId`, `lastDriveFileName`, `lastDriveBackupAttempt` (ISO-Zeitstempel, seit 04.11.2026), `lastDriveBackupError` (Kurztext oder null, seit 04.11.2026) (string) | – (Drive-Referenzen; Auto-Backup nur wenn letzter Versuch > 24 h) |
 | `settings/exercises` | 11 Übungsschlüssel (`pullups`, `pushups`, `lunges`, `terraband_knie`, `custom_*`) je map | – |
@@ -675,7 +675,7 @@ App selbst mit ihrer eigenen Berechnungslogik geschrieben (`buildDailySnapshotPa
 kcalGezaehlt, formel?, garminNetto?, covered?}]` (je Trainingseintrag; `formel`/`garminNetto` nur bei
 verknüpftem Zirkel, siehe `zirkelPulseBreakdown`; `covered:true` ab 004b/07.11.2026 bei einer durch
 eine Plan-Einzelübung abgedeckten unverknüpften Garmin-Kraft-Einheit, `kcalGezaehlt` dann 0), `intake: {kcal, protein, carbs, fat}`
-(aus `getDayIntakeTotals`). Ausloeser: nach vollständigem Laden, periodisch alle 30 Min
+(aus `getDayIntakeTotals`); ab 027 (21.11.2026) `goal_protein_g`, `goal_fat_g`, `goal_carbs_g` (Makroziele des Tages, `calcMacroGoals`; bis 040 Modell „fix“ P 150/F 100/KH Rest, ab 040 (APP_BUILD 2026-11-24) Prozentmodell 20/33/47 % mit Protein ≥ 1,8 g/kg, siehe `docs/kalorien.md`), nur bei aktiver Makro-Prognose (heute, offene Plan-Einheit) zusätzlich `goal_carbs_forecast_g`, `goal_fat_forecast_g` und ab 040 `goal_protein_forecast_g`; ältere Snapshots nicht nachberechnet. Ausloeser: nach vollständigem Laden, periodisch alle 30 Min
 solange sichtbar, nach Speichern/Löschen eines Eintrags für heute (gedrosselt 1×/Min);
 beim Tageswechsel wird der Vortag einmalig mit `final=true` nachgezogen. Postgres-Sicht
 `views.daily_summary` (siehe `analytics/schema.sql`) macht daraus eine typisierte

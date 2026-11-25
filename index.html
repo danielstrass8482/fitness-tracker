@@ -1204,11 +1204,12 @@
             <p class="fo-help" style="margin:0;">Schritte kommen automatisch von der Garmin-Uhr; fehlt ein Garmin-Tageswert, wird Oura genutzt.</p>
             <div class="fo-field">
               <label class="fo-label" for="log-date">Datum</label>
-              <input class="fo-input" type="date" id="log-date">
+              <input class="fo-input" type="date" id="log-date" onchange="renderWeightHints()">
             </div>
             <div class="fo-field">
               <label class="fo-label" for="log-weight">Gewicht (kg)</label>
               <input class="fo-input" type="number" id="log-weight" step="0.1" placeholder="75.0">
+              <div class="fo-help" id="log-weight-hint"></div>
             </div>
             <input type="hidden" id="log-steps" value="">
             <button class="fo-btn fo-btn--primary fo-btn--block" type="button" onclick="saveDayLog()">Tageslog speichern</button>
@@ -2124,7 +2125,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-24 21:22';
+    const APP_BUILD = '2026-11-25 06:04';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -3203,10 +3204,8 @@
         const gender = s?.gender || 'male';
         if (!height) return { base: 0, activity: 0, daily: 0, total: 0 };
 
-        const logsWithWeight = (allDayLogs || trainingEntries.filter(e => e.typ === 'tageslog'))
-          .filter(e => e.weight && e.datum <= date)
-          .sort((a, b) => b.datum.localeCompare(a.datum));
-        const weight = logsWithWeight[0]?.weight || s?.weight || 75;
+        // 047: Gewicht nach derselben Tagesregel wie weightForDate (Waage vor Handeintrag)
+        const weight = weightForDateFrom(date, allDayLogs || trainingEntries);
 
         const age = s?.birthday ? calcAgeAtDate(s.birthday, date) : s?.age;
         if (!age) return { base: 0, activity: 0, daily: 0, total: 0 };
@@ -4220,11 +4219,33 @@
     // sonst 75 kg. Gleiche Quelle/Reihenfolge wie calcHistoricalKcalGoal (BMR), damit Trainings- und
     // Kalorienziel-Berechnung dasselbe Gewicht verwenden. Ohne datum (z.B. Vorschau ohne konkretes Datum):
     // aktuelles Einstellungs-Gewicht.
+    // 047 (Daniel 25.11.2026: "A" = Waage hat Vorrang): je Tag zählt die Garmin-Waage
+    // (weightGarmin, letzte Wiegung des Tages, vom VPS-Sync), sonst das manuelle Tagesgewicht (weight).
+    // Dann der neueste Tag ≤ date mit einem der beiden (gleiche Tagesregel), sonst settings.weight, sonst 75.
+    // Das manuelle Feld weight wird nie überschrieben.
+    function dayLogWeight(e) {
+      return (e && (e.weightGarmin || e.weight)) || null;
+    }
+    function weightForDateFrom(date, logs) {
+      const best = (logs || []).filter(e => e.typ === 'tageslog' && dayLogWeight(e) && e.datum <= date)
+        .sort((a, b) => b.datum.localeCompare(a.datum))[0];
+      return dayLogWeight(best) || settings.weight || 75;
+    }
     function weightForDate(date) {
       if (!date) return settings.weight || 75;
-      const logsWithWeight = trainingEntries.filter(e => e.typ === 'tageslog' && e.weight && e.datum <= date)
-        .sort((a, b) => b.datum.localeCompare(a.datum));
-      return logsWithWeight[0]?.weight || settings.weight || 75;
+      return weightForDateFrom(date, trainingEntries);
+    }
+    window.weightForDate = weightForDate;
+    // Neueste Garmin-Wiegung am oder vor date (für die Anzeige "Waage 76,1 kg (24.11. 05:47)").
+    function latestGarminWeighIn(date) {
+      return trainingEntries.filter(e => e.typ === 'tageslog' && e.weightGarmin && e.datum <= date)
+        .sort((a, b) => b.datum.localeCompare(a.datum))[0] || null;
+    }
+    function garminWeighInLabel(e) {
+      if (!e) return '';
+      const [, m, d] = e.datum.split('-');
+      const hhmm = typeof e.weightGarminTs === 'string' ? e.weightGarminTs.slice(11, 16) : '';
+      return `Waage ${fmt(e.weightGarmin, 1)} kg (${d}.${m}.${hhmm ? ' ' + hhmm : ''})`;
     }
 
     // Puls-Kalorien für Zirkel mit verknüpfter Garmin-Kraftaktivität (Phase 1d, 02.11.2026): die
@@ -7411,12 +7432,13 @@
       };
       
       try {
-        await setDoc(doc(userTrainingCol(), String(entry.id)), entry);
+        // 047: merge, damit die Waagen-Felder (weightGarmin …) des Tages erhalten bleiben
+        await setDoc(doc(userTrainingCol(), String(entry.id)), entry, { merge: true });
         
         // Update local
         const idx = trainingEntries.findIndex(e => e.id === entry.id);
         if (idx >= 0) {
-          trainingEntries[idx] = entry;
+          trainingEntries[idx] = { ...trainingEntries[idx], ...entry };
         } else {
           trainingEntries.push(entry);
         }
@@ -7427,6 +7449,9 @@
 
         renderTrainingHistory();
         renderDataStats();
+        if (weight != null && trainingEntries.find(e => e.id === entry.id)?.weightGarmin) {
+          showToast('Gespeichert – an diesem Tag zählt die Waage', 'ok');
+        }
 
         // Auto-update weight in settings: NUR wenn dieser Eintrag (nach dem Speichern) auch der
         // NEUESTE datierte Gewichtseintrag ist – ein nachträglich für ein VERGANGENES Datum erfasstes
@@ -7499,6 +7524,7 @@
     };
 
     function renderTrainingHistory() {
+      try { renderWeightHints(); } catch (e) { console.warn('Waagen-Hinweis:', e); }
       const container = document.getElementById('training-history');
       if (!container) return;
 
@@ -8137,6 +8163,8 @@
           // einen Tageslog-Eintrag für HEUTE an, wodurch "neuester datierter Eintrag" und "zuletzt
           // manuell gespeichert" wieder übereinstimmen.
           document.getElementById('settings-weight').value = weightForDate(berlinTodayStr()) || '';
+          settingsWeightPrefill = document.getElementById('settings-weight').value;
+          renderWeightHints();
 
           calcTDEE();
         }
@@ -8147,6 +8175,41 @@
         console.error('Load settings error:', err);
       }
     }
+
+    // 047: Wert, mit dem loadSettings das Gewichtsfeld vorbelegt hat - unverändert gespeichert und von
+    // der Waage stammend → kein Handeintrag (sonst würde der Waagenwert als manuelles Gewicht kopiert).
+    let settingsWeightPrefill = null;
+    function todayWeightIsGarmin() {
+      const g = latestGarminWeighIn(berlinTodayStr());
+      return !!g && Number(g.weightGarmin) === Number(weightForDate(berlinTodayStr()));
+    }
+    // Waagen-Anzeige in Einstellungen (neueste Wiegung) und Tageslog (Wiegung des gewählten Tages).
+    function renderWeightHints() {
+      const today = berlinTodayStr();
+      const sHint = document.getElementById('settings-weight-hint');
+      if (sHint) {
+        const g = latestGarminWeighIn(today);
+        const manual = getLatestWeight();
+        const parts = [];
+        if (g) parts.push(garminWeighInLabel(g));
+        if (manual) parts.push(`Zuletzt eingetragen: ${manual.weight} kg am ${manual.datum}`);
+        if (g) parts.push('Handeintrag zählt nur an Tagen ohne Wiegung.');
+        sHint.textContent = parts.join(' · ');
+        const input = document.getElementById('settings-weight');
+        // Feld folgt neuen Daten, solange es nicht von Hand geändert wurde
+        if (input && settingsWeightPrefill !== null && input.value === settingsWeightPrefill) {
+          const v = String(weightForDate(today) || '');
+          if (v !== input.value) { input.value = v; settingsWeightPrefill = v; calcTDEE(); }
+        }
+      }
+      const lHint = document.getElementById('log-weight-hint');
+      if (lHint) {
+        const date = document.getElementById('log-date')?.value;
+        const e = date && trainingEntries.find(x => x.typ === 'tageslog' && x.datum === date && x.weightGarmin);
+        lHint.textContent = e ? `${garminWeighInLabel(e)} – an diesem Tag zählt die Waage, ein Handeintrag wird nicht verwendet.` : '';
+      }
+    }
+    window.renderWeightHints = renderWeightHints;
 
     function getLatestWeight() {
       // Find most recent dayLog with a weight entry
@@ -8221,7 +8284,10 @@
       const gender = document.getElementById('settings-gender').value;
       const age = parseInt(document.getElementById('settings-age').value) || null;
       const height = parseFloat(document.getElementById('settings-height').value) || null;
-      const weight = parseFloat(document.getElementById('settings-weight').value) || null;
+      const weightField = parseFloat(document.getElementById('settings-weight').value) || null;
+      const weightFromScale = weightField != null && document.getElementById('settings-weight').value === settingsWeightPrefill && todayWeightIsGarmin();
+      // 047: unverändert übernommener Waagenwert → settings.weight (Rückfallwert) bleibt, kein Tageslog-Handeintrag
+      const weight = weightFromScale ? (settings.weight ?? weightField) : weightField;
       // Kein Dropdown mehr: gespeicherten Wert unverändert zurückschreiben (setDoc ohne merge)
       const activityLevel = settings.activityLevel || 1.55;
       
@@ -8234,7 +8300,7 @@
       try {
         const docRef = doc(db, 'users', userId, 'settings', 'main');
         await setDoc(docRef, settings);
-        if (weight != null) {
+        if (weight != null && !weightFromScale) {
           try { await upsertTodayWeightLog(weight); }
           catch (e) { console.error('Tageslog-Gewicht (heute) speichern fehlgeschlagen:', e); showToast('Gewicht in Einstellungen gespeichert, Tageslog-Eintrag fehlgeschlagen', 'bad'); }
         }

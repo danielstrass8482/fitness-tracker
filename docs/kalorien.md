@@ -1,12 +1,29 @@
 # Kalorienziel, Aktivitäts- und Schrittkalorien, Makroziele
 
-Stand 040 (24.11.2026). Beschreibt den Ist-Code in `index.html`; die Kalorienformeln wurden in 040
+Stand 040 (24.11.2026), Gewichtsquelle 047 (25.11.2026). Beschreibt den Ist-Code in `index.html`; die Kalorienformeln wurden in 040
 **nicht** geändert (nur dokumentiert). Formeln nur auf ausdrücklichen Auftrag ändern.
 
 ## 1. Tages-Kalorienziel (`calcHistoricalKcalGoal(date)` → `{base, activity, daily, total}`)
 
 - `base` = Mifflin-St-Jeor-Grundumsatz × `ACTIVITY_FACTOR` 1,375 (fest „leicht aktiv“), mit Gewicht
-  des Tages (letzter Tageslog ≤ Datum, sonst `settings.weight`, sonst 75 kg) und Alter am Datum.
+  des Tages (`weightForDate`/`weightForDateFrom`, siehe 1a) und Alter am Datum.
+
+## 1a. Gewicht des Tages (`weightForDate(date)`, 047, 25.11.2026)
+
+Daniel 25.11.2026: „A“ = „Waage hat Vorrang: Fuelofit übernimmt automatisch das Garmin-Gewicht. Dein
+Handeintrag zählt nur, wenn es an dem Tag keine Wiegung gibt.“
+
+- Je Tag (`entries/log_YYYYMMDD`, `typ: 'tageslog'`): `weightGarmin` (Garmin-Waage, letzte Wiegung des
+  Tages, VPS-Sync) vor `weight` (Handeintrag aus Einstellungen/Tageslog).
+- Für ein Datum: neuester Tag ≤ Datum mit einem der beiden Werte (gleiche Tagesregel), sonst
+  `settings.weight`, sonst 75 kg. Gilt überall, wo Gewicht eingeht: BMR/`base`, Aktivitätskalorien,
+  Zirkel-kcal, Protein-Untergrenze. Die Formeln selbst sind unverändert.
+- Der Handeintrag wird nie überschrieben; an Tagen mit Wiegung wird er gespeichert, aber nicht verwendet
+  (Hinweis in der App). Ein unverändert gespeicherter Waagenwert in den Einstellungen wird nicht als
+  Handeintrag kopiert.
+- Vergangene Tages-Snapshots (`dailySnapshots`, final) werden nicht neu berechnet; nur der Snapshot von
+  heute (und ein noch nicht finaler Vortag beim nächsten App-Start, sowie der manuelle Button
+  „Tageswerte neu berechnen“) nutzen das neue Gewicht.
 - `activity` = Summe `activityKcalForGoal(e)` über die wirksamen Trainingseinträge des Tages
   (`getEffectiveTrainingEntries`): Regeln aus `countsAsActivity` (Plan neben Auto-Eintrag gleichen
   Typs zählt nicht, Einträge ohne `source` zählen nicht); manuelle/Plan-Einträge erst ab

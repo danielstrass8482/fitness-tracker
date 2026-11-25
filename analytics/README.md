@@ -171,3 +171,10 @@ Tempo, Lauf-/Geh-/Stehzeit (msg 312), Handgelenk- vs. Gurt-HF (record f136/f144)
 `raw.garmin_fit_laps`, View `views.lauf_details`; Spalten an training_sessions, aktivitaet_runden, aktivitaet_verlauf angehaengt.
 Altbestand einmalig per `backfill_lauf_extras_046.py` (fortsetzbar ueber `extras_version`, `nice`, Pause je Datei). Feldquellen
 im Kopf von `migrations/024_lauf_details.sql`.
+
+**025 (Aufgabe 047, 25.11.2026)**: Garmin-Waage. `views.body_weight` + Spalten `weight_garmin_kg` (letzte Wiegung des Tages),
+`weight_manual_kg` (Handeintrag), `weight_used_kg` (Vorrang Waage, sonst Hand, wie App `weightForDate`), `quelle`
+('waage'/'manuell'); `weight_kg` = `weight_used_kg` (vorher nur Handeintrag; gewaehlt, damit Tage nur mit Waage nicht
+als NULL-Zeilen erscheinen). Neu `views.koerperzusammensetzung` (Koerperfett, Muskel-, Knochenmasse, Wasser, BMI,
+Anzahl Wiegungen) - Waagen-Schaetzung (BIA), nur fuer Trends. Quelle: tageslog-Felder aus `ingestGarmin {weights}`
+(VPS `sync_official.py`). Regeln im Kopf von `migrations/025_koerpergewicht_waage.sql`.

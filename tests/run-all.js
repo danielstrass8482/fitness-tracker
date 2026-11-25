@@ -32,6 +32,7 @@ const TESTS = [
   { file: '../labor/test/run-kern.js', args: [] },
   { file: 'run-038-zaehl-labor.js', args: [] },
   { file: 'run-042-aktivitaet-notiz.js', args: [] },
+  { file: 'run-047-gewicht-waage.js', args: [] },
 ];
 
 function statusFor(code) {

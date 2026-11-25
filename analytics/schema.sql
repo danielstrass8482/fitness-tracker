@@ -270,14 +270,45 @@ WHERE deleted_at IS NULL AND day IS NOT NULL
 GROUP BY day;
 
 -- 2) Gewicht: aus entries.typ='tageslog', Feld weight (nur gesetzt, wenn im Tageslog erfasst).
+-- Stand Migration 025 (Aufgabe 047): Waage (weightGarmin) vor Handeintrag (weight); weight_kg = weight_used_kg.
 CREATE OR REPLACE VIEW views.body_weight AS
+WITH t AS (
+  SELECT
+    day,
+    NULLIF((data->>'weightGarmin')::numeric, 0) AS g,
+    NULLIF((data->>'weight')::numeric, 0) AS m
+  FROM raw.entries
+  WHERE deleted_at IS NULL
+    AND data->>'typ' = 'tageslog'
+)
 SELECT
   day,
-  (data->>'weight')::numeric AS weight_kg
-FROM raw.entries
-WHERE deleted_at IS NULL
-  AND data->>'typ' = 'tageslog'
-  AND data->>'weight' IS NOT NULL;
+  COALESCE(g, m) AS weight_kg,
+  g AS weight_garmin_kg,
+  m AS weight_manual_kg,
+  COALESCE(g, m) AS weight_used_kg,
+  CASE WHEN g IS NOT NULL THEN 'waage' ELSE 'manuell' END AS quelle
+FROM t
+WHERE g IS NOT NULL OR m IS NOT NULL;
+
+CREATE OR REPLACE VIEW views.koerperzusammensetzung AS
+SELECT
+  e.day,
+  substr(e.data->>'weightGarminTs', 12, 5) AS uhrzeit,
+  (e.data->>'weightGarmin')::numeric AS gewicht_kg,
+  (e.data->>'bodyFatPct')::numeric AS koerperfett_pct,
+  (e.data->>'muscleMassKg')::numeric AS muskelmasse_kg,
+  (e.data->>'boneMassKg')::numeric AS knochenmasse_kg,
+  (e.data->>'bodyWaterPct')::numeric AS koerperwasser_pct,
+  (e.data->>'bmiGarmin')::numeric AS bmi,
+  (e.data->>'weighInsGarmin')::int AS wiegungen
+FROM raw.entries e
+WHERE e.deleted_at IS NULL
+  AND e.data->>'typ' = 'tageslog'
+  AND NULLIF((e.data->>'weightGarmin')::numeric, 0) IS NOT NULL;
+
+COMMENT ON VIEW views.koerperzusammensetzung IS
+  'Waagen-Schaetzung (BIA), absolute Werte ungenau, nur fuer Trends. Letzte Wiegung je Tag (Garmin-Waage, Aufgabe 047).';
 
 -- 3) Trainings (Stand Migration 009, Aufgabe 012c; Garmin primaer seit 007/012).
 -- Je Garmin-Aktivitaet (nicht geloescht, nicht in garmin_hidden) eine Zeile mit

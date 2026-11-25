@@ -15,6 +15,7 @@ Handeintrag zählt nur, wenn es an dem Tag keine Wiegung gibt.“
 
 - Je Tag (`entries/log_YYYYMMDD`, `typ: 'tageslog'`): `weightGarmin` (Garmin-Waage, letzte Wiegung des
   Tages, VPS-Sync) vor `weight` (Handeintrag aus Einstellungen/Tageslog).
+- Löschabgleich (050): In Garmin gelöschte Wiegungen verschwinden beim nächsten Sync aus den Waagenfeldern; der Tag fällt dann auf den Handeintrag `weight` bzw. den letzten Wert zurück. Formeln unverändert.
 - Für ein Datum: neuester Tag ≤ Datum mit einem der beiden Werte (gleiche Tagesregel), sonst
   `settings.weight`, sonst 75 kg. Gilt überall, wo Gewicht eingeht: BMR/`base`, Aktivitätskalorien,
   Zirkel-kcal, Protein-Untergrenze. Die Formeln selbst sind unverändert.

@@ -101,7 +101,7 @@ bleibt die vollstaendige Referenz fuer einen Neuaufbau von Null.
 Claude-Code-Session ausgegeben und sollte nach demselben Verfahren (fuer das Garmin-Ingest statt
 Analytics-Secret, inkl. Update auf dem Garmin-Sync-Job unter User `fuelofit`) rotiert werden.
 
-## Garmin-FIT-Detaildaten (Migration 014, 017, 021, 022)
+## Garmin-FIT-Detaildaten (Migration 014, 017, 021, 022, 024)
 
 Zweiter Schreibpfad neben `sync.py`: der Garmin-Sync (`fit_sync.py`, User `fuelofit`, Repo
 fuelofit-functions `vps/garmin/`, Rolle `fuelofit_fit_write`) laedt FIT-Dateien und schreibt direkt
@@ -162,3 +162,12 @@ eigenes Verhaeltnis). Zusatzspalten `herkunft` (direkt/rezept_expandiert/rezept_
 `rezept`, `skalierung`, `abweichung_pct`. Rest-Zeilen (fehlende Zutaten-Lebensmittel, Rundung) halten die
 Tagessummen exakt = `daily_nutrition`. Nur Analyse-View; Alkohol-Regel zaehlt Rezeptzutaten nie (Regeln im Kopf
 von `migrations/023_food_log_zutaten.sql`).
+
+**024 (Aufgabe 046, 25.11.2026)**: Lauf-Zusatzwerte aus der FIT-Datei (`fit_sync.parse_run_extras`/`store_run_extras`, nur
+Laeufe, eigener Savepoint -- ein Fehler dort verhindert die Basisdaten nicht): Handy-Wetter (msg 288), VO2max vorher/nachher,
+Trainingslast, Erholungszeit, Trainingsnutzen, Leistungszustand, Zeit in Pulszonen (msg 216, Session + Laps), bergbereinigtes
+Tempo, Lauf-/Geh-/Stehzeit (msg 312), Handgelenk- vs. Gurt-HF (record f136/f144). Neu `raw.garmin_fit_zeit_in_zone`,
+`raw.garmin_fit_record_extras` (Rolle `fuelofit_fit_write` SELECT/INSERT/UPDATE/DELETE), Spalten in `raw.garmin_fit_session`/
+`raw.garmin_fit_laps`, View `views.lauf_details`; Spalten an training_sessions, aktivitaet_runden, aktivitaet_verlauf angehaengt.
+Altbestand einmalig per `backfill_lauf_extras_046.py` (fortsetzbar ueber `extras_version`, `nice`, Pause je Datei). Feldquellen
+im Kopf von `migrations/024_lauf_details.sql`.

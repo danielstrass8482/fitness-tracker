@@ -1,6 +1,6 @@
 # Kalorienziel, Aktivitäts- und Schrittkalorien, Makroziele
 
-Stand 040 (24.11.2026), Gewichtsquelle 047 (25.11.2026). Beschreibt den Ist-Code in `index.html`; die Kalorienformeln wurden in 040
+Stand 040 (24.11.2026), Gewichtsquelle 047/048 (25.11.2026). Beschreibt den Ist-Code in `index.html`; die Kalorienformeln wurden in 040
 **nicht** geändert (nur dokumentiert). Formeln nur auf ausdrücklichen Auftrag ändern.
 
 ## 1. Tages-Kalorienziel (`calcHistoricalKcalGoal(date)` → `{base, activity, daily, total}`)
@@ -21,6 +21,13 @@ Handeintrag zählt nur, wenn es an dem Tag keine Wiegung gibt.“
 - Der Handeintrag wird nie überschrieben; an Tagen mit Wiegung wird er gespeichert, aber nicht verwendet
   (Hinweis in der App). Ein unverändert gespeicherter Waagenwert in den Einstellungen wird nicht als
   Handeintrag kopiert.
+- Plausibilitätsfilter (048, Daniel 25.11.2026: „ja, bitte“): Konstanten `WEIGHT_PLAUSIBLE_MAX_DIFF_KG` = 5,
+  `WEIGHT_PLAUSIBLE_WINDOW_DAYS` = 14 (`weightPlausibility`). Tage chronologisch; Referenz für eine Wiegung
+  = Median der genutzten Gewichte (plausible Waage oder Handeintrag) der 14 Tage davor, sonst letztes
+  genutztes Gewicht davor, sonst gilt die Wiegung. |Waage − Referenz| > 5 kg → verworfen: an dem Tag zählt
+  der Handeintrag, sonst der Tag davor. Handeinträge werden nie gefiltert. Berechnung beim Lesen
+  (Firestore unverändert), dieselbe Regel im Connector (Migration 026). Hinweis in Einstellungen/Tageslog:
+  „Waage 61,4 kg verworfen (weicht > 5 kg ab)“. Bekannt verworfen: 16./17.06.2026 (61,42/61,46 kg).
 - Vergangene Tages-Snapshots (`dailySnapshots`, final) werden nicht neu berechnet; nur der Snapshot von
   heute (und ein noch nicht finaler Vortag beim nächsten App-Start, sowie der manuelle Button
   „Tageswerte neu berechnen“) nutzen das neue Gewicht.

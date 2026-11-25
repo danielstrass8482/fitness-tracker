@@ -2125,7 +2125,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-25 06:04';
+    const APP_BUILD = '2026-11-25 11:52';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4223,19 +4223,64 @@
     // (weightGarmin, letzte Wiegung des Tages, vom VPS-Sync), sonst das manuelle Tagesgewicht (weight).
     // Dann der neueste Tag ≤ date mit einem der beiden (gleiche Tagesregel), sonst settings.weight, sonst 75.
     // Das manuelle Feld weight wird nie überschrieben.
-    function dayLogWeight(e) {
-      return (e && (e.weightGarmin || e.weight)) || null;
+    // 048 (Daniel 25.11.2026: "ja, bitte"): Plausibilitätsfilter für Waagenwerte. Referenz = Median der
+    // GENUTZTEN Gewichte (plausible Waage oder Handeintrag) der 14 Tage VOR dem Datum; keine im Fenster →
+    // letztes genutztes Gewicht davor; gar keins → Wiegung gilt. |Waage − Referenz| > 5 kg → verworfen
+    // (an dem Tag zählt dann der Handeintrag, sonst der Tag davor). Handeinträge werden nie gefiltert.
+    // Wird beim Lesen berechnet (Firestore unverändert); dieselbe Regel steht im Connector
+    // (analytics/migrations/026_gewicht_plausibilitaet.sql, views.gewicht_plausibilitaet()).
+    const WEIGHT_PLAUSIBLE_MAX_DIFF_KG = 5;
+    const WEIGHT_PLAUSIBLE_WINDOW_DAYS = 14;
+    // Map datum → {g, m, ref, plausible, used, quelle} für alle Tageslogs mit Gewicht, chronologisch berechnet.
+    function weightPlausibility(logs) {
+      const days = (logs || []).filter(e => e.typ === 'tageslog' && e.datum && (Number(e.weightGarmin) || Number(e.weight)))
+        .sort((a, b) => a.datum.localeCompare(b.datum));
+      const res = new Map();
+      const usedList = []; // [{datum, w}] chronologisch
+      for (const e of days) {
+        const g = Number(e.weightGarmin) || 0, m = Number(e.weight) || 0;
+        let ref = null, plausible = null;
+        if (g) {
+          const [y, mo, d] = e.datum.split('-').map(Number);
+          const from = localDateStr(new Date(y, mo - 1, d - WEIGHT_PLAUSIBLE_WINDOW_DAYS));
+          const win = usedList.filter(u => u.datum >= from && u.datum < e.datum).map(u => u.w).sort((a, b) => a - b);
+          if (win.length) {
+            const h = Math.floor(win.length / 2);
+            ref = win.length % 2 ? win[h] : (win[h - 1] + win[h]) / 2;
+          } else if (usedList.length) {
+            ref = usedList[usedList.length - 1].w;
+          }
+          plausible = ref == null || Math.abs(g - ref) <= WEIGHT_PLAUSIBLE_MAX_DIFF_KG;
+        }
+        const used = (g && plausible) ? g : (m || null);
+        // quelle wie Connector views.body_weight: Tag mit verworfener Waage immer 'waage_verworfen'
+        const quelle = g ? (plausible ? 'waage' : 'waage_verworfen') : 'manuell';
+        res.set(e.datum, { g: g || null, m: m || null, ref, plausible, used, quelle });
+        if (used) usedList.push({ datum: e.datum, w: used });
+      }
+      return res;
+    }
+    // Neuester Tag ≤ date mit genutztem Gewicht: {datum, used, quelle, …} oder null.
+    function weightSourceFrom(date, logs) {
+      let best = null;
+      for (const [datum, v] of weightPlausibility(logs)) {
+        if (datum <= date && v.used && (!best || datum > best.datum)) best = { datum, ...v };
+      }
+      return best;
     }
     function weightForDateFrom(date, logs) {
-      const best = (logs || []).filter(e => e.typ === 'tageslog' && dayLogWeight(e) && e.datum <= date)
-        .sort((a, b) => b.datum.localeCompare(a.datum))[0];
-      return dayLogWeight(best) || settings.weight || 75;
+      return weightSourceFrom(date, logs)?.used || settings.weight || 75;
+    }
+    // Waagenwert des Tageslogs e verworfen? (für Hinweise)
+    function garminWeighInDiscarded(e) {
+      return !!(e && e.weightGarmin && weightPlausibility(trainingEntries).get(e.datum)?.plausible === false);
     }
     function weightForDate(date) {
       if (!date) return settings.weight || 75;
       return weightForDateFrom(date, trainingEntries);
     }
     window.weightForDate = weightForDate;
+    window.weightPlausibility = weightPlausibility;
     // Neueste Garmin-Wiegung am oder vor date (für die Anzeige "Waage 76,1 kg (24.11. 05:47)").
     function latestGarminWeighIn(date) {
       return trainingEntries.filter(e => e.typ === 'tageslog' && e.weightGarmin && e.datum <= date)
@@ -4244,6 +4289,7 @@
     function garminWeighInLabel(e) {
       if (!e) return '';
       const [, m, d] = e.datum.split('-');
+      if (garminWeighInDiscarded(e)) return `Waage ${fmt(e.weightGarmin, 1)} kg verworfen (weicht > ${WEIGHT_PLAUSIBLE_MAX_DIFF_KG} kg ab)`;
       const hhmm = typeof e.weightGarminTs === 'string' ? e.weightGarminTs.slice(11, 16) : '';
       return `Waage ${fmt(e.weightGarmin, 1)} kg (${d}.${m}.${hhmm ? ' ' + hhmm : ''})`;
     }
@@ -7449,7 +7495,7 @@
 
         renderTrainingHistory();
         renderDataStats();
-        if (weight != null && trainingEntries.find(e => e.id === entry.id)?.weightGarmin) {
+        if (weight != null && weightPlausibility(trainingEntries).get(date)?.quelle === 'waage') {
           showToast('Gespeichert – an diesem Tag zählt die Waage', 'ok');
         }
 
@@ -8180,8 +8226,8 @@
     // der Waage stammend → kein Handeintrag (sonst würde der Waagenwert als manuelles Gewicht kopiert).
     let settingsWeightPrefill = null;
     function todayWeightIsGarmin() {
-      const g = latestGarminWeighIn(berlinTodayStr());
-      return !!g && Number(g.weightGarmin) === Number(weightForDate(berlinTodayStr()));
+      // 048: Quelle des heute genutzten Gewichts ist eine (plausible) Wiegung
+      return weightSourceFrom(berlinTodayStr(), trainingEntries)?.quelle === 'waage';
     }
     // Waagen-Anzeige in Einstellungen (neueste Wiegung) und Tageslog (Wiegung des gewählten Tages).
     function renderWeightHints() {
@@ -8193,7 +8239,7 @@
         const parts = [];
         if (g) parts.push(garminWeighInLabel(g));
         if (manual) parts.push(`Zuletzt eingetragen: ${manual.weight} kg am ${manual.datum}`);
-        if (g) parts.push('Handeintrag zählt nur an Tagen ohne Wiegung.');
+        if (g && !garminWeighInDiscarded(g)) parts.push('Handeintrag zählt nur an Tagen ohne Wiegung.');
         sHint.textContent = parts.join(' · ');
         const input = document.getElementById('settings-weight');
         // Feld folgt neuen Daten, solange es nicht von Hand geändert wurde
@@ -8206,7 +8252,9 @@
       if (lHint) {
         const date = document.getElementById('log-date')?.value;
         const e = date && trainingEntries.find(x => x.typ === 'tageslog' && x.datum === date && x.weightGarmin);
-        lHint.textContent = e ? `${garminWeighInLabel(e)} – an diesem Tag zählt die Waage, ein Handeintrag wird nicht verwendet.` : '';
+        lHint.textContent = !e ? '' : garminWeighInDiscarded(e)
+          ? `${garminWeighInLabel(e)} – an diesem Tag zählt der Handeintrag, sonst das letzte Gewicht davor.`
+          : `${garminWeighInLabel(e)} – an diesem Tag zählt die Waage, ein Handeintrag wird nicht verwendet.`;
       }
     }
     window.renderWeightHints = renderWeightHints;

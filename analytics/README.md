@@ -178,3 +178,8 @@ im Kopf von `migrations/024_lauf_details.sql`.
 als NULL-Zeilen erscheinen). Neu `views.koerperzusammensetzung` (Koerperfett, Muskel-, Knochenmasse, Wasser, BMI,
 Anzahl Wiegungen) - Waagen-Schaetzung (BIA), nur fuer Trends. Quelle: tageslog-Felder aus `ingestGarmin {weights}`
 (VPS `sync_official.py`). Regeln im Kopf von `migrations/025_koerpergewicht_waage.sql`.
+
+**026 (Aufgabe 048, 25.11.2026)**: Plausibilitaetsfilter Waage (> 5 kg vom Median der genutzten Gewichte der 14 Tage davor
+-> verworfen; gleiche Regel wie App `weightPlausibility`). `views.body_weight` + `weight_garmin_plausibel`, `quelle`
+'waage_verworfen', `weight_used_kg` folgt der Regel; `views.koerperzusammensetzung` + `plausibel`. Regeln im Kopf von
+`migrations/026_gewicht_plausibilitaet.sql`.

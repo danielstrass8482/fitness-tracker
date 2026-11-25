@@ -271,25 +271,61 @@ GROUP BY day;
 
 -- 2) Gewicht: aus entries.typ='tageslog', Feld weight (nur gesetzt, wenn im Tageslog erfasst).
 -- Stand Migration 025 (Aufgabe 047): Waage (weightGarmin) vor Handeintrag (weight); weight_kg = weight_used_kg.
+-- Stand Migration 026 (Aufgabe 048): Plausibilitaetsfilter Waage (> 5 kg vom Median der 14 Tage davor -> verworfen).
 CREATE OR REPLACE VIEW views.body_weight AS
-WITH t AS (
+WITH RECURSIVE t AS (
   SELECT
     day,
     NULLIF((data->>'weightGarmin')::numeric, 0) AS g,
-    NULLIF((data->>'weight')::numeric, 0) AS m
+    NULLIF((data->>'weight')::numeric, 0) AS m,
+    row_number() OVER (ORDER BY day) AS rn
   FROM raw.entries
   WHERE deleted_at IS NULL
     AND data->>'typ' = 'tageslog'
+    AND (NULLIF((data->>'weightGarmin')::numeric, 0) IS NOT NULL
+         OR NULLIF((data->>'weight')::numeric, 0) IS NOT NULL)
+),
+-- r: je Tag Entscheidung; hd/hw = bisherige Tage mit eigenem genutztem Gewicht (Historie)
+r AS (
+  SELECT t.rn, t.day, t.g, t.m,
+         NULL::numeric AS ref,
+         CASE WHEN t.g IS NULL THEN NULL ELSE true END AS plausibel,
+         COALESCE(t.g, t.m) AS own_w,
+         COALESCE(t.g, t.m) AS used_w,
+         ARRAY[t.day] AS hd,
+         ARRAY[COALESCE(t.g, t.m)] AS hw
+  FROM t WHERE t.rn = 1
+  UNION ALL
+  SELECT t.rn, t.day, t.g, t.m, x.ref, x.plausibel, y.own_w,
+         COALESCE(y.own_w, r.hw[array_length(r.hw, 1)]) AS used_w,
+         CASE WHEN y.own_w IS NULL THEN r.hd ELSE r.hd || t.day END,
+         CASE WHEN y.own_w IS NULL THEN r.hw ELSE r.hw || y.own_w END
+  FROM r
+  JOIN t ON t.rn = r.rn + 1
+  CROSS JOIN LATERAL (
+    SELECT ref, CASE WHEN t.g IS NULL THEN NULL ELSE (ref IS NULL OR abs(t.g - ref) <= 5) END AS plausibel
+    FROM (SELECT CASE WHEN t.g IS NULL THEN NULL ELSE COALESCE(
+            (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY u.w)::numeric
+               FROM unnest(r.hd, r.hw) AS u(d, w)
+              WHERE u.d >= t.day - 14 AND u.d < t.day
+             HAVING count(*) > 0),
+            r.hw[array_length(r.hw, 1)]) END AS ref) q
+  ) x
+  CROSS JOIN LATERAL (
+    SELECT CASE WHEN t.g IS NOT NULL AND x.plausibel THEN t.g ELSE t.m END AS own_w
+  ) y
 )
 SELECT
   day,
-  COALESCE(g, m) AS weight_kg,
+  used_w AS weight_kg,
   g AS weight_garmin_kg,
   m AS weight_manual_kg,
-  COALESCE(g, m) AS weight_used_kg,
-  CASE WHEN g IS NOT NULL THEN 'waage' ELSE 'manuell' END AS quelle
-FROM t
-WHERE g IS NOT NULL OR m IS NOT NULL;
+  used_w AS weight_used_kg,
+  CASE WHEN g IS NULL THEN 'manuell'
+       WHEN plausibel THEN 'waage'
+       ELSE 'waage_verworfen' END AS quelle,
+  plausibel AS weight_garmin_plausibel
+FROM r;
 
 CREATE OR REPLACE VIEW views.koerperzusammensetzung AS
 SELECT
@@ -301,14 +337,18 @@ SELECT
   (e.data->>'boneMassKg')::numeric AS knochenmasse_kg,
   (e.data->>'bodyWaterPct')::numeric AS koerperwasser_pct,
   (e.data->>'bmiGarmin')::numeric AS bmi,
-  (e.data->>'weighInsGarmin')::int AS wiegungen
+  (e.data->>'weighInsGarmin')::int AS wiegungen,
+  bw.weight_garmin_plausibel AS plausibel
 FROM raw.entries e
+LEFT JOIN views.body_weight bw ON bw.day = e.day
 WHERE e.deleted_at IS NULL
   AND e.data->>'typ' = 'tageslog'
   AND NULLIF((e.data->>'weightGarmin')::numeric, 0) IS NOT NULL;
 
+COMMENT ON VIEW views.body_weight IS
+  'Gewicht je Tag mit Messung. weight_kg = weight_used_kg (Waage vor Handeintrag; Waage > 5 kg vom Median der 14 Tage davor -> verworfen, quelle waage_verworfen, weight_garmin_plausibel false). Aufgaben 047/048.';
 COMMENT ON VIEW views.koerperzusammensetzung IS
-  'Waagen-Schaetzung (BIA), absolute Werte ungenau, nur fuer Trends. Letzte Wiegung je Tag (Garmin-Waage, Aufgabe 047).';
+  'Waagen-Schaetzung (BIA), absolute Werte ungenau, nur fuer Trends. Letzte Wiegung je Tag (Garmin-Waage, Aufgabe 047). plausibel = false: Wiegung verworfen (> 5 kg Abweichung, Aufgabe 048), Werte nicht verwenden.';
 
 -- 3) Trainings (Stand Migration 009, Aufgabe 012c; Garmin primaer seit 007/012).
 -- Je Garmin-Aktivitaet (nicht geloescht, nicht in garmin_hidden) eine Zeile mit

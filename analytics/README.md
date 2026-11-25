@@ -154,3 +154,11 @@ Garmin-Sync (`sync_official.py`, max. 20 Requests/Lauf, Aktivitaet >= 2 h beende
 `luftfeuchte_pct_mittel`, `taupunkt_c_mittel`, `wind_kmh_mittel`, `boeen_kmh_max`, `niederschlag_mm`,
 `bewoelkung_pct_mittel`, `wetter_quelle` an training_sessions und lauf_kilometer angehaengt (Rechenweg im
 Kopf von `migrations/022_aktivitaet_wetter.sql`).
+
+**023 (Aufgabe 045, 25.11.2026)**: `views.food_log_zutaten` = wie `food_log_entries`, aber jeder kollabierte
+Rezept-Block (recipeId oder foodId = aktives Rezept) durch seine Zutaten ersetzt (Faktor aus unit portions/grams,
+sonst kcal-Verhaeltnis; Zutat = foods je 100 g x Menge x Faktor, auf geloggte Block-kcal skaliert, Makros je Makro
+eigenes Verhaeltnis). Zusatzspalten `herkunft` (direkt/rezept_expandiert/rezept_zerlegt/rezept_nicht_zerlegbar),
+`rezept`, `skalierung`, `abweichung_pct`. Rest-Zeilen (fehlende Zutaten-Lebensmittel, Rundung) halten die
+Tagessummen exakt = `daily_nutrition`. Nur Analyse-View; Alkohol-Regel zaehlt Rezeptzutaten nie (Regeln im Kopf
+von `migrations/023_food_log_zutaten.sql`).

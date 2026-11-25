@@ -1041,6 +1041,11 @@ GRANT SELECT, INSERT, UPDATE ON raw.activity_notes TO fuelofit_sync;
 -- raw.garmin_fit_record_extras, views.lauf_details und die erweiterten Views training_sessions/
 -- aktivitaet_runden/aktivitaet_verlauf stehen NUR in Migration 024 (braucht 014/021/022) -- nach 023 ausfuehren.
 
+-- ===== Lauf-Zusatzwerte 8-10 (049, Migration 027_lauf_extras_8_10.sql) =====
+-- Weitere Spalten in raw.garmin_fit_session/raw.garmin_fit_laps/raw.garmin_fit_record_extras (Atemfrequenz,
+-- Bodenkontakt %, Schrittlaenge je Runde, Ausdauer, Schweissverlust, Gefuehl/RPE, Zieltempo) und die erweiterten Views
+-- lauf_details/aktivitaet_runden/aktivitaet_verlauf stehen NUR in Migration 027 (braucht 024) -- nach 026 ausfuehren.
+
 -- ===== food_log_zutaten (045, Migration 023_food_log_zutaten.sql) =====
 -- Rezept-Bloecke in Zutaten zerlegt; Regeln (herkunft, Faktor, Skalierung, Rest-Zeilen, alkohol)
 -- siehe Kopf von migrations/023_food_log_zutaten.sql. Alkohol-Regel zaehlt Rezeptzutaten nie.

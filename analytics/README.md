@@ -183,3 +183,12 @@ Anzahl Wiegungen) - Waagen-Schaetzung (BIA), nur fuer Trends. Quelle: tageslog-F
 -> verworfen; gleiche Regel wie App `weightPlausibility`). `views.body_weight` + `weight_garmin_plausibel`, `quelle`
 'waage_verworfen', `weight_used_kg` folgt der Regel; `views.koerperzusammensetzung` + `plausibel`. Regeln im Kopf von
 `migrations/026_gewicht_plausibilitaet.sql`.
+
+**027 (Aufgabe 049, 25.11.2026)**: Lauf-Zusatzwerte 8-10 aus der FIT-Datei (`fit_sync.parse_run_extras`, `EXTRAS_VERSION` 2;
+Altbestand per `backfill_lauf_extras_046.py`, fortsetzbar ueber `extras_version`, kein Download). Atemfrequenz (Session/Lap/Record,
+SDK, nur mit Brustgurt), Bodenkontakt % (nur mit Pod), Schrittlaenge je Runde, Ausdauer Start/Ende/Min, Schweissverlust,
+Gefuehl/RPE (eigene Eingabe, ab 2026), geplantes Zieltempo (workout_step). Spalten in `raw.garmin_fit_session`,
+`raw.garmin_fit_laps`, `raw.garmin_fit_record_extras.atemfrequenz`; angehaengt an `views.lauf_details` (inkl. vorhandener
+Session-Leistung/Schrittlaenge/vert. Oszillation/Verhaeltnis), `views.aktivitaet_runden`, `views.aktivitaet_verlauf`.
+Dekodierung mit fitparse 1.2.0 (Feldnummern; Namen/Skalen aus dem offiziellen FIT-SDK-Profil 21.222 nachgeschlagen, kein
+Paketwechsel noetig). Feldquellen/Konfidenz im Kopf von `migrations/027_lauf_extras_8_10.sql`.

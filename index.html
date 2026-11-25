@@ -2125,7 +2125,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-25 11:52';
+    const APP_BUILD = '2026-11-25 13:34';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4228,7 +4228,7 @@
     // letztes genutztes Gewicht davor; gar keins → Wiegung gilt. |Waage − Referenz| > 5 kg → verworfen
     // (an dem Tag zählt dann der Handeintrag, sonst der Tag davor). Handeinträge werden nie gefiltert.
     // Wird beim Lesen berechnet (Firestore unverändert); dieselbe Regel steht im Connector
-    // (analytics/migrations/026_gewicht_plausibilitaet.sql, views.gewicht_plausibilitaet()).
+    // (analytics/migrations/026_gewicht_plausibilitaet.sql, views.body_weight).
     const WEIGHT_PLAUSIBLE_MAX_DIFF_KG = 5;
     const WEIGHT_PLAUSIBLE_WINDOW_DAYS = 14;
     // Map datum → {g, m, ref, plausible, used, quelle} für alle Tageslogs mit Gewicht, chronologisch berechnet.
@@ -10248,7 +10248,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     function normalizeTrainingPlan(data) {
       const plan = {};
       PLAN_DAYS.forEach(({ key }) => {
-        plan[key] = Array.isArray(data?.[key]) ? data[key].map(normalizePlanUnit) : [];
+        // Legacy: der Workout-Builder speicherte Ruhetage als Einheit {typ:'ruhetag'}; Editor-Darstellung = Tag ohne Einheiten
+        plan[key] = Array.isArray(data?.[key]) ? data[key].filter(u => !(u && u.typ === 'ruhetag')).map(normalizePlanUnit) : [];
       });
       return plan;
     }
@@ -11682,7 +11683,7 @@ Regeln:
   "gueltigkeit": "nur_heute" | "nur_diese_woche" | "ab_dieser_woche",
   "questions": [string]
 }
-- "unit" in GENAU derselben Form wie bestehende Plan-Einheiten: Zirkel = {typ:"zirkel", runden, pauseSec, prepSec, sideSwitchSec, uebungen:[{typ, variant, mode:"time"|"reps", holdSec, wdh, pauseSec, perSide}], notiz}; Lauf/Rad/Gehen/Schwimmen = {typ, distanzKm, dauerMin, notiz}; Kraft außerhalb eines Zirkels = {typ, sets:"12-11-10", pauseSec, notiz}; Ruhetag = {typ:"ruhetag"}.
+- "unit" in GENAU derselben Form wie bestehende Plan-Einheiten: Zirkel = {typ:"zirkel", runden, pauseSec, prepSec, sideSwitchSec, uebungen:[{typ, variant, mode:"time"|"reps", holdSec, wdh, pauseSec, perSide}], notiz}; Lauf/Rad/Gehen/Schwimmen = {typ, distanzKm, dauerMin, notiz}; Kraft außerhalb eines Zirkels = {typ, sets:"12-11-10", pauseSec, notiz}; Ruhetag = {typ:"ruhetag"}. Ein Ruhetag wird im Plan als Tag ohne Einheiten gespeichert: ein leerer Tag in aktueller_plan IST ein Ruhetag.
 - "remove" braucht nur unitId (unit:null). "add" braucht day+unit (unitId:null). "update" braucht day+unitId+unit.
 - Ordne Übungen, wo möglich, existierenden Schlüsseln aus bekannte_uebungen zu (Feld "typ"). Existiert eine Übung noch nicht, erfinde KEINEN Schlüssel – gib stattdessen {typ:"__new__", anzeigename, modus:"time"|"reps", perSide, intensitaet_vorschlag:"leicht"|"mittel"|"intensiv"} an.
 - Erwähne oder verwende NIEMALS eine der in pausierte_uebungen gelisteten Übungen in einer neuen/geänderten Einheit. Fragt der Nutzer explizit danach, nimm sie NICHT auf, sondern ergänze in "questions" einen Hinweis, dass sie bis zum angegebenen Datum pausiert ist.
@@ -11820,10 +11821,13 @@ Regeln:
       const plan = workoutBuilderPlanSnapshot();
       for (const c of changes) {
         const list = plan[c.dayKey] || (plan[c.dayKey] = []);
-        if (c.op === 'add') { list.push(c.unit); }
+        // Ruhetag = Tag ohne Einheiten (wie im Editor): add → Tag leeren, update → Einheit entfernen
+        const isRest = c.unit && c.unit.typ === 'ruhetag';
+        if (c.op === 'add') { if (isRest) list.length = 0; else list.push(c.unit); }
         else if (c.op === 'update') {
           const idx = list.findIndex(u => u.id === c.unitId);
-          if (idx === -1) list.push(c.unit); else list[idx] = c.unit;
+          if (isRest) { if (idx !== -1) list.splice(idx, 1); }
+          else if (idx === -1) list.push(c.unit); else list[idx] = c.unit;
         } else if (c.op === 'remove') {
           const idx = list.findIndex(u => u.id === c.unitId);
           if (idx !== -1) list.splice(idx, 1);

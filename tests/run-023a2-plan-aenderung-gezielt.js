@@ -226,7 +226,7 @@ async function scenario4(browser) {
   const ws = await writes(page);
   const w48 = setWrites(ws, planCol(NEXT_MONDAY));
   const w49 = setWrites(ws, planCol(NEXT2_MONDAY));
-  check('Workout-Builder "nur_diese_woche": KW48 geschrieben (Ruhetag Mittwoch enthalten)', w48[0]?.data?.mi?.some(u => u.typ === 'ruhetag'), w48[0]?.data?.mi);
+  check('Workout-Builder "nur_diese_woche": KW48 geschrieben (Ruhetag Mittwoch = Tag ohne Einheiten, 051)', w48.length === 1 && Array.isArray(w48[0]?.data?.mi) && w48[0].data.mi.length === 0, w48[0]?.data?.mi);
   check('Workout-Builder "nur_diese_woche": KW49-Kontinuitaet mit bisherigem Inhalt angelegt', w49.length === 1 && !w49[0]?.data?.mi?.some(u => u.typ === 'ruhetag'), w49[0]?.data?.mi);
 
   await page.close();

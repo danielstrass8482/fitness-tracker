@@ -95,10 +95,10 @@ async function main() {
     Object.keys(newestMsg));
   // "aktueller_plan" ist der zuletzt VORGESCHLAGENE Stand: Runde 4 baut auf Runde 1-3 (Di/Mi/Do
   // Ruhetage) auf, nicht auf dem (leeren) echten Plan.
-  check('Runde 4: aktueller_plan enthält die bisher vorgeschlagenen Ruhetage (Di, Mi, Do)',
-    newestMsg.aktueller_plan?.di?.some(u => u.typ === 'ruhetag')
-    && newestMsg.aktueller_plan?.mi?.some(u => u.typ === 'ruhetag')
-    && newestMsg.aktueller_plan?.do?.some(u => u.typ === 'ruhetag'),
+  // 051: Ruhetag = Tag ohne Einheiten (keine ruhetag-Einheit mehr); der echte Plan hat hier ohnehin keine Einheiten.
+  check('Runde 4: aktueller_plan enthält Di/Mi/Do als Tage ohne Einheiten (Ruhetag = leerer Tag, 051)',
+    ['di', 'mi', 'do'].every(k => Array.isArray(newestMsg.aktueller_plan?.[k]) && newestMsg.aktueller_plan[k].length === 0)
+    && !JSON.stringify(newestMsg.aktueller_plan).includes('ruhetag'),
     newestMsg.aktueller_plan);
 
   // Runde 5: max_tokens erreicht, keine Textantwort -> verständliche Fehlermeldung + "Neu starten".

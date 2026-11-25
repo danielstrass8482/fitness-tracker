@@ -192,3 +192,10 @@ Gefuehl/RPE (eigene Eingabe, ab 2026), geplantes Zieltempo (workout_step). Spalt
 Session-Leistung/Schrittlaenge/vert. Oszillation/Verhaeltnis), `views.aktivitaet_runden`, `views.aktivitaet_verlauf`.
 Dekodierung mit fitparse 1.2.0 (Feldnummern; Namen/Skalen aus dem offiziellen FIT-SDK-Profil 21.222 nachgeschlagen, kein
 Paketwechsel noetig). Feldquellen/Konfidenz im Kopf von `migrations/027_lauf_extras_8_10.sql`.
+
+**028 (Aufgabe 052, 25.11.2026)**: Monitoring der VPS-Abgleiche. `raw.job_heartbeat` (eine Zeile je Job, Upsert durch den Job
+selbst ueber `fuelofit-functions vps/garmin/heartbeat.py`, Rollen `fuelofit_fit_write`/`fuelofit_wetter_write`) und
+`views.job_status` (job, last_success_at, last_run_at, last_run_failed, max_age_min, status ok/stale/fehlt, details). Jobs:
+`garmin_weight` (45 Min), `fit_sync` inkl. Kraft-Saetze (45 Min), `wetter_sync` (150 Min, 60-Min-Pause nach 429). Erfolg =
+Lauf fehlerfrei UND nichts laenger als 6 h unerledigt -> Tage ohne Lauf/Wiegung erzeugen keinen Alarm. Alarm ueber
+MCP `/status?job=<name>` (`job_ok`/`job_stale`) + je ein Cloud-Monitoring-Uptime-Check/Policy, siehe `docs/monitoring.md`.

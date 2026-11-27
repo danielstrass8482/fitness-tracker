@@ -1780,14 +1780,13 @@
             <textarea id="workout-builder-refine-text" rows="2" placeholder="Nachbessern: z.B. „Plank auf 60 Sekunden“" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid var(--fo-line);background:transparent;color:var(--fo-text-1);padding:8px;font-size:13px;resize:vertical;"></textarea>
             <button class="fo-btn fo-btn--secondary fo-btn--block" type="button" onclick="refineWorkoutBuilderSuggestion()" style="margin-top:6px;">Nachbessern</button>
           </div>
-          <div style="margin-top:12px;">
+          <div id="workout-builder-validity-block" style="margin-top:12px;">
             <div style="font-size:12px;color:var(--fo-text-3);margin-bottom:4px;">Gültigkeit</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button id="workout-builder-validity-today" class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="setWorkoutBuilderValidity('nur_heute')">Nur heute</button>
               <button id="workout-builder-validity-week" class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="setWorkoutBuilderValidity('nur_diese_woche')">Nur diese Woche</button>
               <button id="workout-builder-validity-forever" class="fo-btn fo-btn--secondary fo-btn--sm" type="button" onclick="setWorkoutBuilderValidity('ab_dieser_woche')">Ab dieser Woche dauerhaft</button>
             </div>
-            <div id="workout-builder-validity-warning" style="display:none;font-size:12px;color:var(--fo-warn, #eab308);margin-top:6px;"></div>
           </div>
         </div>
       </div>
@@ -2125,7 +2124,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-25 13:34';
+    const APP_BUILD = '2026-11-27 06:31';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -10388,7 +10387,10 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     //                      sinnvoll, wenn X die aktuelle Woche ist).
     // originalPlan = Plan der Woche X VOR dieser Änderung (Kontinuität/nur_heute/Undo-Basis).
     // Gibt { writes, planForX } zurück - writes für die 30s-Undo-Leiste (planScheduleSaveUndo).
-    async function planCommitSave(X, scope, draftPlan, originalPlan) {
+    // opts.skipContinuity (055, Workout-Builder mit mehreren Wochen): die Fortsetzungs-Version bei
+    // X+1 entfällt, weil im SELBEN Übernehmen direkt danach eine eigene Version für X+1 geschrieben
+    // wird (sonst würde zuerst eine Kontinuität angelegt und sofort wieder überschrieben).
+    async function planCommitSave(X, scope, draftPlan, originalPlan, opts) {
       let planForX = normalizeTrainingPlan(draftPlan);
       if (scope === 'nur_heute') {
         const normalizedOriginal = normalizeTrainingPlan(originalPlan);
@@ -10401,7 +10403,7 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       await setDoc(refX, { ...planForX, datum: X, updatedAt: new Date().toISOString() });
       writes.push({ monday: X, isNewDoc: !snapX.exists(), previousPlan: snapX.exists() ? normalizeTrainingPlan(snapX.data()) : null });
 
-      if (scope === 'nur_heute' || scope === 'nur_diese_woche') {
+      if ((scope === 'nur_heute' || scope === 'nur_diese_woche') && !opts?.skipContinuity) {
         const X7 = planAddWeeks(X, 1);
         const ref7 = doc(userPlanCol(), X7);
         const snap7 = await getDoc(ref7);
@@ -10456,6 +10458,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       clearTimeout(timer);
       try {
         let touchesCurrentWeek = false, minMonday = null;
+        // 055: auch bei mehreren Wochen-Gruppen eines Builder-Übernehmens kommt jedes Dokument
+        // höchstens einmal vor (skipContinuity), Reihenfolge daher unerheblich.
         for (const w of writes) {
           if (w.isNewDoc) await deleteDoc(doc(userPlanCol(), w.monday));
           else await setDoc(doc(userPlanCol(), w.monday), { ...w.previousPlan, datum: w.monday, updatedAt: new Date().toISOString() });
@@ -11622,20 +11626,44 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
     // Problem, das Daniel am 20.11.2026 traf (Änderung "ab dieser Woche dauerhaft" wirkte auch auf
     // die laufende Kalenderwoche zurück, siehe Bericht 023a2 Teil A/D).
 
+    // 055 (Daniel 27.11.2026: "wenn ich in der KW 48 bin, will ich die 48, 49, 50 grundsätzlich
+    // gleichzeitig ändern können"): der Builder sieht und ändert die angezeigte Woche W0 und die
+    // nächsten WORKOUT_BUILDER_WEEKS-1 Wochen. Jede Änderung trägt ihre Woche (week = Montag), jede
+    // Wochen-Gruppe hat eine eigene Gültigkeit (scopes[montag]). Gespeichert wird je Gruppe über
+    // dieselbe planCommitSave() (chronologisch), ein gemeinsames Undo für alle Gruppen.
+    const WORKOUT_BUILDER_WEEKS = 3;
+    const WORKOUT_BUILDER_SCOPE_LABELS = { nur_heute: 'nur heute', nur_diese_woche: 'nur diese Woche', ab_dieser_woche: 'ab dieser Woche dauerhaft' };
+
     let workoutBuilderState = {
       conversation: [],     // [{role, content}] – Kontext für "Nachbessern" (bleibt bis Sheet schließt)
-      pendingChanges: null, // { summary, questions, changes:[...], rejected:[...], gueltigkeit } oder null
-      targetMonday: null,   // Montag der Zielwoche (= angezeigte Woche beim Öffnen)
-      gueltigkeit: 'ab_dieser_woche', // 'nur_heute' | 'nur_diese_woche' | 'ab_dieser_woche'
+      pendingChanges: null, // { summary, questions, changes:[{week,...}], rejected:[...], scopes:{montag: gueltigkeit} } oder null
+      targetMonday: null,   // W0 = Montag der angezeigten Woche beim Öffnen (nie Vergangenheit)
+      weeks: [],            // [W0, W0+1, ...] (WORKOUT_BUILDER_WEEKS Montage)
+      laterVersions: {},    // montag -> nächste bereits existierende Version danach (null = keine) - Hinweis bei "ab"
       loading: false
     };
 
+    // Version, aus der die Woche `monday` gerade aufgelöst wird (from === monday = eigene Version).
+    function workoutBuilderWeekFrom(monday) {
+      return monday === planCurrentMonday() ? trainingPlanFrom : (planWeekPlans[monday]?.from ?? null);
+    }
+    function workoutBuilderKw(monday) { return planIsoWeek(planParseYmd(monday)); }
+    function workoutBuilderWeekLabel(monday) {
+      const dates = planWeekDatesFromMonday(monday);
+      const f = d => String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.';
+      return 'KW ' + workoutBuilderKw(monday) + ' (' + f(dates[0]) + '–' + f(dates[6]) + ')';
+    }
+
     // Nur Wochen ab der aktuellen (schreibgeschützt für Vergangenheit, wie der Editor).
-    window.openWorkoutBuilder = function() {
+    window.openWorkoutBuilder = async function() {
       const monday = planYmd(planWeekDates(planWeekOffset)[0]);
       if (monday < planCurrentMonday()) { showToast('Vergangene Wochen sind schreibgeschützt', 'bad'); return; }
       if (!planForWeek(monday)) { showToast('Plan dieser Woche lädt noch, bitte kurz warten', 'bad'); return; }
-      workoutBuilderState = { conversation: [], pendingChanges: null, targetMonday: monday, gueltigkeit: 'ab_dieser_woche', loading: false };
+      const weeks = Array.from({ length: WORKOUT_BUILDER_WEEKS }, (_, i) => planAddWeeks(monday, i));
+      // Folgewochen laden (je ein kleiner Lesezugriff, danach gecacht wie beim Blättern im Plan-Tab)
+      for (const m of weeks) { if (!planForWeek(m)) await loadPlanForWeek(m); }
+      if (weeks.some(m => !planForWeek(m) || planWeekPlans[m]?.error)) { showToast('Plan der Folgewochen lädt noch, bitte kurz warten', 'bad'); return; }
+      workoutBuilderState = { conversation: [], pendingChanges: null, targetMonday: monday, weeks, laterVersions: {}, loading: false };
       const textEl = document.getElementById('workout-builder-text');
       if (textEl) textEl.value = '';
       const refineEl = document.getElementById('workout-builder-refine-text');
@@ -11645,10 +11673,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       document.getElementById('workout-builder-input-area').style.display = 'block';
       document.getElementById('workout-builder-apply-btn').disabled = true;
       const targetLabel = document.getElementById('workout-builder-target-label');
-      if (targetLabel) targetLabel.textContent = 'Zielwoche: ' + (monday === planCurrentMonday() ? 'diese Woche' : ('KW ' + planIsoWeek(planParseYmd(monday))));
-      const todayBtn = document.getElementById('workout-builder-validity-today');
-      if (todayBtn) todayBtn.style.display = monday === planCurrentMonday() ? '' : 'none';
-      window.setWorkoutBuilderValidity('ab_dieser_woche');
+      if (targetLabel) targetLabel.textContent = 'Änderbar: ' + weeks.map((m, i) => 'KW ' + workoutBuilderKw(m) + (i === 0 && m === planCurrentMonday() ? ' (diese Woche)' : '')).join(', ');
+      workoutBuilderStyleGlobalValidity('ab_dieser_woche', monday === planCurrentMonday());
       pushModalState();
       document.getElementById('workout-builder-modal').style.display = 'flex';
     };
@@ -11664,12 +11690,32 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor 
       return [...fixed, ...custom];
     }
 
-    // Plan der ZIELWOCHE (nicht mehr immer die aktuelle Kalenderwoche, 023a2) als Arbeitskopie.
-    function workoutBuilderPlanSnapshot() {
-      const base = planForWeek(workoutBuilderState.targetMonday) || {};
+    // Tiefe Arbeitskopie eines Wochenplans (keine Mutation des echten Plans vor "Übernehmen").
+    function workoutBuilderSnapshotOf(plan) {
       const snap = {};
-      for (const { key } of PLAN_DAYS) snap[key] = (base[key] || []).map(u => JSON.parse(JSON.stringify(u)));
+      for (const { key } of PLAN_DAYS) snap[key] = ((plan || {})[key] || []).map(u => JSON.parse(JSON.stringify(u)));
       return snap;
+    }
+
+    // 055: Basis- und Ergebnisplan je Woche, chronologisch. base(M) = Plan, der für M gelten würde,
+    // NACHDEM die früheren Gruppen dieses Übernehmens gespeichert sind: eine frühere Gruppe mit
+    // "ab_dieser_woche" wirkt bis zur nächsten bereits existierenden eigenen Version weiter (wie
+    // fetchPlanVersion es nach dem Speichern auflöst), "nur_diese_woche"/"nur_heute" wirken nicht
+    // weiter. draft(M) = base(M) + Änderungen der Woche M. base(M) ist auch originalPlan für
+    // planCommitSave (Kontinuität bei M+1 / nur_heute / Vorher-Anzeige).
+    function workoutBuilderComputeWeeks(changes, scopes) {
+      const out = {};
+      let carry = null;
+      workoutBuilderState.weeks.forEach((m, i) => {
+        if (i > 0 && workoutBuilderWeekFrom(m) === m) carry = null; // bestehende eigene Version beendet "ab"
+        const base = workoutBuilderSnapshotOf(carry || planForWeek(m));
+        const own = (changes || []).filter(c => c.week === m);
+        const draft = own.length ? applyWorkoutBuilderChangesToPlan(base, own) : workoutBuilderSnapshotOf(base);
+        const scope = own.length ? ((scopes || {})[m] || 'ab_dieser_woche') : null;
+        if (scope === 'ab_dieser_woche') carry = draft;
+        out[m] = { base, draft, scope, changes: own };
+      });
+      return out;
     }
 
     function buildWorkoutBuilderSystemPrompt() {
@@ -11679,8 +11725,8 @@ Regeln:
 - Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Form, kein Text davor oder danach, kein Markdown-Codeblock:
 {
   "summary": string (max. 200 Zeichen, Deutsch),
-  "changes": [ { "op": "add" | "update" | "remove", "day": "Mo"|"Di"|"Mi"|"Do"|"Fr"|"Sa"|"So", "unitId": string | null, "unit": object | null } ],
-  "gueltigkeit": "nur_heute" | "nur_diese_woche" | "ab_dieser_woche",
+  "changes": [ { "week": "yyyy-mm-dd" (Montag einer Woche aus "wochen"), "op": "add" | "update" | "remove", "day": "Mo"|"Di"|"Mi"|"Do"|"Fr"|"Sa"|"So", "unitId": string | null, "unit": object | null } ],
+  "gueltigkeit": { "<Montag einer Woche mit changes>": "nur_heute" | "nur_diese_woche" | "ab_dieser_woche" },
   "questions": [string]
 }
 - "unit" in GENAU derselben Form wie bestehende Plan-Einheiten: Zirkel = {typ:"zirkel", runden, pauseSec, prepSec, sideSwitchSec, uebungen:[{typ, variant, mode:"time"|"reps", holdSec, wdh, pauseSec, perSide}], notiz}; Lauf/Rad/Gehen/Schwimmen = {typ, distanzKm, dauerMin, notiz}; Kraft außerhalb eines Zirkels = {typ, sets:"12-11-10", pauseSec, notiz}; Ruhetag = {typ:"ruhetag"}. Ein Ruhetag wird im Plan als Tag ohne Einheiten gespeichert: ein leerer Tag in aktueller_plan IST ein Ruhetag.
@@ -11688,31 +11734,39 @@ Regeln:
 - Ordne Übungen, wo möglich, existierenden Schlüsseln aus bekannte_uebungen zu (Feld "typ"). Existiert eine Übung noch nicht, erfinde KEINEN Schlüssel – gib stattdessen {typ:"__new__", anzeigename, modus:"time"|"reps", perSide, intensitaet_vorschlag:"leicht"|"mittel"|"intensiv"} an.
 - Erwähne oder verwende NIEMALS eine der in pausierte_uebungen gelisteten Übungen in einer neuen/geänderten Einheit. Fragt der Nutzer explizit danach, nimm sie NICHT auf, sondern ergänze in "questions" einen Hinweis, dass sie bis zum angegebenen Datum pausiert ist.
 - Ist die Anweisung unklar (welcher Zirkel, welcher Tag, fehlende Wiederholungen/Zeit): entweder einen sinnvollen Standard wählen und das in summary sagen, oder den offenen Punkt in "questions" aufnehmen. Eine Vorschau wird trotzdem gezeigt, wenn ein gültiger Teil der Änderung vorliegt.
-- Dies kann die Fortsetzung eines laufenden Gesprächs sein – eine Nachbesserung bezieht sich auf den zuletzt vorgeschlagenen Stand (aktueller_plan), nicht auf den ursprünglichen Plan.
-- "ziel_woche" im Payload (montag, kw, tage: Datum je Wochentag) ist GENAU die Woche, die der Nutzer gerade im Plan-Tab anschaut – du kannst nur für diese Woche Änderungen vorschlagen, keine andere Woche adressieren. "heute" ist das heutige Datum (Europe/Berlin).
-- "gueltigkeit" bestimmt, wie lange die Änderung gilt: "ab_dieser_woche" (Standard – dauerhaft ab ziel_woche), "nur_diese_woche" (nur für ziel_woche, danach wieder wie vorher), "nur_heute" (nur der heutige Tag – nur sinnvoll, wenn "heute" einer der Tage in ziel_woche.tage ist). Wähle anhand der Formulierung: "nur heute"/"diesmal anders"/"heute ausnahmsweise" → nur_heute; "nur diese Woche"/"nur diesmal"/"diese eine Woche" → nur_diese_woche; keine solche Einschränkung oder "ab jetzt"/"dauerhaft"/"immer" → ab_dieser_woche.
-- Nennt die Anweisung eine Kalenderwoche oder ein Datum AUSSERHALB von ziel_woche (z. B. "ab KW 50", wenn ziel_woche KW 47 ist): nicht spekulieren und dafür KEINE changes vorschlagen. Stattdessen in "questions" erklären, dass du nur die gerade angezeigte Woche (ziel_woche) ändern kannst, und bitten, zuerst im Plan-Tab zur gewünschten Woche zu wechseln.
+- Dies kann die Fortsetzung eines laufenden Gesprächs sein – eine Nachbesserung bezieht sich auf den zuletzt vorgeschlagenen Stand (aktueller_plan bzw. wochen[].plan), nicht auf den ursprünglichen Plan.
+- "wochen" im Payload sind GENAU die Wochen, die du ändern kannst: die gerade im Plan-Tab angezeigte Woche (angezeigt:true, = "ziel_woche"; ihr Plan steht in "aktueller_plan") und die Folgewochen (Plan je Woche in "plan"). Je Woche: montag, kw, von, bis, tage (Datum je Wochentag), eigene_version (true = ab dieser Woche existiert bereits eine eigene, abweichende Plan-Version). Die Pläne enthalten bereits alle in diesem Gespräch vorgeschlagenen Änderungen inkl. ihrer Fortwirkung. "heute" ist das heutige Datum (Europe/Berlin).
+- Jede Änderung braucht "week" = montag der betroffenen Woche aus "wochen"; "unitId" muss aus dem Plan GENAU dieser Woche stammen. Ohne Wochenangabe in der Anweisung → die angezeigte Woche. Relative Angaben ("diese Woche", "nächste Woche", "übernächste Woche", "ab nächster Woche") beziehen sich auf die Kalenderwoche von "heute"; "KW nn" auf wochen[].kw; ein Datum auf die Woche, die es enthält.
+- "gueltigkeit" je Woche mit changes (Schlüssel = deren montag): "ab_dieser_woche" (Standard – dauerhaft ab dieser Woche), "nur_diese_woche" (nur diese Woche, danach wieder wie vorher), "nur_heute" (nur der heutige Tag – nur für die Woche, die "heute" enthält). Wähle anhand der Formulierung: "nur heute"/"diesmal anders"/"heute ausnahmsweise" → nur_heute; "nur diese Woche"/"nur diesmal"/"diese eine Woche"/"nur in KW nn" → nur_diese_woche; keine solche Einschränkung oder "ab jetzt"/"ab nächster Woche"/"ab KW nn"/"dauerhaft"/"immer" → ab_dieser_woche.
+- "ab_dieser_woche" wirkt automatisch in allen späteren Wochen weiter (bis zu einer Woche mit eigener Version) – dieselbe Änderung NICHT zusätzlich für die späteren Wochen wiederholen. Beispiele: "ab nächster Woche Montag Rad statt Lauf" → changes nur in der nächsten Woche, ab_dieser_woche. "Diese und nächste Woche Mittwoch Ruhetag" → je eine Änderung in beiden Wochen, beide nur_diese_woche. "Diese Woche nur Mittwoch frei, ab nächster Woche dauerhaft Freitag Zirkel" → Woche 1 nur_diese_woche, Woche 2 ab_dieser_woche.
+- Nennt die Anweisung eine Kalenderwoche oder ein Datum AUSSERHALB von "wochen" (vor der ersten oder nach der letzten): nicht spekulieren und dafür KEINE changes vorschlagen. Stattdessen in "questions" erklären: „Ich kann nur KW <erste>–<letzte> ändern.“
 - Sprache: Deutsch, informelles "du".`;
     }
 
     // "aktueller_plan" ist der zuletzt VORGESCHLAGENE Stand (siehe Systemprompt: eine Nachbesserung
     // bezieht sich darauf, nicht auf den ursprünglichen Plan) – bei laufendem Gespräch also der echte
     // Plan MIT den bisher in diesem Gespräch vorgeschlagenen (noch nicht übernommenen) Änderungen.
-    function workoutBuilderCurrentProposedSnapshot() {
-      if (workoutBuilderState.pendingChanges?.changes?.length) {
-        return applyWorkoutBuilderChangesToSnapshot(workoutBuilderState.pendingChanges.changes).plan;
-      }
-      return workoutBuilderPlanSnapshot();
+    // 055: zuletzt vorgeschlagener Stand JEDER Builder-Woche (inkl. Fortwirkung von "ab"-Gruppen).
+    function workoutBuilderProposedWeeks() {
+      const p = workoutBuilderState.pendingChanges;
+      return workoutBuilderComputeWeeks(p?.changes || [], p?.scopes || {});
     }
 
     function buildWorkoutBuilderPayload(instruction) {
       const todayStr = berlinTodayStr();
       const monday = workoutBuilderState.targetMonday;
-      const dates = planWeekDatesFromMonday(monday);
-      const tage = {};
-      PLAN_DAYS.forEach(({ key }, i) => { tage[key] = planYmd(dates[i]); });
+      const proposed = workoutBuilderProposedWeeks();
+      const tageOf = m => { const t = {}; planWeekDatesFromMonday(m).forEach((d, i) => { t[PLAN_DAYS[i].key] = planYmd(d); }); return t; };
+      const tage = tageOf(monday);
+      const wochen = workoutBuilderState.weeks.map((m, i) => {
+        const t = tageOf(m);
+        const w = { montag: m, kw: workoutBuilderKw(m), von: t.mo, bis: t.so, tage: t, eigene_version: workoutBuilderWeekFrom(m) === m, angezeigt: i === 0 };
+        if (i > 0) w.plan = proposed[m].draft; // Plan der angezeigten Woche steht in aktueller_plan
+        return w;
+      });
       return {
-        aktueller_plan: workoutBuilderCurrentProposedSnapshot(),
+        aktueller_plan: proposed[monday].draft,
+        wochen,
         bekannte_uebungen: workoutBuilderKnownExercises(),
         pausierte_uebungen: Object.entries(exerciseSettings)
           .filter(([, s]) => s?.pausedUntil && todayStr <= s.pausedUntil)
@@ -11794,31 +11848,63 @@ Regeln:
       return { op: change.op, dayKey, unitId: change.unitId || null, unit, newExercise, reusedExercises };
     }
 
+    // 055: "week" einer Änderung -> Montag einer Builder-Woche. Fehlt sie: angezeigte Woche (W0, wie
+    // vor 055). Ein beliebiges Datum wird auf den Montag seiner Woche abgebildet. Vergangene Woche
+    // oder Woche außerhalb des Bereichs -> Fehler (Änderung wird mit Begründung verworfen).
+    function workoutBuilderResolveWeek(raw) {
+      const W = workoutBuilderState.weeks;
+      if (raw === undefined || raw === null || raw === '') return W[0];
+      const str = String(raw).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(str) || isNaN(planParseYmd(str).getTime())) throw new Error('Woche ungültig: ' + str);
+      const d = planParseYmd(str);
+      const monday = planYmd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)));
+      const kw = workoutBuilderKw(monday);
+      if (monday < planCurrentMonday()) throw new Error('KW ' + kw + ' liegt in der Vergangenheit (schreibgeschützt)');
+      if (!W.includes(monday)) throw new Error('KW ' + kw + ' außerhalb des Bereichs – nur KW ' + workoutBuilderKw(W[0]) + '–' + workoutBuilderKw(W[W.length - 1]));
+      return monday;
+    }
+
     function validateWorkoutBuilderResult(parsed) {
       if (!parsed || typeof parsed !== 'object') throw new Error('Kein Objekt');
       if (typeof parsed.summary !== 'string') throw new Error('summary fehlt');
       const todayStr = berlinTodayStr();
       const changes = [], rejected = [];
       for (const c of (Array.isArray(parsed.changes) ? parsed.changes : [])) {
-        try { changes.push(validateWorkoutBuilderChange(c, todayStr)); }
-        catch (e) { rejected.push({ change: c, error: e.message }); }
+        try {
+          const week = workoutBuilderResolveWeek(c && c.week);
+          const v = validateWorkoutBuilderChange(c, todayStr);
+          v.week = week;
+          changes.push(v);
+        } catch (e) { rejected.push({ change: c, error: e.message }); }
       }
-      // gueltigkeit: ungültiger/fehlender Wert -> sicherer Standard ab_dieser_woche. "nur_heute" ist
-      // nur sinnvoll, wenn die Zielwoche die aktuelle Woche ist (sonst nächstbeste Einschränkung).
-      let gueltigkeit = ['nur_heute', 'nur_diese_woche', 'ab_dieser_woche'].includes(parsed.gueltigkeit) ? parsed.gueltigkeit : 'ab_dieser_woche';
-      if (gueltigkeit === 'nur_heute' && workoutBuilderState.targetMonday !== planCurrentMonday()) gueltigkeit = 'nur_diese_woche';
+      // gueltigkeit je Woche (055): Objekt {montag: wert} oder - wie vor 055 - ein einzelner Wert für
+      // alle Wochen. Ungültig/fehlend -> sicherer Standard ab_dieser_woche. "nur_heute" nur für die
+      // aktuelle Kalenderwoche (sonst nächstbeste Einschränkung nur_diese_woche).
+      const VALID = ['nur_heute', 'nur_diese_woche', 'ab_dieser_woche'];
+      const byWeek = {};
+      if (parsed.gueltigkeit && typeof parsed.gueltigkeit === 'object') {
+        for (const [k, v] of Object.entries(parsed.gueltigkeit)) {
+          try { byWeek[workoutBuilderResolveWeek(k)] = v; } catch (e) { /* Schlüssel außerhalb: ignoriert */ }
+        }
+      }
+      const scopes = {};
+      for (const m of new Set(changes.map(c => c.week))) {
+        let g = typeof parsed.gueltigkeit === 'string' ? parsed.gueltigkeit : byWeek[m];
+        if (!VALID.includes(g)) g = 'ab_dieser_woche';
+        if (g === 'nur_heute' && m !== planCurrentMonday()) g = 'nur_diese_woche';
+        scopes[m] = g;
+      }
       return {
         summary: String(parsed.summary).trim().slice(0, 200),
         questions: Array.isArray(parsed.questions) ? parsed.questions.map(q => String(q)).slice(0, 5) : [],
-        changes, rejected, gueltigkeit
+        changes, rejected, scopes
       };
     }
 
-    // Wendet changes auf eine TIEFE KOPIE des Plans der ZIELWOCHE an (workoutBuilderPlanSnapshot) –
-    // keine Mutation des echten Plans vor "Übernehmen". Gibt { plan } zurück (fertig für
-    // normalizeTrainingPlan/planCommitSave).
-    function applyWorkoutBuilderChangesToSnapshot(changes) {
-      const plan = workoutBuilderPlanSnapshot();
+    // Wendet changes auf eine TIEFE KOPIE von basePlan an – keine Mutation des echten Plans vor
+    // "Übernehmen". Gibt den Plan zurück (fertig für normalizeTrainingPlan/planCommitSave).
+    function applyWorkoutBuilderChangesToPlan(basePlan, changes) {
+      const plan = workoutBuilderSnapshotOf(basePlan);
       for (const c of changes) {
         const list = plan[c.dayKey] || (plan[c.dayKey] = []);
         // Ruhetag = Tag ohne Einheiten (wie im Editor): add → Tag leeren, update → Einheit entfernen
@@ -11833,7 +11919,7 @@ Regeln:
           if (idx !== -1) list.splice(idx, 1);
         }
       }
-      return { plan };
+      return plan;
     }
 
     // Kompakte Kartendarstellung einer Einheit – nutzt für Zirkel dieselbe Übungslisten-Funktion wie
@@ -11862,12 +11948,12 @@ Regeln:
       return `<div style="font-size:11px;color:var(--fo-text-3);margin-top:4px;">Bestehende Übung verwendet: ${c.reusedExercises.map(planEsc).join(', ')}</div>`;
     }
 
-    function workoutBuilderChangeCardHtml(c) {
+    function workoutBuilderChangeCardHtml(c, basePlan) {
       const dayLabel = PLAN_DAYS.find(d => d.key === c.dayKey)?.label || c.dayKey;
       if (c.op === 'add') {
         return `<div class="fo-card" style="margin-bottom:8px;"><div style="font-size:11px;color:var(--fo-text-3);margin-bottom:4px;">${dayLabel} · <span style="color:var(--fo-ok, #22c55e);font-weight:600;">neu</span></div>${workoutBuilderUnitSummaryHtml(c.unit)}${workoutBuilderReusedExerciseNoteHtml(c)}</div>`;
       }
-      const oldUnit = ((planForWeek(workoutBuilderState.targetMonday) || {})[c.dayKey] || []).find(u => u.id === c.unitId);
+      const oldUnit = ((basePlan || {})[c.dayKey] || []).find(u => u.id === c.unitId);
       if (c.op === 'remove') {
         return `<div class="fo-card" style="margin-bottom:8px;opacity:.7;"><div style="font-size:11px;color:var(--fo-text-3);margin-bottom:4px;">${dayLabel} · <span style="color:var(--fo-bad);font-weight:600;">entfernt</span></div>${workoutBuilderUnitSummaryHtml(oldUnit)}</div>`;
       }
@@ -11880,14 +11966,14 @@ Regeln:
       </div>`;
     }
 
-    // Tage der ZIELWOCHE, die bereits vergangen sind UND von einer Änderung betroffen sind (nur
-    // möglich, wenn die Zielwoche die aktuelle Woche ist - eine künftige Zielwoche hat nie
-    // "vergangene" Tage). "ab_dieser_woche"/"nur_diese_woche" würden für diese Tage rückwirkend einen
-    // anderen Plan zeigen (planMatchDay wertet bereits geloggte Einträge sofort gegen die neue Liste).
-    function workoutBuilderPastDaysAffected(changedDayKeys) {
-      if (workoutBuilderState.targetMonday !== planCurrentMonday()) return [];
+    // Tage der Woche `monday`, die bereits vergangen sind UND von einer Änderung betroffen sind (nur
+    // möglich, wenn das die aktuelle Woche ist - eine künftige Woche hat nie "vergangene" Tage).
+    // "ab_dieser_woche"/"nur_diese_woche" würden für diese Tage rückwirkend einen anderen Plan zeigen
+    // (planMatchDay wertet bereits geloggte Einträge sofort gegen die neue Liste).
+    function workoutBuilderPastDaysAffected(monday, changedDayKeys) {
+      if (monday !== planCurrentMonday()) return [];
       const todayStr = berlinTodayStr();
-      const dates = planWeekDatesFromMonday(workoutBuilderState.targetMonday);
+      const dates = planWeekDatesFromMonday(monday);
       const affected = [];
       PLAN_DAYS.forEach(({ key, label }, i) => {
         const ds = planYmd(dates[i]);
@@ -11896,8 +11982,9 @@ Regeln:
       return affected;
     }
 
-    window.setWorkoutBuilderValidity = function(v) {
-      workoutBuilderState.gueltigkeit = v;
+    // Globale Gültigkeits-Buttons (unter der Vorschau): bei genau EINER Wochen-Gruppe wie vor 055;
+    // bei mehreren Gruppen ausgeblendet, dann hat jede Gruppe eigene Buttons.
+    function workoutBuilderStyleGlobalValidity(v, todayAllowed) {
       const ids = { nur_heute: 'workout-builder-validity-today', nur_diese_woche: 'workout-builder-validity-week', ab_dieser_woche: 'workout-builder-validity-forever' };
       Object.entries(ids).forEach(([val, id]) => {
         const btn = document.getElementById(id);
@@ -11905,38 +11992,84 @@ Regeln:
         btn.style.background = v === val ? 'var(--fo-primary)' : '';
         btn.style.color = v === val ? '#fff' : '';
       });
-      updateWorkoutBuilderValidityWarning();
-    };
-
-    function updateWorkoutBuilderValidityWarning() {
-      const warnEl = document.getElementById('workout-builder-validity-warning');
-      if (!warnEl) return;
-      if (!workoutBuilderState.pendingChanges || !workoutBuilderState.pendingChanges.changes.length) { warnEl.style.display = 'none'; return; }
-      const changedDayKeys = new Set(workoutBuilderState.pendingChanges.changes.map(c => c.dayKey));
-      const pastDays = workoutBuilderPastDaysAffected(changedDayKeys);
-      // "nur_heute" betrifft nie vergangene Tage (nur den heutigen) - dafür gilt die Warnung nie.
-      if (pastDays.length && workoutBuilderState.gueltigkeit !== 'nur_heute') {
-        warnEl.style.display = 'block';
-        warnEl.textContent = 'Ändert bereits vergangene Tage dieser Woche (' + pastDays.join(', ') + ') rückwirkend.';
-      } else {
-        warnEl.style.display = 'none';
-      }
+      const todayBtn = document.getElementById('workout-builder-validity-today');
+      if (todayBtn) todayBtn.style.display = todayAllowed ? '' : 'none';
     }
 
-    function renderWorkoutBuilderPreview() {
-      const { summary, questions, changes, rejected, gueltigkeit } = workoutBuilderState.pendingChanges;
-      document.getElementById('workout-builder-summary').textContent = summary;
-      document.getElementById('workout-builder-questions').innerHTML = questions
-        .map(q => `<div style="font-size:12px;color:var(--fo-text-3);margin-top:2px;">? ${planEsc(q)}</div>`).join('');
+    // Globale Buttons: setzen die Gültigkeit ALLER Gruppen (bei einer Gruppe = genau diese).
+    window.setWorkoutBuilderValidity = function(v) {
+      const p = workoutBuilderState.pendingChanges;
+      if (!p) { workoutBuilderStyleGlobalValidity(v, workoutBuilderState.targetMonday === planCurrentMonday()); return; }
+      for (const m of Object.keys(p.scopes)) p.scopes[m] = (v === 'nur_heute' && m !== planCurrentMonday()) ? 'nur_diese_woche' : v;
+      renderWorkoutBuilderGroups();
+    };
+    window.setWorkoutBuilderGroupScope = function(monday, v) {
+      const p = workoutBuilderState.pendingChanges;
+      if (!p || !(monday in p.scopes)) return;
+      if (v === 'nur_heute' && monday !== planCurrentMonday()) return;
+      p.scopes[monday] = v;
+      renderWorkoutBuilderGroups();
+    };
+
+    // Hinweis "ab KW nn gilt bereits eine andere Version" für "ab"-Gruppen (wie Editor-Dialog,
+    // planNextVersionAfter: ein kleiner Lesezugriff je Woche, im Builder-Zustand gecacht).
+    function workoutBuilderLaterVersionHint(monday, groupWeeks) {
+      const cache = workoutBuilderState.laterVersions;
+      if (!(monday in cache)) {
+        cache[monday] = undefined;
+        planNextVersionAfter(monday)
+          .then(v => { cache[monday] = v || null; })
+          .catch(() => { cache[monday] = null; })
+          .then(() => { if (workoutBuilderState.pendingChanges) renderWorkoutBuilderGroups(); });
+        return '';
+      }
+      const later = cache[monday];
+      if (!later || groupWeeks.includes(later)) return '';
+      return `Hinweis: Ab KW ${planIsoWeek(planParseYmd(later))} gilt bereits eine andere Version – die bleibt bei „Ab dieser Woche dauerhaft“ bestehen.`;
+    }
+
+    // 055: Vorschau gruppiert nach Woche ("KW 49 (30.11.–06.12.) – ab dieser Woche dauerhaft"),
+    // Gültigkeit je Gruppe vor "Übernehmen" änderbar (Vorbelegung = Modellvorschlag).
+    function renderWorkoutBuilderGroups() {
+      const { changes, rejected, scopes } = workoutBuilderState.pendingChanges;
+      const computed = workoutBuilderComputeWeeks(changes, scopes);
+      const groups = workoutBuilderState.weeks.filter(m => computed[m].scope);
+      const multi = groups.length > 1;
+      const cur = planCurrentMonday();
       const rejectedHtml = rejected.length
         ? `<div style="font-size:12px;color:var(--fo-bad);margin-bottom:8px;">${rejected.length} Änderung(en) ungültig und übersprungen: ${rejected.map(r => planEsc(r.error)).join('; ')}</div>`
         : '';
-      document.getElementById('workout-builder-changes').innerHTML = rejectedHtml + changes.map(workoutBuilderChangeCardHtml).join('');
+      const groupHtml = m => {
+        const g = computed[m];
+        const pastDays = workoutBuilderPastDaysAffected(m, new Set(g.changes.map(c => c.dayKey)));
+        const notes = [];
+        if (pastDays.length && g.scope !== 'nur_heute') notes.push('Ändert bereits vergangene Tage dieser Woche (' + pastDays.join(', ') + ') rückwirkend.');
+        if (g.scope === 'ab_dieser_woche') { const h = workoutBuilderLaterVersionHint(m, groups); if (h) notes.push(h); }
+        const buttons = multi ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px;">${
+          ['nur_heute', 'nur_diese_woche', 'ab_dieser_woche'].filter(v => v !== 'nur_heute' || m === cur).map(v =>
+            `<button class="fo-btn fo-btn--secondary fo-btn--sm" type="button" data-wb-scope="${v}" style="${g.scope === v ? 'background:var(--fo-primary);color:#fff;' : ''}" onclick="setWorkoutBuilderGroupScope('${m}','${v}')">${{ nur_heute: 'Nur heute', nur_diese_woche: 'Nur diese Woche', ab_dieser_woche: 'Ab dieser Woche dauerhaft' }[v]}</button>`).join('')
+        }</div>` : '';
+        return `<div class="wb-week-group" data-wb-week="${m}" style="margin-bottom:12px;">
+          <div class="wb-week-head" style="font-size:13px;font-weight:600;margin-bottom:4px;">${workoutBuilderWeekLabel(m)} – ${WORKOUT_BUILDER_SCOPE_LABELS[g.scope]}</div>
+          ${buttons}
+          ${notes.map(n => `<div class="wb-week-note" style="font-size:12px;color:var(--fo-warn, #eab308);margin-bottom:6px;">${planEsc(n)}</div>`).join('')}
+          ${g.changes.map(c => workoutBuilderChangeCardHtml(c, g.base)).join('')}
+        </div>`;
+      };
+      document.getElementById('workout-builder-changes').innerHTML = rejectedHtml + groups.map(groupHtml).join('');
+      const block = document.getElementById('workout-builder-validity-block');
+      if (block) block.style.display = multi ? 'none' : 'block';
+      if (groups.length === 1) workoutBuilderStyleGlobalValidity(computed[groups[0]].scope, groups[0] === cur);
+    }
+
+    function renderWorkoutBuilderPreview() {
+      const { summary, questions, changes } = workoutBuilderState.pendingChanges;
+      document.getElementById('workout-builder-summary').textContent = summary;
+      document.getElementById('workout-builder-questions').innerHTML = questions
+        .map(q => `<div style="font-size:12px;color:var(--fo-text-3);margin-top:2px;">? ${planEsc(q)}</div>`).join('');
+      renderWorkoutBuilderGroups();
       document.getElementById('workout-builder-preview').style.display = 'block';
       document.getElementById('workout-builder-apply-btn').disabled = !changes.length;
-      // Modellvorschlag (gueltigkeit) vorbelegen, Nutzer kann vor "Übernehmen" umstellen - das IST
-      // die geforderte deutliche Anzeige der Gültigkeit in der Vorschau.
-      window.setWorkoutBuilderValidity(gueltigkeit);
     }
 
     async function runWorkoutBuilderCall(instruction) {
@@ -11999,16 +12132,21 @@ Regeln:
     // Anthropic-API). Neue Übungen werden über denselben Pfad wie eigene Trainingsarten aus dem Editor
     // angelegt (globalTrainingTypesCol() + exerciseSettings), dann wird die geänderte Plankopie über
     // dieselbe planCommitSave() wie der Editor gespeichert (023a2, inkl. der dort gewählten
-    // Gültigkeit workoutBuilderState.gueltigkeit) - gemeinsame Undo-Leiste s. planScheduleSaveUndo.
+    // Gültigkeit je Wochen-Gruppe, pendingChanges.scopes) - gemeinsame Undo-Leiste s. planScheduleSaveUndo.
     window.applyWorkoutBuilderChanges = async function() {
       const result = workoutBuilderState.pendingChanges;
       if (!result || !result.changes.length) return;
-      const X = workoutBuilderState.targetMonday;
-      const originalPlan = planForWeek(X) || {};
-      const { plan: draftPlan } = applyWorkoutBuilderChangesToSnapshot(result.changes);
+      // 055: je Wochen-Gruppe ein planCommitSave (chronologisch). Basis/Ergebnis aller Gruppen werden
+      // VOR dem ersten Schreiben berechnet (workoutBuilderComputeWeeks). Folgt im selben Übernehmen
+      // direkt die Woche M+1 als eigene Gruppe, entfällt die Kontinuitäts-Version von M
+      // (skipContinuity) - sie würde M+1 sonst erst anlegen und gleich wieder überschreiben.
+      const computed = workoutBuilderComputeWeeks(result.changes, result.scopes);
+      const groups = workoutBuilderState.weeks.filter(m => computed[m].scope);
+      const groupSet = new Set(groups);
       const newExercises = result.changes.map(c => c.newExercise).filter(Boolean);
       const btn = document.getElementById('workout-builder-apply-btn');
       if (btn) btn.disabled = true;
+      const allWrites = [];
       try {
         for (const ne of newExercises) {
           if (!customTrainingTypes.find(t => t.id === ne.id)) {
@@ -12019,16 +12157,29 @@ Regeln:
         }
         if (newExercises.length) { customTrainingTypes.sort((a, b) => a.label.localeCompare(b.label)); renderCustomTypes(); updateTrainingTypeSelect(); }
 
-        const scope = workoutBuilderState.gueltigkeit;
-        const { writes } = await planCommitSave(X, scope, draftPlan, originalPlan);
+        for (const m of groups) {
+          const g = computed[m];
+          const { writes } = await planCommitSave(m, g.scope, g.draft, g.base, { skipContinuity: groupSet.has(planAddWeeks(m, 1)) });
+          allWrites.push(...writes);
+        }
         closeWorkoutBuilder();
         renderTrainingPlan(true);
-        planScheduleSaveUndo(writes);
-        const scopeLabel = { nur_heute: 'nur heute', nur_diese_woche: 'nur diese Woche', ab_dieser_woche: 'ab dieser Woche dauerhaft' }[scope];
-        showToast('Plan aktualisiert (' + scopeLabel + ')', 'ok');
+        planScheduleSaveUndo(allWrites); // EIN Undo für alle Gruppen
+        const W0 = workoutBuilderState.targetMonday;
+        const scopeText = groups.length === 1 && groups[0] === W0
+          ? WORKOUT_BUILDER_SCOPE_LABELS[computed[W0].scope]
+          : groups.map(m => 'KW ' + workoutBuilderKw(m) + ' ' + WORKOUT_BUILDER_SCOPE_LABELS[computed[m].scope]).join(', ');
+        showToast('Plan aktualisiert (' + scopeText + ')', 'ok');
       } catch (e) {
         console.error('Workout-Builder Übernehmen fehlgeschlagen:', e);
-        showToast('Übernehmen fehlgeschlagen', 'bad');
+        if (allWrites.length) {
+          // Teilweise gespeichert: bisherige Schreibzugriffe bleiben per "Rückgängig" zurücknehmbar
+          renderTrainingPlan(true);
+          planScheduleSaveUndo(allWrites);
+          showToast('Nur teilweise gespeichert – „Rückgängig“ nimmt es zurück', 'bad');
+        } else {
+          showToast('Übernehmen fehlgeschlagen', 'bad');
+        }
       } finally {
         if (btn) btn.disabled = false;
       }

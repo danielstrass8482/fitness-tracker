@@ -35,6 +35,7 @@ const TESTS = [
   { file: 'run-047-gewicht-waage.js', args: [] },
   { file: 'run-048-gewicht-plausibilitaet.js', args: [] },
   { file: 'run-051-ruhetag.js', args: [] },
+  { file: 'run-055-builder-mehrere-wochen.js', args: [] },
 ];
 
 function statusFor(code) {

@@ -2124,7 +2124,7 @@
 
     // Versionsmarker: von Hand bei jedem Commit aktualisieren (Datum/Uhrzeit, Europe/Berlin), damit auf
     // dem Gerät nachprüfbar ist, welcher Stand tatsächlich läuft (siehe Einstellungen-Tab, unten).
-    const APP_BUILD = '2026-11-27 06:31';
+    const APP_BUILD = '2026-11-28 09:04';
     console.info('Fuelofit Build:', APP_BUILD);
     document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById('app-build-marker');
@@ -4975,6 +4975,14 @@
                     const alreadyInName = /\(\d+(?:[.,]\d+)?\s*g\)/i.test(e.name || '');
                     if (e.serving && e.serving.name && Number(e.serving.count) > 0) {
                       return ` <span>${fmtGrams(e.serving.count)} × ${offEscape(e.serving.name)} (${fmtGrams(e.amount)}g)</span>`;
+                    }
+                    // 056a: Portions-Einträge (unit 'portions' bzw. Rezeptblock ohne unit, den recipeEntryAmountUnit
+                    // als Portionen deutet) zeigen "1 Portion"/"<n> Portionen" statt "<amount>g". Nur Anzeige.
+                    if (!e._isExpanded && e.unit !== 'grams') {
+                      const rec = e.unit === 'portions' ? null : recipes.find(r => String(r.id) === String(e.foodId));
+                      if (e.unit === 'portions' || (rec && recipeEntryAmountUnit(e, rec) === 'portions')) {
+                        return ` <span>${fmtGrams(e.amount)} ${Number(e.amount) === 1 ? 'Portion' : 'Portionen'}</span>`;
+                      }
                     }
                     return alreadyInName ? '' : ` <span>${e.amount}g</span>`;
                   })()}</div>

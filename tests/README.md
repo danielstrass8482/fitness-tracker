@@ -180,3 +180,9 @@ zusätzliche Nutzen einer zweiten, entfernten Ausführung ist bei einer Ein-Pers
   "Nur diese Woche"), Hinweis auf spätere Version, Abbrechen schreibt nichts, Rückgängig löscht genau
   die neuen Versionen, andere Wochentage unverändert, Vorschlagszeile danach weg, bereits geloggter
   Eintrag bleibt der Einheit zugeordnet (gleiche id). `--payloads` druckt die Payloads.
+
+- `run-056a-portion-anzeige.js` (Aufgabe 056a, Tagebuch-Zeile Portionsanzeige): Einträge mit
+  `unit: 'portions'` und Rezeptblöcke ohne `unit`, die `recipeEntryAmountUnit` als Portionen deutet,
+  zeigen "1 Portion"/"<n> Portionen" statt "<amount>g"; Gramm-Einträge, `unit: 'grams'` und
+  Gramm-Heuristik bleiben "<amount>g", aufgeklappte Zutatenzeilen unverändert. Zeilen-/Mahlzeit-kcal
+  und `getDayIntakeTotals` unverändert, keine Writes auf logEntries/foods/recipes.
